@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -31,10 +32,12 @@ export default async function AppLayout({
       <Sidebar perms={perms} isAdmin={!!isAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-end gap-3 border-b border-line bg-card px-6 print:hidden">
-          <span className="text-sm text-muted">{displayName}</span>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-medium text-accent">
-            {initials}
-          </span>
+          <Link href="/cuenta" className="flex items-center gap-3 rounded-lg px-1.5 py-1 transition-colors hover:bg-canvas" title="Mi cuenta">
+            <span className="text-sm text-muted">{displayName}</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-medium text-accent">
+              {initials}
+            </span>
+          </Link>
           <form action={logout}>
             <button
               type="submit"

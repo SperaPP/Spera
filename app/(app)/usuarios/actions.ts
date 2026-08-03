@@ -55,3 +55,20 @@ export async function asignarRol(userId: string, roleId: string | null): Promise
   revalidatePath("/usuarios");
   return { ok: true };
 }
+
+/** El admin le pone una contraseña nueva a un usuario de su organización. */
+export async function resetearPassword(userId: string, newPassword: string): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  if (!newPassword || newPassword.length < 6) return { error: "Mínimo 6 caracteres" };
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  const { data: prof } = await sb.from("profiles").select("id").eq("id", userId).eq("organization_id", orgId).maybeSingle();
+  if (!prof) return { error: "Usuario inválido" };
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
+  if (error) return { error: error.message };
+  return { ok: true };
+}
