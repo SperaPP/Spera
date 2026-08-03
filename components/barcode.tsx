@@ -3,8 +3,9 @@
 import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
 
-/** Código de barras CODE39 que llena el ancho del contenedor, con alto en mm. */
-export function Barcode({ value, heightMm = 10 }: { value: string; heightMm?: number }) {
+/** Código de barras CODE39 que llena el ancho del contenedor.
+ *  fill=true: además llena el alto disponible (el padre controla la altura). */
+export function Barcode({ value, heightMm = 10, fill = false }: { value: string; heightMm?: number; fill?: boolean }) {
   const ref = useRef<SVGSVGElement>(null);
   useEffect(() => {
     const svg = ref.current;
@@ -21,5 +22,5 @@ export function Barcode({ value, heightMm = 10 }: { value: string; heightMm?: nu
       /* valor no codificable */
     }
   }, [value]);
-  return <svg ref={ref} style={{ width: "100%", height: `${heightMm}mm`, display: "block" }} />;
+  return <svg ref={ref} style={{ width: "100%", height: fill ? "100%" : `${heightMm}mm`, display: "block" }} />;
 }
