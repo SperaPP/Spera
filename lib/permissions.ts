@@ -4,6 +4,24 @@
 
 export type Perms = Record<string, { view: boolean; edit: boolean }>;
 
+/** Módulos gateables por permiso (para la matriz de roles). */
+export const MODULES: { key: string; label: string }[] = [
+  { key: "pos", label: "Punto de venta" },
+  { key: "ventas", label: "Ventas" },
+  { key: "devoluciones", label: "Devoluciones" },
+  { key: "logistica", label: "Logística" },
+  { key: "productos", label: "Productos" },
+  { key: "stock", label: "Stock" },
+  { key: "transferencias", label: "Transferencias" },
+  { key: "clientes", label: "Clientes" },
+  { key: "precios", label: "Precios" },
+  { key: "caja", label: "Caja" },
+  { key: "cobranzas", label: "Cobranzas" },
+  { key: "reportes", label: "Reportes" },
+  { key: "configuracion", label: "Configuración" },
+  { key: "tiendanube", label: "Tiendanube" },
+];
+
 export function canView(perms: Perms, module: string): boolean {
   return perms[module]?.view === true;
 }
