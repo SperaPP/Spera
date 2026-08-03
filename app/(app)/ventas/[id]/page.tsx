@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { AnularVentaButton } from "@/components/anular-venta-button";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -15,7 +16,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total), sale_payments(amount, surcharge, payment_methods(name))")
+    .select("id, number, status, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total), sale_payments(amount, surcharge, payment_methods(name))")
     .eq("id", id)
     .single();
 
@@ -35,7 +36,14 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
       </Link>
 
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Venta #{sale.number}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Venta #{sale.number}</h1>
+          {sale.status === "anulada" ? (
+            <span className="rounded-full bg-danger-bg px-2.5 py-0.5 text-xs font-medium text-danger">Anulada</span>
+          ) : (
+            <AnularVentaButton saleId={sale.id} />
+          )}
+        </div>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
           {field("Fecha", formatDateTime(sale.created_at))}
           {field("Local", relName(sale.stores))}

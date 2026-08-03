@@ -14,8 +14,8 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   const query = (q ?? "").trim();
   const sb = await createClient();
 
-  const sel = "id, number, created_at, total, customers(name), stores(name), sale_items(count)";
-  let req = sb.from("sales").select(sel).eq("status", "completada").order("created_at", { ascending: false }).limit(100);
+  const sel = "id, number, status, created_at, total, customers(name), stores(name), sale_items(count)";
+  let req = sb.from("sales").select(sel).order("created_at", { ascending: false }).limit(100);
 
   if (query) {
     const isNum = /^\d+$/.test(query);
@@ -64,6 +64,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                 <tr key={s.id} className="border-b border-line last:border-0 hover:bg-canvas">
                   <td className="px-4 py-3 font-medium">
                     <Link href={`/ventas/${s.id}`} className="text-ink transition-colors hover:text-accent">{s.number}</Link>
+                    {s.status === "anulada" && <span className="ml-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-medium text-danger">Anulada</span>}
                   </td>
                   <td className="px-4 py-3 text-muted">{formatDateTime(s.created_at)}</td>
                   <td className="px-4 py-3 text-muted">{relName(s.stores) ?? "—"}</td>
