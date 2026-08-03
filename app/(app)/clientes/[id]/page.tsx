@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, HandCoins } from "lucide-react";
+import { ArrowLeft, HandCoins, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 
@@ -68,10 +68,16 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
               {infoField("Teléfono", customer.phone)}
             </div>
           </div>
-          <Link href="/cobranzas/nueva" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
-            <HandCoins className="h-4 w-4" />
-            Cobrar
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link href={`/clientes/${customer.id}/editar`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+              <Pencil className="h-4 w-4" />
+              Editar
+            </Link>
+            <Link href="/cobranzas/nueva" className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+              <HandCoins className="h-4 w-4" />
+              Cobrar
+            </Link>
+          </div>
         </div>
 
         <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
