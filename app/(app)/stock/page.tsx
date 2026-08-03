@@ -10,7 +10,10 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
   const query = (q ?? "").trim();
   const sb = await createClient();
 
-  type Row = { id: string; name: string; product_variants: unknown };
+  const { data: warehouses } = await sb.from("warehouses").select("id, name").eq("active", true).order("name");
+  const whs = warehouses ?? [];
+
+  type Row = { id: string; name: string };
   let rows: Row[] = [];
 
   if (query) {
@@ -27,35 +30,38 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
     }
     const idList = [...ids].slice(0, PAGE_SIZE);
     if (idList.length) {
-      const { data } = await sb.from("products").select("id, name, product_variants(count)").in("id", idList).order("name");
+      const { data } = await sb.from("products").select("id, name").in("id", idList).order("name");
       rows = (data ?? []) as Row[];
     }
   } else {
-    const { data } = await sb.from("products").select("id, name, product_variants(count)").order("created_at", { ascending: false }).limit(PAGE_SIZE);
+    const { data } = await sb.from("products").select("id, name").order("created_at", { ascending: false }).limit(PAGE_SIZE);
     rows = (data ?? []) as Row[];
   }
 
-  // Total de stock por producto (para los mostrados).
-  const totals = new Map<string, number>();
+  // Stock por (producto, depósito).
+  const byProdWh = new Map<string, Map<string, number>>();
   if (rows.length) {
     const { data: st } = await sb
       .from("stock")
-      .select("quantity, product_variants!inner(product_id)")
+      .select("quantity, warehouse_id, product_variants!inner(product_id)")
       .in("product_variants.product_id", rows.map((r) => r.id));
     for (const s of st ?? []) {
       const pv = s.product_variants as unknown;
       const pid = (Array.isArray(pv) ? pv[0]?.product_id : (pv as { product_id: string } | null)?.product_id) as string | undefined;
-      if (pid) totals.set(pid, (totals.get(pid) ?? 0) + Number(s.quantity));
+      if (!pid) continue;
+      if (!byProdWh.has(pid)) byProdWh.set(pid, new Map());
+      const m = byProdWh.get(pid)!;
+      m.set(s.warehouse_id, (m.get(s.warehouse_id) ?? 0) + Number(s.quantity));
     }
   }
 
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Stock</h1>
-      <p className="mt-1 mb-4 text-sm text-muted">Buscá un producto para ver y ajustar sus existencias por depósito.</p>
+      <p className="mt-1 mb-4 text-sm text-muted">Existencias por depósito. Clic en un producto para ajustar.</p>
 
       <div className="mb-4">
-        <ProductSearch basePath="/stock" />
+        <ProductSearch basePath="/stock" placeholder="Buscar por nombre o código…" />
       </div>
 
       {rows.length === 0 ? (
@@ -67,27 +73,34 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
           <p className="mt-1 text-sm text-muted">Por nombre o código de barras.</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-line bg-card">
+        <div className="overflow-x-auto rounded-xl border border-line bg-card">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
                 <th className="px-4 py-3 font-medium">Producto</th>
-                <th className="px-4 py-3 text-right font-medium">Variantes</th>
-                <th className="px-4 py-3 text-right font-medium">Stock total</th>
+                {whs.map((w) => <th key={w.id} className="px-3 py-3 text-right font-medium">{w.name}</th>)}
+                <th className="px-4 py-3 text-right font-medium">Total</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((p) => {
-                const count = (p.product_variants as { count: number }[] | null)?.[0]?.count ?? 0;
-                const tot = totals.get(p.id) ?? 0;
+                const m = byProdWh.get(p.id);
+                const total = whs.reduce((a, w) => a + (m?.get(w.id) ?? 0), 0);
                 return (
                   <tr key={p.id} className="border-b border-line last:border-0 hover:bg-canvas">
                     <td className="px-4 py-3 font-medium">
                       <Link href={`/stock/${p.id}`} className="text-ink transition-colors hover:text-accent">{p.name}</Link>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted">{count}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      <span className={tot > 0 ? "text-ink" : tot < 0 ? "text-danger" : "text-muted"}>{tot}</span>
+                    {whs.map((w) => {
+                      const qty = m?.get(w.id) ?? 0;
+                      return (
+                        <td key={w.id} className="px-3 py-3 text-right tabular-nums">
+                          <span className={qty > 0 ? "text-ink" : qty < 0 ? "text-danger" : "text-faint"}>{qty}</span>
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                      <span className={total > 0 ? "text-ink" : total < 0 ? "text-danger" : "text-faint"}>{total}</span>
                     </td>
                   </tr>
                 );
