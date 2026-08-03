@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
 import { ProductPhotos } from "@/components/product-photos";
@@ -86,11 +86,16 @@ export default async function ProductoDetallePage({
               <span>IVA {product.tax_rate}%</span>
             </div>
           </div>
-          {product.active ? (
-            <span className="shrink-0 rounded-full bg-ok-bg px-2.5 py-0.5 text-xs font-medium text-ok">Activo</span>
-          ) : (
-            <span className="shrink-0 rounded-full bg-canvas px-2.5 py-0.5 text-xs font-medium text-muted">Inactivo</span>
-          )}
+          <div className="flex shrink-0 items-center gap-3">
+            {product.active ? (
+              <span className="rounded-full bg-ok-bg px-2.5 py-0.5 text-xs font-medium text-ok">Activo</span>
+            ) : (
+              <span className="rounded-full bg-canvas px-2.5 py-0.5 text-xs font-medium text-muted">Inactivo</span>
+            )}
+            <Link href={`/productos/${product.id}/editar`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
+              <Pencil className="h-3.5 w-3.5" /> Editar
+            </Link>
+          </div>
         </div>
 
         {product.description && (

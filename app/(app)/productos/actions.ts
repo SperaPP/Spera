@@ -63,3 +63,39 @@ export async function crearProducto(
   revalidatePath("/productos");
   return { ok: true, id: data as string };
 }
+
+const editSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1, "Ingresá un nombre"),
+  description: z.string().trim().optional(),
+  categoryId: z.string().uuid().nullable(),
+  fabricTypeId: z.string().uuid().nullable(),
+  taxRate: z.number().min(0).max(100),
+  active: z.boolean(),
+});
+
+export type EditarProductoInput = z.infer<typeof editSchema>;
+
+export async function editarProducto(input: EditarProductoInput): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+
+  const parsed = editSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const d = parsed.data;
+
+  const sb = await createClient();
+  const { error } = await sb.from("products").update({
+    name: d.name,
+    description: d.description || null,
+    category_id: d.categoryId,
+    fabric_type_id: d.fabricTypeId,
+    tax_rate: d.taxRate,
+    active: d.active,
+  }).eq("id", d.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/productos");
+  revalidatePath(`/productos/${d.id}`);
+  return { ok: true };
+}
