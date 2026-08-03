@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { History } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { CajaManager } from "@/components/caja-manager";
 
@@ -96,8 +98,15 @@ export default async function CajaPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Caja</h1>
-      <p className="mt-1 mb-6 text-sm text-muted">Apertura y cierre de turno por local.</p>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Caja</h1>
+          <p className="mt-1 text-sm text-muted">Apertura y cierre de turno por local.</p>
+        </div>
+        <Link href="/caja/cierres" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+          <History className="h-4 w-4" /> Ver cierres
+        </Link>
+      </div>
       <CajaManager rows={rows} />
     </div>
   );
