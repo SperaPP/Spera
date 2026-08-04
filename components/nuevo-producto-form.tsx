@@ -3,11 +3,13 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { crearProducto } from "@/app/(app)/productos/actions";
+import { crearProducto, agregarValorCatalogo } from "@/app/(app)/productos/actions";
 
 type Ref = { id: string; name: string };
 type Variation = "none" | "size" | "color" | "size_color";
+type CatalogKind = "categoria" | "tela" | "talle" | "color";
 
 const input =
   "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
@@ -15,6 +17,74 @@ const label = "mb-1.5 block text-sm font-medium text-ink";
 const card = "rounded-xl border border-line bg-card p-5";
 
 const rowKey = (size: string, color: string) => `${size}||${color}`;
+
+// "+ Agregar nuevo" inline: crea un valor de catálogo sin salir del alta.
+function InlineAdd({
+  kind,
+  labelText,
+  onAdded,
+}: {
+  kind: CatalogKind;
+  labelText: string;
+  onAdded: (item: Ref) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    const name = val.trim();
+    if (!name) return;
+    setBusy(true);
+    const res = await agregarValorCatalogo(kind, name);
+    setBusy(false);
+    if (res.error) return toast.error(res.error);
+    if (res.item) {
+      onAdded(res.item);
+      setVal("");
+      setOpen(false);
+      toast.success(`${labelText} agregado.`);
+    }
+  }
+
+  if (!open)
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+      >
+        <Plus className="h-3.5 w-3.5" /> Agregar nuevo
+      </button>
+    );
+
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <input
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); add(); }
+          if (e.key === "Escape") setOpen(false);
+        }}
+        placeholder={`Nuevo ${labelText.toLowerCase()}…`}
+        className={`${input} py-1.5`}
+      />
+      <button
+        type="button"
+        onClick={add}
+        disabled={busy}
+        className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+      >
+        {busy ? "…" : "Agregar"}
+      </button>
+      <button type="button" onClick={() => setOpen(false)} className="shrink-0 rounded-lg border border-line-strong p-1.5 text-muted hover:bg-canvas">
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 function Chips({
   options,
@@ -26,8 +96,6 @@ function Chips({
   onToggle: (name: string) => void;
 }) {
   const [q, setQ] = useState("");
-  if (options.length === 0)
-    return <p className="text-sm text-muted">No hay opciones cargadas todavía.</p>;
 
   const query = q.trim().toLowerCase();
   // Muestra siempre los seleccionados + los que matchean la búsqueda.
@@ -46,26 +114,30 @@ function Chips({
           className={`${input} mb-2`}
         />
       )}
-      <div className="flex flex-wrap gap-2">
-        {limited.map((o) => {
-          const on = selected.includes(o.name);
-          return (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => onToggle(o.name)}
-              className={cn(
-                "rounded-lg border px-3 py-1.5 text-sm transition-colors",
-                on
-                  ? "border-accent bg-accent-soft font-medium text-accent"
-                  : "border-line-strong text-ink hover:bg-canvas"
-              )}
-            >
-              {o.name}
-            </button>
-          );
-        })}
-      </div>
+      {options.length === 0 ? (
+        <p className="text-sm text-muted">No hay opciones cargadas todavía.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {limited.map((o) => {
+            const on = selected.includes(o.name);
+            return (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => onToggle(o.name)}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                  on
+                    ? "border-accent bg-accent-soft font-medium text-accent"
+                    : "border-line-strong text-ink hover:bg-canvas"
+                )}
+              >
+                {o.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {!query && shown.length > limited.length && (
         <p className="mt-2 text-xs text-muted">
           Mostrando {limited.length} de {options.length}. Usá el buscador para ver el resto.
@@ -98,6 +170,12 @@ export function NuevoProductoForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
+  // Catálogos como estado: el "+ agregar nuevo" los amplía sin recargar.
+  const [cats, setCats] = useState<Ref[]>(categories);
+  const [fabrics, setFabrics] = useState<Ref[]>(fabricTypes);
+  const [sizeList, setSizeList] = useState<Ref[]>(sizes);
+  const [colorList, setColorList] = useState<Ref[]>(colors);
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -107,6 +185,7 @@ export function NuevoProductoForm({
   const [selSizes, setSelSizes] = useState<string[]>([]);
   const [selColors, setSelColors] = useState<string[]>([]);
   const [stockData, setStockData] = useState<Record<string, string>>({});
+  const [skuData, setSkuData] = useState<Record<string, string>>({});
   const [prices, setPrices] = useState<Record<string, string>>({});
 
   const usesSize = variation === "size" || variation === "size_color";
@@ -129,11 +208,19 @@ export function NuevoProductoForm({
     if (usesSize && selSizes.length === 0) return toast.error("Elegí al menos un talle.");
     if (usesColor && selColors.length === 0) return toast.error("Elegí al menos un color.");
 
-    const variants = rows.map((r) => ({
-      size: r.size || undefined,
-      color: r.color || undefined,
-      stock: Number(stockData[rowKey(r.size, r.color)]) || 0,
-    }));
+    // No permitir SKUs repetidos entre las variantes que se están cargando.
+    const skus = rows.map((r) => skuData[rowKey(r.size, r.color)]?.trim()).filter(Boolean);
+    if (new Set(skus).size !== skus.length) return toast.error("Hay SKUs repetidos entre las variantes.");
+
+    const variants = rows.map((r) => {
+      const key = rowKey(r.size, r.color);
+      return {
+        size: r.size || undefined,
+        color: r.color || undefined,
+        sku: skuData[key]?.trim() || undefined,
+        stock: Number(stockData[key]) || 0,
+      };
+    });
 
     startTransition(async () => {
       const res = await crearProducto({
@@ -176,15 +263,25 @@ export function NuevoProductoForm({
             <label className={label} htmlFor="cat">Categoría</label>
             <select id="cat" className={input} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">Sin categoría</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+            <InlineAdd
+              kind="categoria"
+              labelText="Categoría"
+              onAdded={(item) => { setCats((p) => [...p, item].sort((a, b) => a.name.localeCompare(b.name))); setCategoryId(item.id); }}
+            />
           </div>
           <div>
             <label className={label} htmlFor="fabric">Tipo de tela</label>
             <select id="fabric" className={input} value={fabricTypeId} onChange={(e) => setFabricTypeId(e.target.value)}>
               <option value="">Sin especificar</option>
-              {fabricTypes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              {fabrics.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
+            <InlineAdd
+              kind="tela"
+              labelText="Tela"
+              onAdded={(item) => { setFabrics((p) => [...p, item].sort((a, b) => a.name.localeCompare(b.name))); setFabricTypeId(item.id); }}
+            />
           </div>
           <div>
             <label className={label} htmlFor="variation">Tipo de variación</label>
@@ -206,20 +303,30 @@ export function NuevoProductoForm({
       <div className={card}>
         <h2 className="mb-1 text-sm font-medium text-ink">Variantes y stock inicial</h2>
         <p className="mb-4 text-xs text-muted">
-          El SKU y el código de barras se generan automáticamente. Stock inicial en{" "}
-          <span className="font-medium text-ink">{warehouseName}</span>.
+          Dejá el SKU vacío para que se genere correlativo, o escribí uno propio (sin repetir).
+          Stock inicial en <span className="font-medium text-ink">{warehouseName}</span>.
         </p>
 
         {usesSize && (
           <div className="mb-4">
             <label className={label}>Talles</label>
-            <Chips options={sizes} selected={selSizes} onToggle={(n) => toggle(selSizes, setSelSizes, n)} />
+            <Chips options={sizeList} selected={selSizes} onToggle={(n) => toggle(selSizes, setSelSizes, n)} />
+            <InlineAdd
+              kind="talle"
+              labelText="Talle"
+              onAdded={(item) => { setSizeList((p) => [...p, item]); setSelSizes((p) => [...p, item.name]); }}
+            />
           </div>
         )}
         {usesColor && (
           <div className="mb-4">
             <label className={label}>Colores</label>
-            <Chips options={colors} selected={selColors} onToggle={(n) => toggle(selColors, setSelColors, n)} />
+            <Chips options={colorList} selected={selColors} onToggle={(n) => toggle(selColors, setSelColors, n)} />
+            <InlineAdd
+              kind="color"
+              labelText="Color"
+              onAdded={(item) => { setColorList((p) => [...p, item].sort((a, b) => a.name.localeCompare(b.name))); setSelColors((p) => [...p, item.name]); }}
+            />
           </div>
         )}
 
@@ -233,6 +340,7 @@ export function NuevoProductoForm({
               <thead>
                 <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
                   <th className="px-3 py-2.5 font-medium">Variante</th>
+                  <th className="px-3 py-2.5 font-medium">SKU</th>
                   <th className="px-3 py-2.5 font-medium">Stock inicial</th>
                 </tr>
               </thead>
@@ -250,6 +358,14 @@ export function NuevoProductoForm({
                             {r.color && <span className="rounded-md bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">{r.color}</span>}
                           </div>
                         )}
+                      </td>
+                      <td className="px-3 py-2 w-44">
+                        <input
+                          className={`${input} py-1.5`}
+                          value={skuData[key] ?? ""}
+                          onChange={(e) => setSkuData((p) => ({ ...p, [key]: e.target.value }))}
+                          placeholder="Automático"
+                        />
                       </td>
                       <td className="px-3 py-2 w-40">
                         <input
@@ -271,29 +387,31 @@ export function NuevoProductoForm({
       </div>
 
       {/* Precios */}
-      <div className={card}>
-        <h2 className="mb-1 text-sm font-medium text-ink">Precios</h2>
-        <p className="mb-4 text-xs text-muted">Precio final (IVA incluido), igual para todas las variantes. Podés dejarlo vacío y cargarlo después.</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {priceLists.map((pl) => (
-            <div key={pl.id}>
-              <label className={label} htmlFor={`price-${pl.id}`}>{pl.name}</label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted">$</span>
-                <input
-                  id={`price-${pl.id}`}
-                  type="number"
-                  min={0}
-                  className={input}
-                  value={prices[pl.id] ?? ""}
-                  onChange={(e) => setPrices((p) => ({ ...p, [pl.id]: e.target.value }))}
-                  placeholder="0"
-                />
+      {priceLists.length > 0 && (
+        <div className={card}>
+          <h2 className="mb-1 text-sm font-medium text-ink">Precio</h2>
+          <p className="mb-4 text-xs text-muted">Precio final (IVA incluido), igual para todas las variantes. Es opcional: podés dejarlo vacío y cargarlo después desde Precios.</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {priceLists.map((pl) => (
+              <div key={pl.id}>
+                <label className={label} htmlFor={`price-${pl.id}`}>{pl.name}</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted">$</span>
+                  <input
+                    id={`price-${pl.id}`}
+                    type="number"
+                    min={0}
+                    className={input}
+                    value={prices[pl.id] ?? ""}
+                    onChange={(e) => setPrices((p) => ({ ...p, [pl.id]: e.target.value }))}
+                    placeholder="0"
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex items-center justify-end gap-3">
         <button

@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Printer, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
+import { getPermissions } from "@/lib/auth";
+import { canEdit } from "@/lib/permissions";
 import { ProductPhotos } from "@/components/product-photos";
+import { VariantesManager } from "@/components/variantes-manager";
 
 const VARIATION_LABEL: Record<string, string> = {
   none: "Sin variantes",
@@ -34,17 +37,24 @@ export default async function ProductoDetallePage({
   if (!product) notFound();
 
   const variants = (product.product_variants ?? []) as {
-    id: string; size: string | null; color: string | null; sku: string | null; barcode: string | null;
+    id: string; size: string | null; color: string | null; sku: string | null; barcode: string | null; active: boolean;
   }[];
   const variantIds = variants.map((v) => v.id);
 
-  const [{ data: stock }, { data: prices }, { data: images }] = await Promise.all([
+  const [{ data: stock }, { data: prices }, { data: images }, { data: sizes }, { data: colors }, { data: warehouses }, perms] = await Promise.all([
     variantIds.length
       ? sb.from("stock").select("variant_id, quantity").in("variant_id", variantIds)
       : Promise.resolve({ data: [] as { variant_id: string; quantity: number }[] }),
     sb.from("price_list_items").select("price, price_lists(name)").eq("product_id", id).is("variant_id", null),
     sb.from("product_images").select("id, path, color, is_primary").eq("product_id", id).order("is_primary", { ascending: false }).order("created_at"),
+    sb.from("sizes").select("id, name").eq("active", true).order("position"),
+    sb.from("colors").select("id, name").eq("active", true).order("name"),
+    sb.from("warehouses").select("id, name").eq("active", true),
+    getPermissions(),
   ]);
+
+  const editable = canEdit(perms, "productos");
+  const central = (warehouses ?? []).find((w) => w.name === "Mayorista - Central");
 
   const stockByVariant = new Map<string, number>();
   for (const s of stock ?? []) {
@@ -118,48 +128,19 @@ export default async function ProductoDetallePage({
       <ProductPhotos productId={product.id} photos={photos} colors={productColors} />
 
       {/* Variantes */}
-      <div className="rounded-xl border border-line bg-card">
-        <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-          <h2 className="text-sm font-medium text-ink">Variantes</h2>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted">{variants.length} en total</span>
-            <Link href={`/etiquetas/${product.id}`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
-              <Printer className="h-3.5 w-3.5" /> Imprimir etiquetas
-            </Link>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
-                <th className="px-5 py-2.5 font-medium">Variante</th>
-                <th className="px-5 py-2.5 font-medium">SKU</th>
-                <th className="px-5 py-2.5 font-medium">Código de barras</th>
-                <th className="px-5 py-2.5 text-right font-medium">Stock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {variants.map((v) => (
-                <tr key={v.id} className="border-b border-line last:border-0">
-                  <td className="px-5 py-2.5">
-                    {v.size || v.color ? (
-                      <div className="flex flex-wrap gap-1">
-                        {v.size && <span className="rounded-md bg-canvas px-2 py-0.5 text-xs font-medium text-ink">{v.size}</span>}
-                        {v.color && <span className="rounded-md bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">{v.color}</span>}
-                      </div>
-                    ) : (
-                      <span className="text-muted">Única</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-2.5 font-mono text-xs text-ink">{v.sku ?? "—"}</td>
-                  <td className="px-5 py-2.5 font-mono text-xs text-muted">{v.barcode ?? "—"}</td>
-                  <td className="px-5 py-2.5 text-right tabular-nums text-ink">{stockByVariant.get(v.id) ?? 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <VariantesManager
+        productId={product.id}
+        variationType={product.variation_type}
+        warehouseId={editable ? central?.id ?? null : null}
+        warehouseName={central?.name ?? "Mayorista - Central"}
+        sizes={editable ? sizes ?? [] : []}
+        colors={editable ? colors ?? [] : []}
+        variants={variants.map((v) => ({
+          id: v.id, size: v.size, color: v.color, sku: v.sku, barcode: v.barcode,
+          active: v.active, stock: stockByVariant.get(v.id) ?? 0,
+        }))}
+        canEdit={editable}
+      />
     </div>
   );
 }
