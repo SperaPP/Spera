@@ -15,14 +15,14 @@ const PAGE_SIZE = 100;
 export default async function ProductosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; cat?: string; foto?: string; estado?: string }>;
+  searchParams: Promise<{ q?: string; cat?: string; foto?: string; estado?: string; ciclo?: string }>;
 }) {
-  const { q, cat, foto, estado } = await searchParams;
+  const { q, cat, foto, estado, ciclo } = await searchParams;
   const query = (q ?? "").trim();
   const sb = await createClient();
 
-  const sel = "id, name, variation_type, active, has_image, categories(name), product_variants(count)";
-  type Row = { id: string; name: string; variation_type: string; active: boolean; has_image: boolean; categories: unknown; product_variants: unknown };
+  const sel = "id, name, variation_type, active, has_image, lifecycle, categories(name), product_variants(count)";
+  type Row = { id: string; name: string; variation_type: string; active: boolean; has_image: boolean; lifecycle: string; categories: unknown; product_variants: unknown };
 
   // Si hay búsqueda, primero resolvemos los ids por nombre/código.
   let idList: string[] | null = null;
@@ -50,6 +50,8 @@ export default async function ProductosPage({
     else if (foto === "con") req = req.eq("has_image", true);
     if (estado === "activo") req = req.eq("active", true);
     else if (estado === "inactivo") req = req.eq("active", false);
+    if (ciclo === "actual") req = req.eq("lifecycle", "actual");
+    else if (ciclo === "discontinuo") req = req.eq("lifecycle", "discontinuo");
     const { data } = query
       ? await req.order("name").limit(PAGE_SIZE)
       : await req.order("created_at", { ascending: false }).limit(PAGE_SIZE);
@@ -105,6 +107,7 @@ export default async function ProductosPage({
                 <th className="px-4 py-3 font-medium">Variación</th>
                 <th className="px-4 py-3 text-center font-medium">Foto</th>
                 <th className="px-4 py-3 text-right font-medium">Variantes</th>
+                <th className="px-4 py-3 font-medium">Ciclo</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
               </tr>
             </thead>
@@ -130,6 +133,13 @@ export default async function ProductosPage({
                       )}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{count}</td>
+                    <td className="px-4 py-3">
+                      {p.lifecycle === "discontinuo" ? (
+                        <span className="rounded-full bg-warn-bg px-2.5 py-0.5 text-xs font-medium text-warn">Discontinuo</span>
+                      ) : (
+                        <span className="text-xs text-muted">Actual</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       {p.active ? (
                         <span className="rounded-full bg-ok-bg px-2.5 py-0.5 text-xs font-medium text-ok">Activo</span>

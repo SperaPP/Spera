@@ -74,6 +74,7 @@ const editSchema = z.object({
   fabricTypeId: z.string().uuid().nullable(),
   taxRate: z.number().min(0).max(100),
   active: z.boolean(),
+  lifecycle: z.enum(["actual", "discontinuo"]),
 });
 
 export type EditarProductoInput = z.infer<typeof editSchema>;
@@ -94,6 +95,7 @@ export async function editarProducto(input: EditarProductoInput): Promise<Action
     fabric_type_id: d.fabricTypeId,
     tax_rate: d.taxRate,
     active: d.active,
+    lifecycle: d.lifecycle,
   }).eq("id", d.id);
   if (error) return { error: error.message };
 

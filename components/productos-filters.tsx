@@ -49,6 +49,11 @@ export function ProductosFilters({ categories }: { categories: Ref[] }) {
         <option value="activo">Activos</option>
         <option value="inactivo">Inactivos</option>
       </select>
+      <select value={sp.get("ciclo") ?? ""} onChange={(e) => setParam("ciclo", e.target.value)} className={ctl}>
+        <option value="">Ciclo: todos</option>
+        <option value="actual">Actual</option>
+        <option value="discontinuo">Discontinuo</option>
+      </select>
     </div>
   );
 }

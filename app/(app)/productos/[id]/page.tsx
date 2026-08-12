@@ -29,7 +29,7 @@ export default async function ProductoDetallePage({
   const { data: product } = await sb
     .from("products")
     .select(
-      "id, name, description, variation_type, tax_rate, active, external_id, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active)"
+      "id, name, description, variation_type, tax_rate, active, lifecycle, external_id, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active)"
     )
     .eq("id", id)
     .single();
@@ -97,6 +97,9 @@ export default async function ProductoDetallePage({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            {product.lifecycle === "discontinuo" && (
+              <span className="rounded-full bg-warn-bg px-2.5 py-0.5 text-xs font-medium text-warn">Discontinuo</span>
+            )}
             {product.active ? (
               <span className="rounded-full bg-ok-bg px-2.5 py-0.5 text-xs font-medium text-ok">Activo</span>
             ) : (

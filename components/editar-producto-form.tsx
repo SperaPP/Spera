@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { editarProducto } from "@/app/(app)/productos/actions";
 
 type Ref = { id: string; name: string };
-type Product = { id: string; name: string; description: string; categoryId: string; fabricTypeId: string; taxRate: number; active: boolean };
+type Lifecycle = "actual" | "discontinuo";
+type Product = { id: string; name: string; description: string; categoryId: string; fabricTypeId: string; taxRate: number; active: boolean; lifecycle: Lifecycle };
 
 const input =
   "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
@@ -21,6 +22,7 @@ export function EditarProductoForm({ product, categories, fabricTypes }: { produ
   const [fabricTypeId, setFabricTypeId] = useState(product.fabricTypeId);
   const [taxRate, setTaxRate] = useState(String(product.taxRate));
   const [active, setActive] = useState(product.active);
+  const [lifecycle, setLifecycle] = useState<Lifecycle>(product.lifecycle);
 
   function submit() {
     if (!name.trim()) return toast.error("Ingresá un nombre.");
@@ -28,7 +30,7 @@ export function EditarProductoForm({ product, categories, fabricTypes }: { produ
       const r = await editarProducto({
         id: product.id, name: name.trim(), description: description.trim() || undefined,
         categoryId: categoryId || null, fabricTypeId: fabricTypeId || null,
-        taxRate: Number(taxRate) || 21, active,
+        taxRate: Number(taxRate) || 21, active, lifecycle,
       });
       if (r.error) { toast.error(r.error); return; }
       toast.success("Producto actualizado.");
@@ -66,11 +68,24 @@ export function EditarProductoForm({ product, categories, fabricTypes }: { produ
             <label className={label} htmlFor="tax">IVA (%)</label>
             <input id="tax" type="number" className={input} value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
           </div>
+          <div>
+            <label className={label} htmlFor="lifecycle">Ciclo de vida</label>
+            <select id="lifecycle" className={input} value={lifecycle} onChange={(e) => setLifecycle(e.target.value as Lifecycle)}>
+              <option value="actual">Actual</option>
+              <option value="discontinuo">Discontinuo</option>
+            </select>
+          </div>
           <div className="flex items-end">
             <label className="flex items-center gap-2 text-sm text-ink">
               <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-[color:var(--color-accent)]" />
               Producto activo
             </label>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted">
+              <span className="font-medium text-ink">Ciclo de vida</span> clasifica el producto para decisiones futuras (qué reponer, qué dejar de fabricar).
+              Marcar <span className="font-medium text-ink">Discontinuo</span> no lo saca de la venta: para eso destildá <span className="font-medium text-ink">Producto activo</span>.
+            </p>
           </div>
         </div>
       </div>
