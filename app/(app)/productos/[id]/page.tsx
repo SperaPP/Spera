@@ -2,11 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/format";
 import { getPermissions } from "@/lib/auth";
 import { canEdit } from "@/lib/permissions";
 import { ProductPhotos } from "@/components/product-photos";
 import { VariantesManager } from "@/components/variantes-manager";
+import { PrecioEditor } from "@/components/precio-editor";
 
 const VARIATION_LABEL: Record<string, string> = {
   none: "Sin variantes",
@@ -59,6 +59,12 @@ export default async function ProductoDetallePage({
   const stockByVariant = new Map<string, number>();
   for (const s of stock ?? []) {
     stockByVariant.set(s.variant_id, (stockByVariant.get(s.variant_id) ?? 0) + s.quantity);
+  }
+
+  const priceByList = new Map<string, number>();
+  for (const p of prices ?? []) {
+    const ln = relName(p.price_lists);
+    if (ln) priceByList.set(ln, Number(p.price));
   }
 
   const bucketUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
@@ -115,16 +121,13 @@ export default async function ProductoDetallePage({
           <p className="mt-4 border-t border-line pt-4 text-sm text-ink">{product.description}</p>
         )}
 
-        {(prices ?? []).length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-4 border-t border-line pt-4">
-            {(prices ?? []).map((p, i) => (
-              <div key={i} className="text-sm">
-                <span className="text-muted">{relName(p.price_lists)}: </span>
-                <span className="font-medium text-ink">{formatMoney(p.price)}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        <PrecioEditor
+          productId={product.id}
+          platinum={priceByList.get("Platinum") ?? null}
+          publico={priceByList.get("Publico") ?? null}
+          mayorista={priceByList.get("Mayorista") ?? null}
+          canEdit={editable}
+        />
       </div>
 
       {/* Fotos */}

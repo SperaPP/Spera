@@ -22,8 +22,8 @@ export default async function NuevoProductoPage() {
   ]);
 
   const central = (warehouses ?? []).find((w) => w.name === "Mayorista - Central");
-  // Producción carga sólo el precio mayorista; el minorista se maneja desde Precios.
-  const mayoristaLists = (priceLists ?? []).filter((p) => /mayorista/i.test(p.name));
+  // Producción carga sólo Platinum (base); Publico y Mayorista se derivan solos.
+  const platinumLists = (priceLists ?? []).filter((p) => /platinum/i.test(p.name));
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -44,7 +44,7 @@ export default async function NuevoProductoPage() {
         sizes={sizes ?? []}
         colors={colors ?? []}
         fabricTypes={fabricTypes ?? []}
-        priceLists={mayoristaLists}
+        priceLists={platinumLists}
         warehouseId={central?.id ?? null}
         warehouseName={central?.name ?? "Mayorista - Central"}
       />

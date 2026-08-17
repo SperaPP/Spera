@@ -166,3 +166,74 @@ export async function toggleLocal(id: string, active: boolean): Promise<ActionSt
   revalidatePath("/configuracion");
   return { ok: true };
 }
+
+// ── Reglas de precios ──────────────────────────────────────────
+// Guarda (o borra) la regla de una categoría. category_id null = regla general.
+// pubMarkup null en una categoría = "usa la regla general" → borra el override.
+export async function setReglaPrecio(
+  categoryId: string | null,
+  pubMarkup: number | null,
+  mayDiscount: number | null
+): Promise<ActionState> {
+  const denied = await requireCan("configuracion", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+
+  // Categoría sin override → borrar la regla propia (vuelve a la general).
+  if (categoryId && pubMarkup == null) {
+    const { error } = await sb.from("pricing_rules").delete().eq("organization_id", orgId).eq("category_id", categoryId);
+    if (error) return { error: error.message };
+    revalidatePath("/configuracion");
+    return { ok: true };
+  }
+
+  if (pubMarkup == null || !isFinite(pubMarkup) || pubMarkup < 0) return { error: "Markup inválido" };
+  const disc = mayDiscount ?? 50;
+  if (!isFinite(disc) || disc < 0 || disc > 100) return { error: "Descuento inválido (0–100)" };
+
+  const row = {
+    organization_id: orgId as string,
+    category_id: categoryId,
+    publico_markup_pct: pubMarkup,
+    mayorista_discount_pct: disc,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Upsert manual por (org, category_id); category_id null = regla general.
+  const base = sb.from("pricing_rules").select("id").eq("organization_id", orgId);
+  const found = await (categoryId === null
+    ? base.is("category_id", null)
+    : base.eq("category_id", categoryId)
+  ).maybeSingle();
+
+  const { error } = found.data
+    ? await sb.from("pricing_rules").update(row).eq("id", found.data.id)
+    : await sb.from("pricing_rules").insert(row);
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  return { ok: true };
+}
+
+export async function recalcularPrecios(): Promise<ActionState & { count?: number }> {
+  const denied = await requireCan("configuracion", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("recalc_all_pricing");
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  revalidatePath("/precios");
+  return { ok: true, count: (data as number) ?? 0 };
+}
+
+export async function inicializarPrecios(): Promise<ActionState & { count?: number }> {
+  const denied = await requireCan("configuracion", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("seed_pricing_from_current");
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  revalidatePath("/precios");
+  return { ok: true, count: (data as number) ?? 0 };
+}

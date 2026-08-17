@@ -3,6 +3,7 @@ import { CatalogManager } from "@/components/catalog-manager";
 import { MediosPagoManager } from "@/components/medios-pago-manager";
 import { TiposClienteManager } from "@/components/tipos-cliente-manager";
 import { DepositosManager, LocalesManager } from "@/components/locales-depositos-manager";
+import { ReglasPreciosManager } from "@/components/reglas-precios-manager";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -27,6 +28,18 @@ export default async function ConfiguracionPage() {
     sb.from("stores").select("id, name, active, has_cash_register, warehouses(name)").order("name"),
   ]);
 
+  const { data: rules } = await sb.from("pricing_rules").select("category_id, publico_markup_pct, mayorista_discount_pct");
+  const defaultRuleRow = (rules ?? []).find((r) => r.category_id == null);
+  const defaultRule = {
+    markup: Number(defaultRuleRow?.publico_markup_pct ?? 110),
+    discount: Number(defaultRuleRow?.mayorista_discount_pct ?? 50),
+  };
+  const overrides: Record<string, { markup: number; discount: number }> = {};
+  for (const r of rules ?? []) {
+    if (r.category_id != null) overrides[r.category_id] = { markup: Number(r.publico_markup_pct), discount: Number(r.mayorista_discount_pct) };
+  }
+  const activeCategories = (categorias ?? []).filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }));
+
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Configuración</h1>
@@ -39,6 +52,9 @@ export default async function ConfiguracionPage() {
         <CatalogManager kind="colores" title="Colores" items={colores ?? []} />
         <CatalogManager kind="telas" title="Tipos de tela" items={telas ?? []} />
       </div>
+
+      <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Precios</h2>
+      <ReglasPreciosManager defaultRule={defaultRule} categories={activeCategories} overrides={overrides} />
 
       <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Ventas</h2>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

@@ -62,8 +62,14 @@ export async function crearProducto(
 
   if (error) return { error: error.message };
 
+  // El precio cargado es Platinum (base): derivar Publico y Mayorista.
+  const newId = data as string;
+  if (d.prices.some((p) => p.price != null)) {
+    await sb.rpc("apply_product_pricing", { p_product_id: newId });
+  }
+
   revalidatePath("/productos");
-  return { ok: true, id: data as string };
+  return { ok: true, id: newId };
 }
 
 const editSchema = z.object({
@@ -129,6 +135,19 @@ export async function agregarValorCatalogo(
   const { data, error } = await sb.from(table).insert(row).select("id, name").single();
   if (error) return { error: error.code === "23505" ? "Ya existe ese valor" : error.message };
   return { ok: true, item: data };
+}
+
+// ── Precio Platinum (base) → deriva Publico y Mayorista ────────
+export async function setPrecioPlatinum(productId: string, platinum: number): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  if (!isFinite(platinum) || platinum < 0) return { error: "Precio inválido" };
+  const sb = await createClient();
+  const { error } = await sb.rpc("apply_product_pricing", { p_product_id: productId, p_platinum: platinum });
+  if (error) return { error: error.message };
+  revalidatePath(`/productos/${productId}`);
+  revalidatePath("/precios");
+  return { ok: true };
 }
 
 // ── Gestión de variantes ──────────────────────────────────────
