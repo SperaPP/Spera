@@ -16,14 +16,27 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, status, channel, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total), sale_payments(amount, surcharge, payment_methods(name))")
+    .select("id, number, status, channel, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
     .eq("id", id)
     .single();
 
   if (!sale) notFound();
 
-  const items = (sale.sale_items ?? []) as { product_name: string; variant_label: string | null; quantity: number; unit_price: number; line_total: number }[];
+  const items = (sale.sale_items ?? []) as { product_name: string; variant_label: string | null; quantity: number; unit_price: number; line_total: number; returned_qty: number }[];
   const payments = (sale.sale_payments ?? []) as { amount: number; surcharge: number; payment_methods: unknown }[];
+
+  // Cambios asociados: esta venta como origen (se cambiaron prendas) o como resultado de un cambio.
+  const [{ data: exFrom }, { data: exTo }] = await Promise.all([
+    sb.from("exchanges").select("new_sale_id").eq("original_sale_id", id),
+    sb.from("exchanges").select("original_sale_id").eq("new_sale_id", id),
+  ]);
+  const linkedIds = [...(exFrom ?? []).map((e) => e.new_sale_id as string), ...(exTo ?? []).map((e) => e.original_sale_id as string)];
+  const { data: linked } = linkedIds.length
+    ? await sb.from("sales").select("id, number").in("id", linkedIds)
+    : { data: [] as { id: string; number: number }[] };
+  const numById = new Map((linked ?? []).map((s) => [s.id, s.number]));
+  const cambioDeVenta = (exTo ?? [])[0]?.original_sale_id as string | undefined;
+  const generoCambios = [...new Set((exFrom ?? []).map((e) => e.new_sale_id as string))];
 
   const field = (label: string, value: string | null) =>
     value ? <div className="text-sm"><span className="text-muted">{label}: </span><span className="text-ink">{value}</span></div> : null;
@@ -60,6 +73,21 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
           {field("Cliente", relName(sale.customers))}
           {field("Lista", relName(sale.price_lists))}
         </div>
+
+        {(cambioDeVenta || generoCambios.length > 0) && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-sm">
+            {cambioDeVenta && (
+              <span className="text-muted">Generada por el cambio de la <Link href={`/ventas/${cambioDeVenta}`} className="font-medium text-accent hover:underline">venta #{numById.get(cambioDeVenta) ?? "?"}</Link></span>
+            )}
+            {generoCambios.length > 0 && (
+              <span className="text-muted">
+                Prendas cambiadas → {generoCambios.map((sid, i) => (
+                  <span key={sid}>{i > 0 ? ", " : ""}<Link href={`/ventas/${sid}`} className="font-medium text-accent hover:underline">venta #{numById.get(sid) ?? "?"}</Link></span>
+                ))}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mb-5 overflow-hidden rounded-xl border border-line bg-card">
@@ -79,6 +107,9 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
                 <td className="px-5 py-2.5">
                   <span className="font-medium text-ink">{it.product_name}</span>
                   {it.variant_label && <span className="ml-2 text-xs text-muted">{it.variant_label}</span>}
+                  {it.returned_qty > 0 && (
+                    <span className="ml-2 rounded-full bg-warn-bg px-2 py-0.5 text-[11px] font-medium text-warn">{it.returned_qty} cambiada{it.returned_qty > 1 ? "s" : ""}</span>
+                  )}
                 </td>
                 <td className="px-5 py-2.5 text-right tabular-nums text-ink">{it.quantity}</td>
                 <td className="px-5 py-2.5 text-right tabular-nums text-muted">{formatMoney(Number(it.unit_price))}</td>
