@@ -8,10 +8,11 @@ export default async function UsuariosPage() {
   const { data: isAdmin } = await sb.rpc("is_admin");
   if (!isAdmin) redirect("/");
 
-  const [{ data: roles }, { data: perms }, { data: profiles }] = await Promise.all([
+  const [{ data: roles }, { data: perms }, { data: profiles }, { data: stores }] = await Promise.all([
     sb.from("roles").select("id, name").order("name"),
     sb.from("role_permissions").select("role_id, module, can_view, can_edit"),
-    sb.from("profiles").select("id, email, full_name, role_id").order("email"),
+    sb.from("profiles").select("id, email, full_name, role_id, store_id").order("email"),
+    sb.from("stores").select("id, name").eq("active", true).order("name"),
   ]);
 
   const permsByRole: Record<string, Record<string, { view: boolean; edit: boolean }>> = {};
@@ -21,6 +22,7 @@ export default async function UsuariosPage() {
 
   const users = (profiles ?? []).map((p) => ({
     id: p.id, email: p.email ?? "", name: p.full_name ?? "", roleId: p.role_id as string | null,
+    storeId: (p.store_id as string | null) ?? null,
   }));
 
   return (
@@ -31,7 +33,7 @@ export default async function UsuariosPage() {
       <RolesManager roles={roles ?? []} permsByRole={permsByRole} />
 
       <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Usuarios</h2>
-      <UsuariosManager users={users} roles={roles ?? []} />
+      <UsuariosManager users={users} roles={roles ?? []} stores={stores ?? []} />
     </div>
   );
 }

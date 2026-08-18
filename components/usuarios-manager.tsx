@@ -3,15 +3,16 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { UserCircle, KeyRound, X } from "lucide-react";
-import { asignarRol, resetearPassword } from "@/app/(app)/usuarios/actions";
+import { asignarRol, asignarSucursal, resetearPassword } from "@/app/(app)/usuarios/actions";
 
-type User = { id: string; email: string; name: string; roleId: string | null };
+type User = { id: string; email: string; name: string; roleId: string | null; storeId: string | null };
 type Role = { id: string; name: string };
+type Store = { id: string; name: string };
 
 const select =
   "rounded-lg border border-line-strong bg-card px-2 py-1.5 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
 
-export function UsuariosManager({ users, roles }: { users: User[]; roles: Role[] }) {
+export function UsuariosManager({ users, roles, stores }: { users: User[]; roles: Role[]; stores: Store[] }) {
   const [pending, start] = useTransition();
   const [resetId, setResetId] = useState<string | null>(null);
   const [pass, setPass] = useState("");
@@ -20,6 +21,13 @@ export function UsuariosManager({ users, roles }: { users: User[]; roles: Role[]
     start(async () => {
       const r = await asignarRol(userId, roleId || null);
       if (r.error) toast.error(r.error); else toast.success("Rol asignado");
+    });
+  }
+
+  function assignStore(userId: string, storeId: string) {
+    start(async () => {
+      const r = await asignarSucursal(userId, storeId || null);
+      if (r.error) toast.error(r.error); else toast.success("Sucursal asignada");
     });
   }
 
@@ -51,7 +59,11 @@ export function UsuariosManager({ users, roles }: { users: User[]; roles: Role[]
               >
                 <KeyRound className="h-4 w-4" />
               </button>
-              <select value={u.roleId ?? ""} onChange={(e) => assign(u.id, e.target.value)} disabled={pending} className={select}>
+              <select value={u.storeId ?? ""} onChange={(e) => assignStore(u.id, e.target.value)} disabled={pending} className={select} title="Sucursal asignada">
+                <option value="">Sin sucursal</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <select value={u.roleId ?? ""} onChange={(e) => assign(u.id, e.target.value)} disabled={pending} className={select} title="Rol">
                 <option value="">Sin rol</option>
                 {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>

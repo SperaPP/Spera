@@ -7,6 +7,14 @@ import { requireCan, type ActionState } from "@/lib/auth";
 const label = (size: string | null, color: string | null) =>
   [size, color].filter(Boolean).join(" / ") || null;
 
+const bucketUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
+function imageUrl(images: { path: string; is_primary: boolean }[] | null | undefined): string | null {
+  const list = images ?? [];
+  if (list.length === 0) return null;
+  const chosen = list.find((i) => i.is_primary) ?? list[0];
+  return `${bucketUrl}/${chosen.path}`;
+}
+
 /** Busca productos por nombre y devuelve su precio en la lista indicada. */
 export async function buscarProductos(query: string, priceListId: string | null) {
   const q = query.trim();
@@ -15,7 +23,7 @@ export async function buscarProductos(query: string, priceListId: string | null)
   const sb = await createClient();
   let req = sb
     .from("products")
-    .select("id, name, variation_type, product_variants(id, size, color, sku, barcode), price_list_items(price, variant_id, price_list_id)")
+    .select("id, name, variation_type, product_images(path, is_primary), product_variants(id, size, color, sku, barcode), price_list_items(price, variant_id, price_list_id)")
     .eq("active", true)
     .ilike("name", `%${q}%`)
     .limit(15);
@@ -29,6 +37,7 @@ export async function buscarProductos(query: string, priceListId: string | null)
       id: p.id,
       name: p.name,
       price,
+      image: imageUrl(p.product_images as { path: string; is_primary: boolean }[] | null),
       variants: ((p.product_variants ?? []) as { id: string; size: string | null; color: string | null; sku: string | null; barcode: string | null }[])
         .map((v) => ({ id: v.id, label: label(v.size, v.color), sku: v.sku })),
     };
@@ -41,7 +50,7 @@ export async function buscarPorCodigo(code: string, priceListId: string | null) 
   if (!c) return { notFound: true as const };
 
   const sb = await createClient();
-  const sel = "id, size, color, sku, barcode, product_id, products(name)";
+  const sel = "id, size, color, sku, barcode, product_id, products(name, product_images(path, is_primary))";
   let { data: v } = await sb.from("product_variants").select(sel).eq("barcode", c).limit(1).maybeSingle();
   if (!v) ({ data: v } = await sb.from("product_variants").select(sel).eq("sku", c).limit(1).maybeSingle());
   if (!v) return { notFound: true as const };
@@ -57,8 +66,8 @@ export async function buscarPorCodigo(code: string, priceListId: string | null) 
       .maybeSingle();
     price = pli?.price ?? null;
   }
-  const prod = v.products as unknown;
-  const name = (Array.isArray(prod) ? prod[0]?.name : (prod as { name: string } | null)?.name) ?? "";
+  const prod = (Array.isArray(v.products) ? v.products[0] : v.products) as { name: string; product_images: { path: string; is_primary: boolean }[] } | null;
+  const name = prod?.name ?? "";
 
   return {
     notFound: false as const,
@@ -68,6 +77,7 @@ export async function buscarPorCodigo(code: string, priceListId: string | null) 
     label: label(v.size, v.color),
     sku: v.sku,
     price,
+    image: imageUrl(prod?.product_images),
   };
 }
 

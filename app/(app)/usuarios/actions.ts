@@ -19,6 +19,26 @@ export async function crearRol(name: string): Promise<ActionState> {
   return { ok: true };
 }
 
+export async function asignarSucursal(userId: string, storeId: string | null): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+
+  if (storeId) {
+    const { data: store } = await sb.from("stores").select("id").eq("id", storeId).maybeSingle();
+    if (!store) return { error: "Sucursal inválida" };
+  }
+
+  // Editar el perfil de OTRO usuario requiere service-role (la policy solo permite el propio).
+  const admin = createAdminClient();
+  const { error } = await admin.from("profiles").update({ store_id: storeId }).eq("id", userId).eq("organization_id", orgId);
+  if (error) return { error: error.message };
+  revalidatePath("/usuarios");
+  return { ok: true };
+}
+
 export async function setPermiso(roleId: string, module: string, canView: boolean, canEdit: boolean): Promise<ActionState> {
   const denied = await requireAdmin();
   if (denied) return denied;
