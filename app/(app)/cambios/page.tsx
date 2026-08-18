@@ -36,7 +36,6 @@ export default async function CambiosPage({ searchParams }: { searchParams: Prom
   }
 
   const retailPriceListId = (priceLists ?? []).find((l) => l.name === "Publico")?.id ?? null;
-  const diffMethods = (methods ?? []).filter((m) => ["efectivo", "tarjeta", "transferencia", "digital", "otro"].includes(m.kind));
 
   if (openStores.length === 0) {
     return (
@@ -54,9 +53,9 @@ export default async function CambiosPage({ searchParams }: { searchParams: Prom
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight text-ink">Cambio de mostrador</h1>
-      <p className="mb-5 text-sm text-muted">Buscá la venta por N°, elegí qué prenda se devuelve y con qué se cambia. Sin efectivo de vuelta; el cambio es por otra prenda dentro de los 30 días.</p>
-      <NuevoCambioForm openStores={openStores} locked={locked} retailPriceListId={retailPriceListId} diffMethods={diffMethods} />
+      <h1 className="mb-1 text-2xl font-semibold tracking-tight text-ink">Cambios</h1>
+      <p className="mb-5 text-sm text-muted">Elegí el alcance (cliente mayorista o ticket), escaneá las prendas a devolver y con qué se cambian. Dentro de los 30 días.</p>
+      <NuevoCambioForm openStores={openStores} locked={locked} retailPriceListId={retailPriceListId} paymentMethods={methods ?? []} />
     </div>
   );
 }

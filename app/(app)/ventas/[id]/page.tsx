@@ -30,13 +30,13 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
     sb.from("exchanges").select("new_sale_id").eq("original_sale_id", id),
     sb.from("exchanges").select("original_sale_id").eq("new_sale_id", id),
   ]);
-  const linkedIds = [...(exFrom ?? []).map((e) => e.new_sale_id as string), ...(exTo ?? []).map((e) => e.original_sale_id as string)];
+  const linkedIds = [...(exFrom ?? []).map((e) => e.new_sale_id), ...(exTo ?? []).map((e) => e.original_sale_id)].filter(Boolean) as string[];
   const { data: linked } = linkedIds.length
     ? await sb.from("sales").select("id, number").in("id", linkedIds)
     : { data: [] as { id: string; number: number }[] };
   const numById = new Map((linked ?? []).map((s) => [s.id, s.number]));
-  const cambioDeVenta = (exTo ?? [])[0]?.original_sale_id as string | undefined;
-  const generoCambios = [...new Set((exFrom ?? []).map((e) => e.new_sale_id as string))];
+  const cambioDeVenta = ((exTo ?? [])[0]?.original_sale_id as string | null) ?? undefined;
+  const generoCambios = [...new Set((exFrom ?? []).map((e) => e.new_sale_id).filter(Boolean) as string[])];
 
   const field = (label: string, value: string | null) =>
     value ? <div className="text-sm"><span className="text-muted">{label}: </span><span className="text-ink">{value}</span></div> : null;
