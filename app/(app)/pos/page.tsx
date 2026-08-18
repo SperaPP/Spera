@@ -16,6 +16,7 @@ export type PosSummary = {
 export type PosStore = {
   id: string;
   name: string;
+  isWholesale: boolean;
   sessionId: string | null;
   openingAmount: number;
   openedAt: string | null;
@@ -69,12 +70,13 @@ export default async function PosPage() {
   const sb = await createClient();
   const { data: auth } = await sb.auth.getUser();
 
-  const [{ data: profile }, { data: isAdmin }, { data: stores }, { data: sessions }, { data: customers }, { data: methods }] = await Promise.all([
+  const [{ data: profile }, { data: isAdmin }, { data: stores }, { data: sessions }, { data: priceLists }, { data: profiles }, { data: methods }] = await Promise.all([
     auth?.user ? sb.from("profiles").select("store_id").eq("id", auth.user.id).maybeSingle() : Promise.resolve({ data: null }),
     sb.rpc("is_admin"),
-    sb.from("stores").select("id, name").eq("has_cash_register", true).eq("active", true).order("name"),
+    sb.from("stores").select("id, name, is_wholesale").eq("has_cash_register", true).eq("active", true).order("name"),
     sb.from("cash_sessions").select("id, store_id, opening_amount, opened_at").eq("status", "abierta"),
-    sb.from("customers").select("id, name, customer_types(price_list_id, price_lists(name))").eq("active", true).order("name"),
+    sb.from("price_lists").select("id, name").eq("active", true),
+    sb.from("customer_types").select("id, name, price_list_id").eq("active", true).order("name"),
     sb.from("payment_methods").select("id, name, kind").eq("active", true).order("position"),
   ]);
 
@@ -93,6 +95,7 @@ export default async function PosPage() {
     posStores.push({
       id: s.id,
       name: s.name,
+      isWholesale: s.is_wholesale ?? false,
       sessionId: sess?.id ?? null,
       openingAmount: sess ? Number(sess.opening_amount) : 0,
       openedAt: sess?.opened_at ?? null,
@@ -100,20 +103,19 @@ export default async function PosPage() {
     });
   }
 
-  const shapedCustomers = (customers ?? []).map((c) => {
-    const ct = rel<{ price_list_id: string | null; price_lists: unknown }>(c.customer_types);
-    const pl = ct ? rel<{ name: string }>(ct.price_lists) : null;
-    return { id: c.id, name: c.name, priceListId: ct?.price_list_id ?? null, priceListName: pl?.name ?? null };
-  });
-  const defaultCustomer = shapedCustomers.find((c) => c.name === "Consumidor Final")?.id ?? shapedCustomers[0]?.id ?? null;
+  // Lista Publico para mostrador; perfiles Mayorista/Platinum para el flujo mayorista.
+  const retailPriceListId = (priceLists ?? []).find((l) => l.name === "Publico")?.id ?? null;
+  const wholesaleProfiles = (profiles ?? [])
+    .filter((p) => p.name === "Mayorista" || p.name === "Platinum")
+    .map((p) => ({ customerTypeId: p.id, name: p.name, priceListId: p.price_list_id as string | null }));
 
   return (
     <PosTerminal
       stores={posStores}
       lockedToStore={!!myStoreId}
       isAdmin={isAdmin === true}
-      customers={shapedCustomers}
-      defaultCustomerId={defaultCustomer}
+      retailPriceListId={retailPriceListId}
+      wholesaleProfiles={wholesaleProfiles}
       paymentMethods={methods ?? []}
     />
   );

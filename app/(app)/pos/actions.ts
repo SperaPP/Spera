@@ -103,12 +103,76 @@ export async function validarCupon(code: string, subtotal: number): Promise<
   };
 }
 
+type ShapedCustomer = {
+  id: string; name: string; docType: string | null; docNumber: string | null;
+  email: string | null; phone: string | null; balance: number;
+  profileTypeId: string | null; profileName: string | null; priceListId: string | null;
+};
+
+function shapeCustomer(c: {
+  id: string; name: string; doc_type: string | null; doc_number: string | null;
+  email: string | null; phone: string | null; balance: number; customer_types: unknown;
+}): ShapedCustomer {
+  const ct = (Array.isArray(c.customer_types) ? c.customer_types[0] : c.customer_types) as
+    { id: string; name: string; price_list_id: string | null } | null;
+  return {
+    id: c.id, name: c.name, docType: c.doc_type, docNumber: c.doc_number,
+    email: c.email, phone: c.phone, balance: Number(c.balance),
+    profileTypeId: ct?.id ?? null, profileName: ct?.name ?? null, priceListId: ct?.price_list_id ?? null,
+  };
+}
+
+const CUSTOMER_SEL = "id, name, doc_type, doc_number, email, phone, balance, customer_types(id, name, price_list_id)";
+
+/** Busca un cliente por documento (DNI/CUIT) para el flujo mayorista. */
+export async function buscarClientePorDoc(doc: string): Promise<ShapedCustomer | null> {
+  const clean = doc.trim();
+  if (!clean) return null;
+  const sb = await createClient();
+  const { data } = await sb.from("customers").select(CUSTOMER_SEL).eq("doc_number", clean).eq("active", true).limit(1).maybeSingle();
+  return data ? shapeCustomer(data) : null;
+}
+
+/** Crea un cliente mayorista rápido desde el POS y lo devuelve listo para usar. */
+export async function crearClienteRapido(input: {
+  docType: string; docNumber: string; name: string; customerTypeId: string; email?: string; phone?: string;
+}): Promise<{ ok: true; customer: ShapedCustomer } | { ok: false; error: string }> {
+  const denied = await requireCan("pos", true);
+  if (denied) return { ok: false, error: denied.error ?? "Sin permiso" };
+  const name = input.name.trim();
+  const doc = input.docNumber.trim();
+  if (!name) return { ok: false, error: "Ingresá el nombre" };
+  if (!doc) return { ok: false, error: "Ingresá el documento" };
+  if (!input.customerTypeId) return { ok: false, error: "Elegí un perfil" };
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { ok: false, error: "Sin organización" };
+
+  const { data: ct } = await sb.from("customer_types").select("default_fiscal_condition").eq("id", input.customerTypeId).maybeSingle();
+
+  const { data, error } = await sb.from("customers").insert({
+    organization_id: orgId, name, customer_type_id: input.customerTypeId,
+    doc_type: input.docType || "DNI", doc_number: doc,
+    email: input.email?.trim() || null, phone: input.phone?.trim() || null,
+    fiscal_condition: ct?.default_fiscal_condition ?? "responsable_inscripto",
+  }).select(CUSTOMER_SEL).single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, customer: shapeCustomer(data) };
+}
+
 const schema = z.object({
   storeId: z.string().uuid(),
   cashSessionId: z.string().uuid(),
   customerId: z.string().uuid().nullable(),
   priceListId: z.string().uuid().nullable(),
   couponId: z.string().uuid().nullable(),
+  customerData: z.object({
+    name: z.string().trim().optional(),
+    doc: z.string().trim().optional(),
+    phone: z.string().trim().optional(),
+    email: z.string().trim().optional(),
+  }).nullable(),
   items: z.array(z.object({
     variantId: z.string().uuid(),
     productName: z.string(),
@@ -140,6 +204,7 @@ export async function crearVenta(input: CrearVentaInput): Promise<ActionState & 
     p_customer_id: d.customerId,
     p_price_list_id: d.priceListId,
     p_coupon_id: d.couponId,
+    p_customer_data: d.customerData ?? null,
     p_items: d.items.map((i) => ({
       variant_id: i.variantId,
       product_name: i.productName,
