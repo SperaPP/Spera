@@ -1,0 +1,56 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { formatDateTime } from "@/lib/format";
+import { ControlTransferencia } from "@/components/control-transferencia";
+
+function relName(r: unknown): string | null {
+  const o = Array.isArray(r) ? r[0] : r;
+  return (o as { name: string } | null)?.name ?? null;
+}
+
+export default async function TransferenciaDetallePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const sb = await createClient();
+
+  const { data: t } = await sb
+    .from("stock_transfers")
+    .select("id, status, notes, created_at, received_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
+    .eq("id", id)
+    .single();
+  if (!t) notFound();
+
+  const items = ((t.stock_transfer_items ?? []) as { quantity: number; product_variants: unknown }[]).map((it, i) => {
+    const v = (Array.isArray(it.product_variants) ? it.product_variants[0] : it.product_variants) as { sku: string | null; barcode: string | null; size: string | null; color: string | null; products: unknown } | null;
+    return {
+      id: `${i}`,
+      name: relName(v?.products) ?? "—",
+      label: [v?.size, v?.color].filter(Boolean).join(" / ") || null,
+      qty: it.quantity,
+      sku: v?.sku ?? null,
+      barcode: v?.barcode ?? null,
+    };
+  });
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <Link href="/transferencias" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink">
+        <ArrowLeft className="h-4 w-4" /> Volver a transferencias
+      </Link>
+
+      <div className="mb-5 rounded-xl border border-line bg-card p-5">
+        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-ink">
+          {relName(t.from_warehouse) ?? "—"} <ArrowRight className="h-5 w-5 text-faint" /> {relName(t.to_warehouse) ?? "—"}
+        </h1>
+        <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
+          <span>Enviada {formatDateTime(t.created_at)}</span>
+          {t.received_at && <span>Recibida {formatDateTime(t.received_at)}</span>}
+          {t.notes && <span>{t.notes}</span>}
+        </div>
+      </div>
+
+      <ControlTransferencia transferId={t.id} status={t.status} items={items} />
+    </div>
+  );
+}

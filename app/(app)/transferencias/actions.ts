@@ -44,7 +44,7 @@ const schema = z.object({
 
 export type CrearTransferenciaInput = z.infer<typeof schema>;
 
-export async function crearTransferencia(input: CrearTransferenciaInput): Promise<ActionState> {
+export async function crearTransferencia(input: CrearTransferenciaInput): Promise<ActionState & { id?: string }> {
   const denied = await requireCan("transferencias", true);
   if (denied) return denied;
 
@@ -53,7 +53,7 @@ export async function crearTransferencia(input: CrearTransferenciaInput): Promis
   const d = parsed.data;
 
   const sb = await createClient();
-  const { error } = await sb.rpc("create_transfer", {
+  const { data, error } = await sb.rpc("create_transfer", {
     p_from: d.fromWh,
     p_to: d.toWh,
     p_items: d.items.map((i) => ({ variant_id: i.variantId, product_name: i.productName, quantity: i.quantity })),
@@ -62,5 +62,30 @@ export async function crearTransferencia(input: CrearTransferenciaInput): Promis
   if (error) return { error: error.message };
 
   revalidatePath("/transferencias");
+  revalidatePath("/logistica");
+  return { ok: true, id: data as string };
+}
+
+export async function recibirTransferencia(id: string): Promise<ActionState> {
+  const denied = await requireCan("transferencias", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.rpc("receive_transfer", { p_transfer_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/transferencias");
+  revalidatePath(`/transferencias/${id}`);
+  revalidatePath("/logistica");
+  return { ok: true };
+}
+
+export async function cancelarTransferencia(id: string): Promise<ActionState> {
+  const denied = await requireCan("transferencias", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.rpc("cancel_transfer", { p_transfer_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/transferencias");
+  revalidatePath(`/transferencias/${id}`);
+  revalidatePath("/logistica");
   return { ok: true };
 }

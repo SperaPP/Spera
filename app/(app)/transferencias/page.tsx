@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, ArrowLeftRight, ArrowRight } from "lucide-react";
+import { Plus, ArrowLeftRight, ArrowRight, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/format";
 
@@ -7,6 +7,12 @@ function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
   return (o as { name: string } | null)?.name ?? null;
 }
+
+const STATUS: Record<string, { label: string; cls: string }> = {
+  enviada: { label: "Enviada", cls: "bg-warn-bg text-warn" },
+  recibida: { label: "Recibida", cls: "bg-ok-bg text-ok" },
+  cancelada: { label: "Cancelada", cls: "bg-danger-bg text-danger" },
+};
 
 export default async function TransferenciasPage() {
   const sb = await createClient();
@@ -51,27 +57,36 @@ export default async function TransferenciasPage() {
                 <th className="px-4 py-3 font-medium">Movimiento</th>
                 <th className="px-4 py-3 text-right font-medium">Ítems</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((t) => (
-                <tr key={t.id} className="border-b border-line last:border-0 hover:bg-canvas">
-                  <td className="px-4 py-3 text-muted">{formatDateTime(t.created_at)}</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-2 text-ink">
-                      {relName(t.from_warehouse) ?? "—"}
-                      <ArrowRight className="h-3.5 w-3.5 text-faint" />
-                      {relName(t.to_warehouse) ?? "—"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink">
-                    {(t.stock_transfer_items as { count: number }[] | null)?.[0]?.count ?? 0}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-ok-bg px-2.5 py-0.5 text-xs font-medium text-ok">Completada</span>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((t) => {
+                const st = STATUS[t.status] ?? { label: t.status, cls: "bg-canvas text-muted" };
+                return (
+                  <tr key={t.id} className="border-b border-line last:border-0 hover:bg-canvas">
+                    <td className="px-4 py-3 text-muted">{formatDateTime(t.created_at)}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-2 text-ink">
+                        {relName(t.from_warehouse) ?? "—"}
+                        <ArrowRight className="h-3.5 w-3.5 text-faint" />
+                        {relName(t.to_warehouse) ?? "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-ink">
+                      {(t.stock_transfer_items as { count: number }[] | null)?.[0]?.count ?? 0}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link href={`/transferencias/${t.id}`} className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
+                        {t.status === "enviada" ? "Recibir" : "Ver"} <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
