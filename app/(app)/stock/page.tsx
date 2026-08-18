@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Boxes } from "lucide-react";
+import { Boxes, ClipboardCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getPermissions } from "@/lib/auth";
+import { canView } from "@/lib/permissions";
 import { ProductSearch } from "@/components/product-search";
 
 const PAGE_SIZE = 60;
@@ -12,6 +14,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
 
   const { data: warehouses } = await sb.from("warehouses").select("id, name").eq("active", true).order("name");
   const whs = warehouses ?? [];
+  const canControl = canView(await getPermissions(), "control_stock");
 
   type Row = { id: string; name: string };
   let rows: Row[] = [];
@@ -57,8 +60,17 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Stock</h1>
-      <p className="mt-1 mb-4 text-sm text-muted">Existencias por depósito. Clic en un producto para ajustar.</p>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Stock</h1>
+          <p className="mt-1 text-sm text-muted">Existencias por depósito. Clic en un producto para ajustar.</p>
+        </div>
+        {canControl && (
+          <Link href="/stock/control" className="flex shrink-0 items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+            <ClipboardCheck className="h-4 w-4" /> Control de stock
+          </Link>
+        )}
+      </div>
 
       <div className="mb-4">
         <ProductSearch basePath="/stock" placeholder="Buscar por nombre o código…" />
