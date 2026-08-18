@@ -41,7 +41,7 @@ export function ReglasPreciosManager({
   }
 
   function runRecalc() {
-    if (!confirm("Recalcular Publico y Mayorista de todos los productos a partir de su Platinum. ¿Seguir?")) return;
+    if (!confirm("Recalcular desde PLATINUM: recalcula Publico y Mayorista a partir del Platinum de cada producto. Usalo tras cambiar la regla general de markup. ¿Seguir?")) return;
     start(async () => {
       const r = await recalcularPrecios();
       if (r.error) { toast.error(r.error); return; }
@@ -51,11 +51,11 @@ export function ReglasPreciosManager({
   }
 
   function runSeed() {
-    if (!confirm("Inicialización única: toma los precios actuales como Publico y calcula Platinum y Mayorista. Sólo afecta productos sin Platinum. ¿Seguir?")) return;
+    if (!confirm("Recalcular desde PUBLICO: toma el precio Publico como ancla y recalcula Platinum y Mayorista según la regla de cada categoría. Usalo al arrancar o si cambiaste qué categorías son excepción. ¿Seguir?")) return;
     start(async () => {
       const r = await inicializarPrecios();
       if (r.error) { toast.error(r.error); return; }
-      toast.success(`Precios inicializados: ${r.count} productos.`);
+      toast.success(`Precios recalculados desde Publico: ${r.count} productos.`);
       router.refresh();
     });
   }
@@ -119,15 +119,16 @@ export function ReglasPreciosManager({
       <div className={card}>
         <h3 className="text-sm font-medium text-ink">Aplicar a los productos</h3>
         <p className="mt-1 text-xs text-muted">
-          <span className="font-medium text-ink">Inicializar</span> es de un solo uso al arrancar (los precios actuales se toman como Publico).
-          Después de cambiar reglas, usá <span className="font-medium text-ink">Recalcular</span>.
+          <span className="font-medium text-ink">Desde Publico</span>: ancla en el precio Publico → recalcula Platinum y Mayorista. Usalo al arrancar o si cambiás qué categorías son excepción.
+          <br />
+          <span className="font-medium text-ink">Desde Platinum</span>: ancla en el Platinum cargado → recalcula Publico y Mayorista. Usalo tras cambiar la regla general de markup.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <button type="button" onClick={runSeed} disabled={pending} className={btn}>
-            <span className="inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Inicializar precios (una vez)</span>
+            <span className="inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Recalcular desde Publico</span>
           </button>
           <button type="button" onClick={runRecalc} disabled={pending} className={btn}>
-            <span className="inline-flex items-center gap-1.5"><RefreshCw className="h-3.5 w-3.5" /> Recalcular todos</span>
+            <span className="inline-flex items-center gap-1.5"><RefreshCw className="h-3.5 w-3.5" /> Recalcular desde Platinum</span>
           </button>
         </div>
       </div>
