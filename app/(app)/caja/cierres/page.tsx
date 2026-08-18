@@ -17,7 +17,7 @@ export default async function CierresPage() {
   const { data: sessions } = await sb
     .from("cash_sessions")
     .select("id, opening_amount, declared_amount, opened_at, closed_at, stores(name)")
-    .eq("status", "cerrada")
+    .in("status", ["cerrada", "entregada"])
     .order("closed_at", { ascending: false })
     .limit(30);
 

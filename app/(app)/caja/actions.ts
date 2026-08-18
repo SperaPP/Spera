@@ -22,6 +22,18 @@ export async function abrirCaja(
   return { ok: true };
 }
 
+/** Administración marca un período cerrado como Entregado (viajó a central). */
+export async function marcarEntregada(sessionId: string): Promise<ActionState> {
+  const denied = await requireCan("caja", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.rpc("deliver_cash_session", { p_session_id: sessionId });
+  if (error) return { error: error.message };
+  revalidatePath("/caja");
+  revalidatePath(`/caja/${sessionId}`);
+  return { ok: true };
+}
+
 export async function cerrarCaja(
   sessionId: string,
   declaredAmount: number,
