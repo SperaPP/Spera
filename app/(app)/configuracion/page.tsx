@@ -4,6 +4,7 @@ import { MediosPagoManager } from "@/components/medios-pago-manager";
 import { TiposClienteManager } from "@/components/tipos-cliente-manager";
 import { DepositosManager, LocalesManager } from "@/components/locales-depositos-manager";
 import { ReglasPreciosManager } from "@/components/reglas-precios-manager";
+import { CuponesManager } from "@/components/cupones-manager";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -40,6 +41,11 @@ export default async function ConfiguracionPage() {
   }
   const activeCategories = (categorias ?? []).filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }));
 
+  const { data: coupons } = await sb
+    .from("coupons")
+    .select("id, code, discount_type, discount_value, min_amount, max_uses, used_count, expires_at, active")
+    .order("created_at", { ascending: false });
+
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Configuración</h1>
@@ -55,6 +61,14 @@ export default async function ConfiguracionPage() {
 
       <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Precios</h2>
       <ReglasPreciosManager defaultRule={defaultRule} categories={activeCategories} overrides={overrides} />
+
+      <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Cupones</h2>
+      <CuponesManager coupons={(coupons ?? []).map((c) => ({
+        id: c.id, code: c.code, discount_type: c.discount_type, discount_value: Number(c.discount_value),
+        min_amount: c.min_amount != null ? Number(c.min_amount) : null,
+        max_uses: c.max_uses != null ? Number(c.max_uses) : null,
+        used_count: Number(c.used_count), expires_at: c.expires_at, active: c.active,
+      }))} />
 
       <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Ventas</h2>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

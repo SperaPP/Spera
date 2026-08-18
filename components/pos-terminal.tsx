@@ -4,9 +4,9 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff } from "lucide-react";
+import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { buscarProductos, buscarPorCodigo, crearVenta } from "@/app/(app)/pos/actions";
+import { buscarProductos, buscarPorCodigo, crearVenta, validarCupon } from "@/app/(app)/pos/actions";
 import { abrirCaja, cerrarCaja } from "@/app/(app)/caja/actions";
 import type { PosStore } from "@/app/(app)/pos/page";
 
@@ -205,6 +205,8 @@ function Terminal({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [payments, setPayments] = useState<Payment[]>([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
   const [closing, setClosing] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [coupon, setCoupon] = useState<{ id: string; code: string; type: "percent" | "amount"; value: number; minAmount: number | null } | null>(null);
   const [pending, start] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -212,9 +214,32 @@ function Terminal({
   const priceListId = customer?.priceListId ?? null;
 
   const subtotal = cart.reduce((a, i) => a + i.quantity * i.unitPrice, 0);
-  const total = subtotal;
+  // El descuento se recalcula en vivo desde el tipo/valor del cupón (así no se
+  // desincroniza con el carrito). El RPC lo vuelve a calcular al confirmar.
+  const couponBelowMin = !!coupon && coupon.minAmount != null && subtotal < coupon.minAmount;
+  const rawDiscount = coupon && !couponBelowMin
+    ? (coupon.type === "percent" ? Math.round((subtotal * coupon.value) / 100) : coupon.value)
+    : 0;
+  const discount = Math.min(rawDiscount, subtotal);
+  const total = Math.max(0, subtotal - discount);
   const paid = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
   const remaining = Math.round((total - paid) * 100) / 100;
+
+  function aplicarCupon() {
+    const code = couponCode.trim();
+    if (!code) return;
+    if (subtotal <= 0) return toast.error("Agregá productos antes del cupón.");
+    start(async () => {
+      const r = await validarCupon(code, subtotal);
+      if (!r.ok) { toast.error(r.error); return; }
+      setCoupon({ id: r.couponId, code: code.toUpperCase(), type: r.discountType, value: r.discountValue, minAmount: r.minAmount });
+      toast.success(`Cupón aplicado: −${formatMoney(r.discount)}`);
+    });
+  }
+  function quitarCupon() {
+    setCoupon(null);
+    setCouponCode("");
+  }
 
   function onSearch(v: string) {
     setQuery(v);
@@ -248,6 +273,7 @@ function Terminal({
 
   function confirmar() {
     if (cart.length === 0) return toast.error("El carrito está vacío.");
+    if (couponBelowMin) return toast.error("El carrito ya no alcanza el mínimo del cupón. Quitalo o agregá productos.");
     if (remaining !== 0) return toast.error(remaining > 0 ? `Faltan cobrar ${formatMoney(remaining)}` : `Cobro excedido en ${formatMoney(-remaining)}`);
 
     start(async () => {
@@ -256,7 +282,7 @@ function Terminal({
         cashSessionId: store.sessionId!,
         customerId: customerId || null,
         priceListId,
-        discount: 0,
+        couponId: coupon?.id ?? null,
         items: cart.map((i) => ({ variantId: i.variantId, productName: i.name, variantLabel: i.label, quantity: i.quantity, unitPrice: i.unitPrice })),
         payments: payments.filter((p) => p.methodId && Number(p.amount) > 0).map((p) => ({ paymentMethodId: p.methodId, amount: Number(p.amount), surcharge: 0 })),
       });
@@ -264,6 +290,8 @@ function Terminal({
       toast.success(`Venta #${res.number} registrada`);
       setCart([]);
       setPayments([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
+      setCoupon(null);
+      setCouponCode("");
       setQuery("");
       setResults([]);
     });
@@ -383,6 +411,37 @@ function Terminal({
               <span className="text-muted">Subtotal</span>
               <span className="tabular-nums text-ink">{formatMoney(subtotal)}</span>
             </div>
+
+            {/* Cupón */}
+            {coupon ? (
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="inline-flex items-center gap-1.5 text-ok">
+                    <Ticket className="h-3.5 w-3.5" /> {coupon.code}
+                    <button onClick={quitarCupon} className="text-faint hover:text-danger" title="Quitar cupón"><X className="h-3.5 w-3.5" /></button>
+                  </span>
+                  <span className="tabular-nums text-ok">−{formatMoney(discount)}</span>
+                </div>
+                {couponBelowMin && (
+                  <p className="mt-1 text-xs text-warn">El carrito no alcanza el mínimo del cupón ({formatMoney(coupon.minAmount ?? 0)}).</p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Ticket className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+                  <input
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") aplicarCupon(); }}
+                    placeholder="Cupón de descuento"
+                    className={`${input} py-1.5 pl-8 text-sm`}
+                  />
+                </div>
+                <button onClick={aplicarCupon} disabled={pending || !couponCode.trim()} className="shrink-0 rounded-lg border border-line-strong px-3 py-1.5 text-xs font-medium text-ink hover:bg-canvas disabled:opacity-50">Aplicar</button>
+              </div>
+            )}
+
             <div className="mt-3 flex justify-between border-t border-line pt-3">
               <span className="font-medium text-ink">Total</span>
               <span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(total)}</span>

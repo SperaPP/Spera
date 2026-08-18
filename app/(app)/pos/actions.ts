@@ -81,12 +81,34 @@ export async function buscarPorCodigo(code: string, priceListId: string | null) 
   };
 }
 
+/** Valida un cupón contra el subtotal actual (preview del POS, no incrementa uso). */
+export async function validarCupon(code: string, subtotal: number): Promise<
+  { ok: true; couponId: string; discount: number; discountType: "percent" | "amount"; discountValue: number; minAmount: number | null }
+  | { ok: false; error: string }
+> {
+  const clean = code.trim();
+  if (!clean) return { ok: false, error: "Ingresá un código." };
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("validate_coupon", { p_code: clean, p_subtotal: subtotal });
+  if (error) return { ok: false, error: error.message };
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { ok: false, error: "Cupón inválido." };
+  return {
+    ok: true,
+    couponId: row.coupon_id as string,
+    discount: Number(row.discount),
+    discountType: row.discount_type as "percent" | "amount",
+    discountValue: Number(row.discount_value),
+    minAmount: row.min_amount != null ? Number(row.min_amount) : null,
+  };
+}
+
 const schema = z.object({
   storeId: z.string().uuid(),
   cashSessionId: z.string().uuid(),
   customerId: z.string().uuid().nullable(),
   priceListId: z.string().uuid().nullable(),
-  discount: z.number().min(0).default(0),
+  couponId: z.string().uuid().nullable(),
   items: z.array(z.object({
     variantId: z.string().uuid(),
     productName: z.string(),
@@ -117,7 +139,7 @@ export async function crearVenta(input: CrearVentaInput): Promise<ActionState & 
     p_cash_session_id: d.cashSessionId,
     p_customer_id: d.customerId,
     p_price_list_id: d.priceListId,
-    p_discount: d.discount,
+    p_coupon_id: d.couponId,
     p_items: d.items.map((i) => ({
       variant_id: i.variantId,
       product_name: i.productName,

@@ -237,3 +237,43 @@ export async function inicializarPrecios(): Promise<ActionState & { count?: numb
   revalidatePath("/precios");
   return { ok: true, count: (data as number) ?? 0 };
 }
+
+// ── Cupones (solo perfil con acceso a Configuración) ───────────
+export async function crearCupon(input: {
+  code: string; discountType: "percent" | "amount"; discountValue: number;
+  minAmount: number | null; maxUses: number | null; expiresAt: string | null;
+}): Promise<ActionState> {
+  const denied = await requireCan("configuracion", true);
+  if (denied) return denied;
+  const code = input.code.trim().toUpperCase();
+  if (!code) return { error: "Ingresá un código" };
+  if (!isFinite(input.discountValue) || input.discountValue <= 0) return { error: "Valor de descuento inválido" };
+  if (input.discountType === "percent" && input.discountValue > 100) return { error: "El porcentaje no puede superar 100" };
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+
+  const { error } = await sb.from("coupons").insert({
+    organization_id: orgId,
+    code,
+    discount_type: input.discountType,
+    discount_value: input.discountValue,
+    min_amount: input.minAmount,
+    max_uses: input.maxUses,
+    expires_at: input.expiresAt || null,
+  });
+  if (error) return { error: error.code === "23505" ? "Ya existe un cupón con ese código" : error.message };
+  revalidatePath("/configuracion");
+  return { ok: true };
+}
+
+export async function toggleCupon(id: string, active: boolean): Promise<ActionState> {
+  const denied = await requireCan("configuracion", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.from("coupons").update({ active }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  return { ok: true };
+}
