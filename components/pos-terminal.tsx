@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard } from "lucide-react";
+import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard, Receipt, Gift } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { buscarProductos, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, crearClienteRapido } from "@/app/(app)/pos/actions";
 import { abrirCaja, cerrarCaja } from "@/app/(app)/caja/actions";
@@ -206,6 +206,7 @@ function Terminal({
   const [retailData, setRetailData] = useState<RetailForm | null>(null);
   const [showRetail, setShowRetail] = useState(false);
   const [checkout, setCheckout] = useState(false);
+  const [lastSale, setLastSale] = useState<{ id: string; number: number } | null>(null);
   const [pending, start] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -291,6 +292,7 @@ function Terminal({
       });
       if (res.error) { toast.error(res.error); return; }
       toast.success(`Venta #${res.number} registrada${overpay > 0 ? ` · $${overpay.toLocaleString("es-AR")} a favor` : ""}`);
+      if (res.id && res.number != null) setLastSale({ id: res.id, number: res.number });
       setCart([]); setPayments([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
       setCoupon(null); setCouponCode(""); setRetailData(null); setCheckout(false); setQuery(""); setResults([]);
       if (wholesale) setCustomer(null);
@@ -315,6 +317,22 @@ function Terminal({
       </div>
 
       {closing && <CerrarCajaPanel store={store} onDone={() => setClosing(false)} />}
+
+      {lastSale && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-ok/30 bg-ok-bg px-4 py-3">
+          <Receipt className="h-4 w-4 text-ok" />
+          <span className="text-sm font-medium text-ink">Venta #{lastSale.number} registrada</span>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => window.open(`/ventas/${lastSale.id}/ticket`, "_blank")} className="flex items-center gap-1.5 rounded-lg border border-line-strong bg-card px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-canvas">
+              <Receipt className="h-3.5 w-3.5" /> Imprimir ticket
+            </button>
+            <button onClick={() => window.open(`/ventas/${lastSale.id}/ticket?regalo=1`, "_blank")} className="flex items-center gap-1.5 rounded-lg border border-line-strong bg-card px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-canvas">
+              <Gift className="h-3.5 w-3.5" /> Ticket regalo
+            </button>
+            <button onClick={() => setLastSale(null)} className="rounded-md p-1 text-muted hover:text-ink"><X className="h-4 w-4" /></button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_380px]">
         {/* Izquierda: búsqueda + carrito */}

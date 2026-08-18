@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Receipt, Gift } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AnularVentaButton } from "@/components/anular-venta-button";
@@ -38,11 +38,19 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Venta #{sale.number}</h1>
-          {sale.status === "anulada" ? (
-            <span className="rounded-full bg-danger-bg px-2.5 py-0.5 text-xs font-medium text-danger">Anulada</span>
-          ) : (
-            <AnularVentaButton saleId={sale.id} />
-          )}
+          <div className="flex items-center gap-2">
+            <Link href={`/ventas/${sale.id}/ticket`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
+              <Receipt className="h-3.5 w-3.5" /> Ticket
+            </Link>
+            <Link href={`/ventas/${sale.id}/ticket?regalo=1`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
+              <Gift className="h-3.5 w-3.5" /> Regalo
+            </Link>
+            {sale.status === "anulada" ? (
+              <span className="rounded-full bg-danger-bg px-2.5 py-0.5 text-xs font-medium text-danger">Anulada</span>
+            ) : (
+              <AnularVentaButton saleId={sale.id} />
+            )}
+          </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
           {field("Fecha", formatDateTime(sale.created_at))}

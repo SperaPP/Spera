@@ -189,7 +189,7 @@ const schema = z.object({
 
 export type CrearVentaInput = z.infer<typeof schema>;
 
-export async function crearVenta(input: CrearVentaInput): Promise<ActionState & { number?: number }> {
+export async function crearVenta(input: CrearVentaInput): Promise<ActionState & { number?: number; id?: string }> {
   const denied = await requireCan("pos", true);
   if (denied) return denied;
 
@@ -221,5 +221,5 @@ export async function crearVenta(input: CrearVentaInput): Promise<ActionState & 
   if (error) return { error: error.message };
 
   const { data: sale } = await sb.from("sales").select("number").eq("id", id as string).single();
-  return { ok: true, number: sale?.number };
+  return { ok: true, number: sale?.number, id: id as string };
 }
