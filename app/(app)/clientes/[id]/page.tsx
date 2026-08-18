@@ -14,6 +14,10 @@ const REASON_LABEL: Record<string, string> = {
   venta: "Venta",
   cobranza: "Cobranza",
   devolucion: "Devolución",
+  cambio: "Cambio",
+  saldo_favor: "Saldo a favor",
+  sobrepago: "Sobrepago",
+  anulacion: "Anulación",
   ajuste: "Ajuste",
 };
 

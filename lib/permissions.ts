@@ -8,7 +8,6 @@ export type Perms = Record<string, { view: boolean; edit: boolean }>;
 export const MODULES: { key: string; label: string }[] = [
   { key: "pos", label: "Punto de venta" },
   { key: "ventas", label: "Ventas" },
-  { key: "devoluciones", label: "Devoluciones" },
   { key: "logistica", label: "Logística" },
   { key: "productos", label: "Productos" },
   { key: "stock", label: "Stock" },
