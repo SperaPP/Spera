@@ -26,6 +26,7 @@ export default async function CierresPage() {
   // Ventas y cobros en efectivo por turno (una consulta por tabla).
   const soldBySession = new Map<string, number>();
   const cashBySession = new Map<string, number>();
+  const cambioBySession = new Map<string, number>(); // crédito de cambios reusado
 
   if (ids.length) {
     const { data: sales } = await sb.from("sales").select("id, cash_session_id, total").in("cash_session_id", ids).eq("status", "completada");
@@ -36,12 +37,13 @@ export default async function CierresPage() {
     }
     const saleIds = (sales ?? []).map((s) => s.id);
     if (saleIds.length) {
-      const { data: sp } = await sb.from("sale_payments").select("sale_id, amount, payment_methods(affects_cash)").in("sale_id", saleIds);
+      const { data: sp } = await sb.from("sale_payments").select("sale_id, amount, payment_methods(affects_cash, kind)").in("sale_id", saleIds);
       for (const p of sp ?? []) {
-        if (affectsCash(p.payment_methods)) {
-          const sess = saleSession.get(p.sale_id);
-          if (sess) cashBySession.set(sess, (cashBySession.get(sess) ?? 0) + Number(p.amount));
-        }
+        const sess = saleSession.get(p.sale_id);
+        if (!sess) continue;
+        const m = (Array.isArray(p.payment_methods) ? p.payment_methods[0] : p.payment_methods) as { affects_cash: boolean; kind: string } | null;
+        if (m?.affects_cash) cashBySession.set(sess, (cashBySession.get(sess) ?? 0) + Number(p.amount));
+        if (m?.kind === "cambio") cambioBySession.set(sess, (cambioBySession.get(sess) ?? 0) + Number(p.amount));
       }
     }
 
@@ -67,7 +69,7 @@ export default async function CierresPage() {
     const declared = s.declared_amount == null ? null : Number(s.declared_amount);
     return {
       id: s.id, store: relName(s.stores) ?? "—", closedAt: s.closed_at as string,
-      opening, sold: soldBySession.get(s.id) ?? 0, expected, declared,
+      opening, sold: (soldBySession.get(s.id) ?? 0) - (cambioBySession.get(s.id) ?? 0), expected, declared,
       diff: declared == null ? null : declared - expected,
     };
   });

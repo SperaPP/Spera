@@ -36,25 +36,28 @@ export default async function CajaPage() {
       .eq("cash_session_id", s.id)
       .eq("status", "completada");
     const ids = (sales ?? []).map((x) => x.id);
-    const sold = (sales ?? []).reduce((a, x) => a + Number(x.total), 0);
+    const grossSold = (sales ?? []).reduce((a, x) => a + Number(x.total), 0);
 
     let cash = 0;
+    let cambio = 0; // crédito de cambios reusado: no es venta nueva, se descuenta del "vendido"
     const byMethod = new Map<string, number>();
     if (ids.length) {
       const { data: pays } = await sb
         .from("sale_payments")
-        .select("amount, payment_methods(name, affects_cash)")
+        .select("amount, payment_methods(name, affects_cash, kind)")
         .in("sale_id", ids);
       for (const p of pays ?? []) {
         const raw = p.payment_methods as unknown;
-        const m = (Array.isArray(raw) ? raw[0] : raw) as { name: string; affects_cash: boolean } | null;
+        const m = (Array.isArray(raw) ? raw[0] : raw) as { name: string; affects_cash: boolean; kind: string } | null;
         const amt = Number(p.amount);
         if (m) {
           byMethod.set(m.name, (byMethod.get(m.name) ?? 0) + amt);
           if (m.affects_cash) cash += amt;
+          if (m.kind === "cambio") cambio += amt;
         }
       }
     }
+    const sold = grossSold - cambio;
 
     // Cobranzas de cuenta corriente cobradas en este turno (entran al arqueo).
     const { data: receipts } = await sb.from("receipts").select("id").eq("cash_session_id", s.id);

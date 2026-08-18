@@ -30,21 +30,24 @@ async function computeSummary(
 ): Promise<PosSummary> {
   const { data: sales } = await sb.from("sales").select("id, total").eq("cash_session_id", sessionId).eq("status", "completada");
   const ids = (sales ?? []).map((x) => x.id);
-  const sold = (sales ?? []).reduce((a, x) => a + Number(x.total), 0);
+  const grossSold = (sales ?? []).reduce((a, x) => a + Number(x.total), 0);
 
   let cash = 0;
+  let cambio = 0; // crédito de cambios reusado: no es venta nueva
   const byMethod = new Map<string, number>();
   if (ids.length) {
-    const { data: pays } = await sb.from("sale_payments").select("amount, payment_methods(name, affects_cash)").in("sale_id", ids);
+    const { data: pays } = await sb.from("sale_payments").select("amount, payment_methods(name, affects_cash, kind)").in("sale_id", ids);
     for (const p of pays ?? []) {
-      const m = rel<{ name: string; affects_cash: boolean }>(p.payment_methods);
+      const m = rel<{ name: string; affects_cash: boolean; kind: string }>(p.payment_methods);
       const amt = Number(p.amount);
       if (m) {
         byMethod.set(m.name, (byMethod.get(m.name) ?? 0) + amt);
         if (m.affects_cash) cash += amt;
+        if (m.kind === "cambio") cambio += amt;
       }
     }
   }
+  const sold = grossSold - cambio;
 
   // Cobranzas en efectivo de este turno entran al arqueo.
   const { data: receipts } = await sb.from("receipts").select("id").eq("cash_session_id", sessionId);
