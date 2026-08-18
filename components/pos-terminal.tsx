@@ -287,6 +287,18 @@ function Terminal({
     });
   }
 
+  // Aplica el saldo a favor del cliente para cubrir lo que falta (hasta el disponible).
+  function aplicarSaldoAFavor() {
+    const m = methods.find((x) => x.kind === "saldo_favor");
+    if (!m || creditAvailable <= 0) return;
+    const isFavor = (methodId: string) => methods.find((x) => x.id === methodId)?.kind === "saldo_favor";
+    const others = payments.filter((p) => !isFavor(p.methodId));
+    const paidExcl = others.reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const apply = Math.min(creditAvailable, Math.max(0, total - paidExcl));
+    if (apply <= 0) { toast.message("No hace falta usar saldo a favor: el pago ya cubre el total."); return; }
+    setPayments([...others, { methodId: m.id, amount: String(apply) }]);
+  }
+
   function confirmar() {
     if (cart.length === 0) return toast.error("El carrito está vacío.");
     if (wholesale && !customer) return toast.error("Identificá al cliente (mayorista).");
@@ -479,7 +491,12 @@ function Terminal({
               <span className="text-xs font-semibold uppercase tracking-wide text-faint">Cobro</span>
               <button onClick={() => setPayments((p) => { const n = [...p]; if (n[0]) n[0] = { ...n[0], amount: String(total) }; return n; })} className="text-xs font-medium text-accent hover:underline">Efectivo exacto</button>
             </div>
-            {wholesale && creditAvailable > 0 && <p className="mb-2.5 rounded-lg bg-ok-bg px-2.5 py-1.5 text-xs font-medium text-ok">Saldo a favor disponible: {formatMoney(creditAvailable)}</p>}
+            {wholesale && creditAvailable > 0 && (
+              <button onClick={aplicarSaldoAFavor} className="mb-2.5 flex w-full items-center justify-between rounded-lg bg-ok-bg px-2.5 py-2 text-xs font-medium text-ok transition-opacity hover:opacity-80">
+                <span>Saldo a favor: {formatMoney(creditAvailable)}</span>
+                <span className="rounded-md bg-ok/15 px-2 py-0.5 font-semibold">Usar</span>
+              </button>
+            )}
             <div className="space-y-2">
               {payments.map((p, idx) => (
                 <div key={idx} className="flex items-center gap-2">
