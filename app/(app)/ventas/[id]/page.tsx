@@ -16,7 +16,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, status, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total), sale_payments(amount, surcharge, payment_methods(name))")
+    .select("id, number, status, channel, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total), sale_payments(amount, surcharge, payment_methods(name))")
     .eq("id", id)
     .single();
 
@@ -47,6 +47,8 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
             </Link>
             {sale.status === "anulada" ? (
               <span className="rounded-full bg-danger-bg px-2.5 py-0.5 text-xs font-medium text-danger">Anulada</span>
+            ) : sale.channel === "cambio" ? (
+              <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-medium text-accent">Cambio</span>
             ) : (
               <AnularVentaButton saleId={sale.id} />
             )}

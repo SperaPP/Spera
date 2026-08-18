@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard, Receipt, Gift } from "lucide-react";
+import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard, Receipt, Gift, RefreshCw } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { buscarProductos, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, crearClienteRapido } from "@/app/(app)/pos/actions";
 import { abrirCaja, cerrarCaja } from "@/app/(app)/caja/actions";
@@ -310,6 +310,9 @@ function Terminal({
         </div>
         <div className="flex items-center gap-2">
           {storeSelector}
+          <Link href="/cambios" className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+            <RefreshCw className="h-4 w-4" /> Cambio
+          </Link>
           <button onClick={() => setClosing((s) => !s)} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
             <Lock className="h-4 w-4" /> Cerrar caja
           </button>
