@@ -26,6 +26,13 @@ function Thumb({ src, size = "h-10 w-10" }: { src: string | null; size?: string 
   return <img src={src} alt="" className={`${size} shrink-0 rounded-md object-cover`} />;
 }
 
+type RetailForm = { name: string; apellido: string; doc: string; phone: string; email: string };
+function toSnapshot(d: RetailForm) {
+  const name = [d.name, d.apellido].filter(Boolean).join(" ").trim();
+  const s = { name: name || undefined, doc: d.doc.trim() || undefined, phone: d.phone.trim() || undefined, email: d.email.trim() || undefined };
+  return (s.name || s.doc || s.phone || s.email) ? s : null;
+}
+
 export function PosTerminal({
   stores,
   lockedToStore,
@@ -196,8 +203,9 @@ function Terminal({
   const [closing, setClosing] = useState(false);
   const [couponCode, setCouponCode] = useState("");
   const [coupon, setCoupon] = useState<{ id: string; code: string; type: "percent" | "amount"; value: number; minAmount: number | null } | null>(null);
-  const [retailData, setRetailData] = useState<{ name: string; apellido: string; doc: string; phone: string; email: string } | null>(null);
+  const [retailData, setRetailData] = useState<RetailForm | null>(null);
   const [showRetail, setShowRetail] = useState(false);
+  const [checkout, setCheckout] = useState(false);
   const [pending, start] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -264,6 +272,12 @@ function Terminal({
     if (remaining > 0) return toast.error(`Faltan cobrar ${formatMoney(remaining)}`);
     if (!wholesale && remaining < 0) return toast.error(`Cobro excedido en ${formatMoney(overpay)}`);
 
+    // Mostrador: al cobrar se ofrece registrar los datos del cliente (opcional).
+    if (!wholesale) { setCheckout(true); return; }
+    finalizar(null);
+  }
+
+  function finalizar(snapshot: { name?: string; doc?: string; phone?: string; email?: string } | null) {
     start(async () => {
       const res = await crearVenta({
         storeId: store.id,
@@ -271,16 +285,14 @@ function Terminal({
         customerId: wholesale ? customer!.id : null,
         priceListId,
         couponId: !wholesale ? coupon?.id ?? null : null,
-        customerData: !wholesale && retailData
-          ? { name: [retailData.name, retailData.apellido].filter(Boolean).join(" ").trim() || undefined, doc: retailData.doc || undefined, phone: retailData.phone || undefined, email: retailData.email || undefined }
-          : null,
+        customerData: !wholesale ? snapshot : null,
         items: cart.map((i) => ({ variantId: i.variantId, productName: i.name, variantLabel: i.label, quantity: i.quantity, unitPrice: i.unitPrice })),
         payments: payments.filter((p) => p.methodId && Number(p.amount) > 0).map((p) => ({ paymentMethodId: p.methodId, amount: Number(p.amount), surcharge: 0 })),
       });
       if (res.error) { toast.error(res.error); return; }
       toast.success(`Venta #${res.number} registrada${overpay > 0 ? ` · $${overpay.toLocaleString("es-AR")} a favor` : ""}`);
       setCart([]); setPayments([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
-      setCoupon(null); setCouponCode(""); setRetailData(null); setQuery(""); setResults([]);
+      setCoupon(null); setCouponCode(""); setRetailData(null); setCheckout(false); setQuery(""); setResults([]);
       if (wholesale) setCustomer(null);
     });
   }
@@ -447,7 +459,16 @@ function Terminal({
         </div>
       </div>
 
-      {showRetail && <RetailDataModal data={retailData} onClose={() => setShowRetail(false)} onSave={(d) => { setRetailData(d); setShowRetail(false); }} />}
+      {showRetail && <RetailDataModal mode="edit" data={retailData} onClose={() => setShowRetail(false)} onSave={(d) => { setRetailData(d); setShowRetail(false); }} />}
+      {checkout && (
+        <RetailDataModal
+          mode="checkout"
+          data={retailData}
+          onClose={() => setCheckout(false)}
+          onSkip={() => { setCheckout(false); finalizar(null); }}
+          onSave={(d) => { setRetailData(d); setCheckout(false); finalizar(toSnapshot(d)); }}
+        />
+      )}
     </div>
   );
 }
@@ -473,28 +494,40 @@ function ClienteMostrador({ data, onOpen, onClear }: { data: { name: string; ape
   );
 }
 
-function RetailDataModal({ data, onClose, onSave }: {
-  data: { name: string; apellido: string; doc: string; phone: string; email: string } | null;
+function RetailDataModal({ data, mode, onClose, onSave, onSkip }: {
+  data: RetailForm | null;
+  mode: "edit" | "checkout";
   onClose: () => void;
-  onSave: (d: { name: string; apellido: string; doc: string; phone: string; email: string }) => void;
+  onSave: (d: RetailForm) => void;
+  onSkip?: () => void;
 }) {
-  const [f, setF] = useState(data ?? { name: "", apellido: "", doc: "", phone: "", email: "" });
-  const set = (k: keyof typeof f, v: string) => setF((p) => ({ ...p, [k]: v }));
+  const [f, setF] = useState<RetailForm>(data ?? { name: "", apellido: "", doc: "", phone: "", email: "" });
+  const set = (k: keyof RetailForm, v: string) => setF((p) => ({ ...p, [k]: v }));
+  const checkout = mode === "checkout";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border border-line bg-card p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-sm font-medium text-ink">Datos del cliente (opcional)</h2>
-        <p className="mt-1 text-xs text-muted">Para poder enviar la factura por mail cuando activemos facturación. Todo es opcional.</p>
+        <p className="mt-1 text-xs text-muted">{checkout ? "Registralos para enviarle la factura por mail cuando activemos facturación, o cobrá sin datos." : "Para poder enviar la factura por mail cuando activemos facturación. Todo es opcional."}</p>
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <div><label className="mb-1 block text-xs font-medium text-muted">Nombre</label><input className={input} value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
+          <div><label className="mb-1 block text-xs font-medium text-muted">Nombre</label><input autoFocus className={input} value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
           <div><label className="mb-1 block text-xs font-medium text-muted">Apellido</label><input className={input} value={f.apellido} onChange={(e) => set("apellido", e.target.value)} /></div>
           <div><label className="mb-1 block text-xs font-medium text-muted">DNI</label><input className={input} value={f.doc} onChange={(e) => set("doc", e.target.value)} /></div>
           <div><label className="mb-1 block text-xs font-medium text-muted">Teléfono</label><input className={input} value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
           <div className="col-span-2"><label className="mb-1 block text-xs font-medium text-muted">Email</label><input type="email" className={input} value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
         </div>
         <div className="mt-5 flex justify-end gap-3">
-          <button onClick={onClose} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
-          <button onClick={() => onSave(f)} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover">Guardar</button>
+          {checkout ? (
+            <>
+              <button onClick={onSkip} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cobrar sin datos</button>
+              <button onClick={() => onSave(f)} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover">Guardar y cobrar</button>
+            </>
+          ) : (
+            <>
+              <button onClick={onClose} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
+              <button onClick={() => onSave(f)} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover">Guardar</button>
+            </>
+          )}
         </div>
       </div>
     </div>
