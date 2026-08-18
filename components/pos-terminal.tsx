@@ -385,22 +385,12 @@ function Terminal({
                 <button
                   key={p.id}
                   onClick={() => onTile(p)}
-                  className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md"
+                  className="flex min-h-[106px] flex-col justify-between rounded-2xl border border-line bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md"
                 >
-                  <div className="relative aspect-square w-full bg-canvas">
-                    {p.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.image} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-faint"><ImageOff className="h-7 w-7" /></span>
-                    )}
-                    {p.variants.length > 1 && (
-                      <span className="absolute right-2 top-2 rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">{p.variants.length} var.</span>
-                    )}
-                  </div>
-                  <div className="flex flex-1 flex-col p-3">
-                    <div className="line-clamp-2 text-sm font-medium leading-snug text-ink">{p.name}</div>
-                    <div className={`mt-auto pt-2 text-sm font-semibold tabular-nums ${p.price != null ? "text-ink" : "text-faint"}`}>{p.price != null ? formatMoney(p.price) : "sin precio"}</div>
+                  <div className="line-clamp-3 text-sm font-medium leading-snug text-ink">{p.name}</div>
+                  <div className="mt-3 flex items-end justify-between gap-2">
+                    <span className={`text-base font-semibold tabular-nums ${p.price != null ? "text-ink" : "text-faint"}`}>{p.price != null ? formatMoney(p.price) : "sin precio"}</span>
+                    {p.variants.length > 1 && <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">{p.variants.length} var.</span>}
                   </div>
                 </button>
               ))}

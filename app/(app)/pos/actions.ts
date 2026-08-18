@@ -57,7 +57,7 @@ export async function listarProductosPOS(query: string, priceListId: string | nu
   if (priceListId) req = req.eq("price_list_items.price_list_id", priceListId);
   req = q.length >= 2
     ? req.ilike("name", `%${q}%`).order("name").limit(40)
-    : req.order("has_image", { ascending: false }).order("name").limit(40);
+    : req.order("name").limit(40);
 
   const { data } = await req;
   return (data ?? []).map((p) => {
