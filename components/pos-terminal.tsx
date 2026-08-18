@@ -380,18 +380,21 @@ function Terminal({
               <p className="mt-3 text-sm text-muted">{query.trim() ? "Sin resultados para esa búsqueda." : "No hay productos para mostrar."}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+            <div className={`${card} max-h-[70vh] divide-y divide-line overflow-y-auto`}>
               {results.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => onTile(p)}
-                  className="flex min-h-[106px] flex-col justify-between rounded-2xl border border-line bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md"
+                  className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-canvas"
                 >
-                  <div className="line-clamp-3 text-sm font-medium leading-snug text-ink">{p.name}</div>
-                  <div className="mt-3 flex items-end justify-between gap-2">
-                    <span className={`text-base font-semibold tabular-nums ${p.price != null ? "text-ink" : "text-faint"}`}>{p.price != null ? formatMoney(p.price) : "sin precio"}</span>
-                    {p.variants.length > 1 && <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">{p.variants.length} var.</span>}
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas text-muted transition-colors group-hover:bg-accent-soft group-hover:text-accent">
+                    <Plus className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-ink">{p.name}</div>
+                    {p.variants.length > 1 && <div className="mt-0.5 text-xs text-muted">{p.variants.length} variantes</div>}
                   </div>
+                  <span className={`shrink-0 text-sm font-semibold tabular-nums ${p.price != null ? "text-ink" : "text-faint"}`}>{p.price != null ? formatMoney(p.price) : "sin precio"}</span>
                 </button>
               ))}
             </div>
