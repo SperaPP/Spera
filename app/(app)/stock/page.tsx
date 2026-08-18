@@ -2,8 +2,9 @@ import Link from "next/link";
 import { Boxes, ClipboardCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getPermissions } from "@/lib/auth";
-import { canView } from "@/lib/permissions";
+import { canView, canEdit } from "@/lib/permissions";
 import { ProductSearch } from "@/components/product-search";
+import { StockTable } from "@/components/stock-table";
 
 const PAGE_SIZE = 60;
 
@@ -14,7 +15,9 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
 
   const { data: warehouses } = await sb.from("warehouses").select("id, name").eq("active", true).order("name");
   const whs = warehouses ?? [];
-  const canControl = canView(await getPermissions(), "control_stock");
+  const perms = await getPermissions();
+  const canControl = canView(perms, "control_stock");
+  const canEditStock = canEdit(perms, "stock");
 
   type Row = { id: string; name: string };
   let rows: Row[] = [];
@@ -58,6 +61,14 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
     }
   }
 
+  const tableRows = rows.map((p) => {
+    const m = byProdWh.get(p.id);
+    const perWh: Record<string, number> = {};
+    let total = 0;
+    for (const w of whs) { const qy = m?.get(w.id) ?? 0; perWh[w.id] = qy; total += qy; }
+    return { id: p.id, name: p.name, perWh, total };
+  });
+
   return (
     <div>
       <div className="mb-4 flex items-start justify-between gap-4">
@@ -85,41 +96,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
           <p className="mt-1 text-sm text-muted">Por nombre o código de barras.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
-                <th className="px-4 py-3 font-medium">Producto</th>
-                {whs.map((w) => <th key={w.id} className="px-3 py-3 text-right font-medium">{w.name}</th>)}
-                <th className="px-4 py-3 text-right font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => {
-                const m = byProdWh.get(p.id);
-                const total = whs.reduce((a, w) => a + (m?.get(w.id) ?? 0), 0);
-                return (
-                  <tr key={p.id} className="border-b border-line last:border-0 hover:bg-canvas">
-                    <td className="px-4 py-3 font-medium">
-                      <Link href={`/stock/${p.id}`} className="text-ink transition-colors hover:text-accent">{p.name}</Link>
-                    </td>
-                    {whs.map((w) => {
-                      const qty = m?.get(w.id) ?? 0;
-                      return (
-                        <td key={w.id} className="px-3 py-3 text-right tabular-nums">
-                          <span className={qty > 0 ? "text-ink" : qty < 0 ? "text-danger" : "text-faint"}>{qty}</span>
-                        </td>
-                      );
-                    })}
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                      <span className={total > 0 ? "text-ink" : total < 0 ? "text-danger" : "text-faint"}>{total}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <StockTable rows={tableRows} warehouses={whs} canEdit={canEditStock} />
       )}
     </div>
   );

@@ -14,11 +14,13 @@ export function StockMatrix({
   variants,
   warehouses,
   stockMap,
+  readOnly = false,
 }: {
   productId: string;
   variants: Variant[];
   warehouses: Warehouse[];
   stockMap: Record<string, number>;
+  readOnly?: boolean;
 }) {
   const init: Record<string, number> = {};
   for (const v of variants) for (const w of warehouses) init[key(v.id, w.id)] = stockMap[key(v.id, w.id)] ?? 0;
@@ -81,11 +83,12 @@ export function StockMatrix({
                     <input
                       type="number"
                       min={0}
+                      disabled={readOnly}
                       value={draft[k] ?? "0"}
                       onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))}
                       onBlur={() => save(v.id, w.id)}
                       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                      className="w-20 rounded-lg border border-line-strong bg-card px-2 py-1.5 text-center text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25"
+                      className="w-20 rounded-lg border border-line-strong bg-card px-2 py-1.5 text-center text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-60"
                     />
                   </td>
                 );
