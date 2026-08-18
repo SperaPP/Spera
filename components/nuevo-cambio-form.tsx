@@ -15,7 +15,7 @@ type Payment = { methodId: string; amount: string };
 const input =
   "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
 
-export function NuevoCambioForm({ openStores, retailPriceListId, diffMethods }: { openStores: OpenStore[]; retailPriceListId: string | null; diffMethods: Method[] }) {
+export function NuevoCambioForm({ openStores, locked, retailPriceListId, diffMethods }: { openStores: OpenStore[]; locked: boolean; retailPriceListId: string | null; diffMethods: Method[] }) {
   const [storeId, setStoreId] = useState(openStores[0]?.id ?? "");
   const store = openStores.find((s) => s.id === storeId) ?? openStores[0];
 
@@ -120,7 +120,9 @@ export function NuevoCambioForm({ openStores, retailPriceListId, diffMethods }: 
 
   return (
     <div className="space-y-5">
-      {openStores.length > 1 && (
+      {locked || openStores.length <= 1 ? (
+        <div className="text-sm text-muted">Sucursal: <span className="font-medium text-ink">{store?.name}</span></div>
+      ) : (
         <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className={`${input} w-auto`}>
           {openStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>

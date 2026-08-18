@@ -3,7 +3,8 @@ import { RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { NuevoCambioForm } from "@/components/nuevo-cambio-form";
 
-export default async function CambiosPage() {
+export default async function CambiosPage({ searchParams }: { searchParams: Promise<{ store?: string }> }) {
+  const { store: storeParam } = await searchParams;
   const sb = await createClient();
   const { data: auth } = await sb.auth.getUser();
 
@@ -22,9 +23,17 @@ export default async function CambiosPage() {
   else if (isAdmin !== true) operable = [];
 
   const sessionByStore = new Map((sessions ?? []).map((s) => [s.store_id, s.id]));
-  const openStores = operable
+  let openStores = operable
     .filter((s) => sessionByStore.has(s.id))
     .map((s) => ({ id: s.id, name: s.name, sessionId: sessionByStore.get(s.id)! }));
+
+  // Anclar a la sucursal del usuario (o a la que viene del POS). No seleccionable.
+  const anchor = myStoreId ?? (storeParam && openStores.some((s) => s.id === storeParam) ? storeParam : null);
+  let locked = false;
+  if (anchor) {
+    openStores = openStores.filter((s) => s.id === anchor);
+    locked = true;
+  }
 
   const retailPriceListId = (priceLists ?? []).find((l) => l.name === "Publico")?.id ?? null;
   const diffMethods = (methods ?? []).filter((m) => ["efectivo", "tarjeta", "transferencia", "digital", "otro"].includes(m.kind));
@@ -47,7 +56,7 @@ export default async function CambiosPage() {
     <div>
       <h1 className="mb-1 text-2xl font-semibold tracking-tight text-ink">Cambio de mostrador</h1>
       <p className="mb-5 text-sm text-muted">Buscá la venta por N°, elegí qué prenda se devuelve y con qué se cambia. Sin efectivo de vuelta; el cambio es por otra prenda dentro de los 30 días.</p>
-      <NuevoCambioForm openStores={openStores} retailPriceListId={retailPriceListId} diffMethods={diffMethods} />
+      <NuevoCambioForm openStores={openStores} locked={locked} retailPriceListId={retailPriceListId} diffMethods={diffMethods} />
     </div>
   );
 }

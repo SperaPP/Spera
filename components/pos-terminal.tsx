@@ -310,7 +310,7 @@ function Terminal({
         </div>
         <div className="flex items-center gap-2">
           {storeSelector}
-          <Link href="/cambios" className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+          <Link href={`/cambios?store=${store.id}`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
             <RefreshCw className="h-4 w-4" /> Cambio
           </Link>
           <button onClick={() => setClosing((s) => !s)} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
