@@ -7,12 +7,13 @@ import { requireCan, type ActionState } from "@/lib/auth";
 const label = (size: string | null, color: string | null) =>
   [size, color].filter(Boolean).join(" / ") || null;
 
-const bucketUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
+// Miniatura vía el redimensionado de Supabase: mucho más liviana para el POS.
+const renderUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/product-images`;
 function imageUrl(images: { path: string; is_primary: boolean }[] | null | undefined): string | null {
   const list = images ?? [];
   if (list.length === 0) return null;
   const chosen = list.find((i) => i.is_primary) ?? list[0];
-  return `${bucketUrl}/${chosen.path}`;
+  return `${renderUrl}/${chosen.path}?width=300&quality=70`;
 }
 
 /** Busca productos por nombre y devuelve su precio en la lista indicada. */

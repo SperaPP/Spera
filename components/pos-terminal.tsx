@@ -18,15 +18,16 @@ type Customer = NonNullable<Awaited<ReturnType<typeof buscarClientePorDoc>>>;
 type CartItem = { variantId: string; name: string; label: string | null; quantity: number; unitPrice: number; image: string | null };
 type Payment = { methodId: string; amount: string };
 
-const input =
-  "w-full rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-4 focus:ring-accent/15";
+const inputBase =
+  "rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-4 focus:ring-accent/15";
+const input = `w-full ${inputBase}`;
 const card = "rounded-2xl border border-line bg-card shadow-sm";
 
 function Thumb({ src, size = "h-10 w-10" }: { src: string | null; size?: string }) {
   if (!src)
     return <span className={`flex ${size} shrink-0 items-center justify-center rounded-md bg-canvas text-faint`}><ImageOff className="h-4 w-4" /></span>;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" className={`${size} shrink-0 rounded-md object-cover`} />;
+  return <img src={src} alt="" loading="lazy" decoding="async" className={`${size} shrink-0 rounded-md object-cover`} />;
 }
 
 type RetailForm = { name: string; apellido: string; doc: string; phone: string; email: string };
@@ -69,7 +70,7 @@ export function PosTerminal({
   }
 
   const storeSelector = !lockedToStore && stores.length > 1 && (
-    <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className={`${input} w-auto`}>
+    <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className={`${inputBase} w-auto shrink-0`}>
       {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
     </select>
   );
@@ -330,11 +331,11 @@ function Terminal({
         </div>
         <div className="flex items-center gap-2">
           {storeSelector}
-          <Link href={`/cambios?store=${store.id}`} className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3 py-2 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-canvas">
-            <RefreshCw className="h-4 w-4" /> Cambio
+          <Link href={`/cambios?store=${store.id}`} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-line-strong bg-card px-3 py-2 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-canvas">
+            <RefreshCw className="h-4 w-4 shrink-0" /> Cambio
           </Link>
-          <button onClick={() => setClosing((s) => !s)} className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3 py-2 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-canvas">
-            <Lock className="h-4 w-4" /> Cerrar caja
+          <button onClick={() => setClosing((s) => !s)} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-line-strong bg-card px-3 py-2 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-canvas">
+            <Lock className="h-4 w-4 shrink-0" /> Cerrar caja
           </button>
         </div>
       </div>
@@ -389,7 +390,7 @@ function Terminal({
                   <div className="relative aspect-square w-full bg-canvas">
                     {p.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.image} alt="" className="h-full w-full object-cover" />
+                      <img src={p.image} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                     ) : (
                       <span className="flex h-full w-full items-center justify-center text-faint"><ImageOff className="h-7 w-7" /></span>
                     )}
@@ -489,11 +490,11 @@ function Terminal({
             <div className="space-y-2">
               {payments.map((p, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <select value={p.methodId} onChange={(e) => setPayments((arr) => arr.map((x, j) => j === idx ? { ...x, methodId: e.target.value } : x))} className={`${input} flex-1`}>
+                  <select value={p.methodId} onChange={(e) => setPayments((arr) => arr.map((x, j) => j === idx ? { ...x, methodId: e.target.value } : x))} className={`${inputBase} min-w-0 flex-1`}>
                     {methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
-                  <input type="number" min={0} value={p.amount} onChange={(e) => setPayments((arr) => arr.map((x, j) => j === idx ? { ...x, amount: e.target.value } : x))} className={`${input} w-28`} placeholder="0" />
-                  {payments.length > 1 && <button onClick={() => setPayments((arr) => arr.filter((_, j) => j !== idx))} className="text-faint hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
+                  <input type="number" min={0} value={p.amount} onChange={(e) => setPayments((arr) => arr.map((x, j) => j === idx ? { ...x, amount: e.target.value } : x))} className={`${inputBase} w-24 shrink-0`} placeholder="0" />
+                  {payments.length > 1 && <button onClick={() => setPayments((arr) => arr.filter((_, j) => j !== idx))} className="shrink-0 text-faint hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
                 </div>
               ))}
             </div>
