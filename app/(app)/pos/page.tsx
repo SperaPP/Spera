@@ -20,8 +20,12 @@ export type PosStore = {
   sessionId: string | null;
   openingAmount: number;
   openedAt: string | null;
+  stale: boolean;
   summary: PosSummary | null;
 };
+
+const AR_TZ = "America/Argentina/Buenos_Aires";
+const arDay = (ts: string) => new Date(ts).toLocaleDateString("en-CA", { timeZone: AR_TZ });
 
 async function computeSummary(
   sb: Awaited<ReturnType<typeof createClient>>,
@@ -77,7 +81,9 @@ export default async function PosPage() {
     auth?.user ? sb.from("profiles").select("store_id").eq("id", auth.user.id).maybeSingle() : Promise.resolve({ data: null }),
     sb.rpc("is_admin"),
     sb.from("stores").select("id, name, is_wholesale").eq("has_cash_register", true).eq("active", true).order("name"),
-    sb.from("cash_sessions").select("id, store_id, opening_amount, opened_at").eq("status", "abierta"),
+    auth?.user
+      ? sb.from("cash_sessions").select("id, store_id, opening_amount, opened_at").eq("status", "abierta").eq("opened_by", auth.user.id)
+      : Promise.resolve({ data: [] as { id: string; store_id: string; opening_amount: number; opened_at: string }[] }),
     sb.from("price_lists").select("id, name").eq("active", true),
     sb.from("customer_types").select("id, name, price_list_id").eq("active", true).order("name"),
     sb.from("payment_methods").select("id, name, kind").eq("active", true).order("position"),
@@ -90,11 +96,13 @@ export default async function PosPage() {
   if (myStoreId) operable = operable.filter((s) => s.id === myStoreId);
   else if (isAdmin !== true) operable = [];
 
-  const sessionByStore = new Map((sessions ?? []).map((s) => [s.store_id, s]));
+  // Caja del usuario actual (una sola abierta por usuario).
+  const mySession = (sessions ?? [])[0] ?? null;
+  const todayAR = new Date().toLocaleDateString("en-CA", { timeZone: AR_TZ });
 
   const posStores: PosStore[] = [];
   for (const s of operable) {
-    const sess = sessionByStore.get(s.id);
+    const sess = mySession && mySession.store_id === s.id ? mySession : null;
     posStores.push({
       id: s.id,
       name: s.name,
@@ -102,6 +110,7 @@ export default async function PosPage() {
       sessionId: sess?.id ?? null,
       openingAmount: sess ? Number(sess.opening_amount) : 0,
       openedAt: sess?.opened_at ?? null,
+      stale: sess ? arDay(sess.opened_at) !== todayAR : false,
       summary: sess ? await computeSummary(sb, sess.id, Number(sess.opening_amount)) : null,
     });
   }

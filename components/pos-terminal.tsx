@@ -75,9 +75,30 @@ export function PosTerminal({
     </select>
   );
 
+  if (store.sessionId && store.stale) return <CajaVieja store={store} storeSelector={storeSelector} />;
   return store.sessionId
     ? <Terminal store={store} storeSelector={storeSelector} retailPriceListId={retailPriceListId} wholesaleProfiles={wholesaleProfiles} paymentMethods={paymentMethods} />
     : <AbrirCaja store={store} storeSelector={storeSelector} />;
+}
+
+// ── Caja de un día anterior: hay que cerrarla antes de vender ──
+function CajaVieja({ store, storeSelector }: { store: PosStore; storeSelector: React.ReactNode }) {
+  return (
+    <div className="mx-auto max-w-lg">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Punto de venta</h1>
+        {storeSelector}
+      </div>
+      <div className="mb-4 flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger-bg px-4 py-3">
+        <Lock className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+        <div>
+          <p className="text-sm font-semibold text-ink">La caja del {store.openedAt ? formatDateTime(store.openedAt) : "día anterior"} no se cerró</p>
+          <p className="mt-0.5 text-sm text-muted">Cerrala para poder abrir la caja de hoy y vender. No se puede vender con una caja de otro día.</p>
+        </div>
+      </div>
+      <CerrarCajaPanel store={store} onDone={() => {}} />
+    </div>
+  );
 }
 
 // ── Apertura de caja embebida ─────────────────────────────────
