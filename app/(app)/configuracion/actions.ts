@@ -167,6 +167,31 @@ export async function toggleLocal(id: string, active: boolean): Promise<ActionSt
   return { ok: true };
 }
 
+// ── Métodos de despacho (logística) ────────────────────────────
+export async function crearMetodoDespacho(name: string): Promise<ActionState> {
+  const denied = await requireCan("configuracion", true);
+  if (denied) return denied;
+  const clean = name.trim();
+  if (!clean) return { error: "Ingresá un nombre" };
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+  const { error } = await sb.from("shipping_methods").insert({ organization_id: orgId, name: clean, position: 99 });
+  if (error) return { error: error.code === "23505" ? "Ya existe un método con ese nombre" : error.message };
+  revalidatePath("/configuracion");
+  return { ok: true };
+}
+
+export async function toggleMetodoDespacho(id: string, active: boolean): Promise<ActionState> {
+  const denied = await requireCan("configuracion", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.from("shipping_methods").update({ active }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/configuracion");
+  return { ok: true };
+}
+
 // ── Reglas de precios ──────────────────────────────────────────
 // Guarda (o borra) la regla de una categoría. category_id null = regla general.
 // pubMarkup null en una categoría = "usa la regla general" → borra el override.

@@ -5,6 +5,7 @@ import { TiposClienteManager } from "@/components/tipos-cliente-manager";
 import { DepositosManager, LocalesManager } from "@/components/locales-depositos-manager";
 import { ReglasPreciosManager } from "@/components/reglas-precios-manager";
 import { CuponesManager } from "@/components/cupones-manager";
+import { MetodosDespachoManager } from "@/components/metodos-despacho-manager";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -46,6 +47,8 @@ export default async function ConfiguracionPage() {
     .select("id, code, discount_type, discount_value, min_amount, max_uses, used_count, expires_at, active")
     .order("created_at", { ascending: false });
 
+  const { data: shippingMethods } = await sb.from("shipping_methods").select("id, name, active").order("position");
+
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Configuración</h1>
@@ -75,6 +78,9 @@ export default async function ConfiguracionPage() {
         <MediosPagoManager methods={(methods ?? []).map((m) => ({ ...m, surcharge_pct: Number(m.surcharge_pct) }))} />
         <TiposClienteManager types={types ?? []} priceLists={priceLists ?? []} />
       </div>
+
+      <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Logística</h2>
+      <MetodosDespachoManager methods={shippingMethods ?? []} />
 
       <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Locales y depósitos</h2>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

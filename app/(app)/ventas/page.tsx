@@ -14,7 +14,13 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   const query = (q ?? "").trim();
   const sb = await createClient();
 
-  const sel = "id, number, status, created_at, total, customers(name), stores(name), sale_items(count)";
+  const sel = "id, number, status, fulfillment_status, created_at, total, customers(name), stores(name), sale_items(count)";
+  const FULFILL: Record<string, { label: string; cls: string }> = {
+    entregado: { label: "Completado", cls: "bg-ok-bg text-ok" },
+    despachado: { label: "Completado", cls: "bg-ok-bg text-ok" },
+    controlado: { label: "Controlado", cls: "bg-accent-soft text-accent" },
+    pendiente: { label: "En preparación", cls: "bg-warn-bg text-warn" },
+  };
   let req = sb.from("sales").select(sel).order("created_at", { ascending: false }).limit(100);
 
   if (query) {
@@ -57,6 +63,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                 <th className="px-4 py-3 font-medium">Cliente</th>
                 <th className="px-4 py-3 text-right font-medium">Ítems</th>
                 <th className="px-4 py-3 text-right font-medium">Total</th>
+                <th className="px-4 py-3 font-medium">Estado</th>
               </tr>
             </thead>
             <tbody>
@@ -71,6 +78,14 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                   <td className="px-4 py-3 text-ink">{relName(s.customers) ?? "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted">{(s.sale_items as { count: number }[] | null)?.[0]?.count ?? 0}</td>
                   <td className="px-4 py-3 text-right tabular-nums font-medium text-ink">{formatMoney(Number(s.total))}</td>
+                  <td className="px-4 py-3">
+                    {s.status === "anulada" ? (
+                      <span className="text-xs text-muted">—</span>
+                    ) : (() => {
+                      const f = FULFILL[s.fulfillment_status] ?? { label: s.fulfillment_status, cls: "bg-canvas text-muted" };
+                      return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${f.cls}`}>{f.label}</span>;
+                    })()}
+                  </td>
                 </tr>
               ))}
             </tbody>
