@@ -56,7 +56,9 @@ export default async function CobranzasPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-line last:border-0 hover:bg-canvas">
-                  <td className="px-4 py-3 tabular-nums text-muted">{r.number}</td>
+                  <td className="px-4 py-3 tabular-nums">
+                    <Link href={`/cobranzas/${r.id}`} className="text-accent transition-colors hover:underline">{r.number}</Link>
+                  </td>
                   <td className="px-4 py-3 text-muted">{formatDateTime(r.created_at)}</td>
                   <td className="px-4 py-3 font-medium text-ink">{relName(r.customers) ?? "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(Number(r.total))}</td>

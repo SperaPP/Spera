@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, HandCoins, Pencil } from "lucide-react";
+import { ArrowLeft, HandCoins, Pencil, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
+
+/** Link al comprobante que originó el movimiento de cuenta corriente. */
+function movHref(referenceType: string | null, referenceId: string | null): string | null {
+  if (!referenceId) return null;
+  if (referenceType === "sale" || referenceType === "sale_cancel" || referenceType === "exchange") return `/ventas/${referenceId}`;
+  if (referenceType === "receipt") return `/cobranzas/${referenceId}`;
+  return null;
+}
 
 const FISCAL_LABEL: Record<string, string> = {
   consumidor_final: "Consumidor Final",
@@ -32,7 +40,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
 
   const [{ data: customer }, { data: movs }] = await Promise.all([
     sb.from("customers").select("id, name, fiscal_condition, balance, doc_type, doc_number, email, phone, customer_types(name)").eq("id", id).single(),
-    sb.from("customer_movements").select("id, delta, reason, created_at").eq("customer_id", id).order("created_at", { ascending: true }),
+    sb.from("customer_movements").select("id, delta, reason, created_at, reference_type, reference_id").eq("customer_id", id).order("created_at", { ascending: true }),
   ]);
   if (!customer) notFound();
 
@@ -112,10 +120,19 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
               <tbody>
                 {rows.map((m) => {
                   const delta = Number(m.delta);
+                  const href = movHref(m.reference_type, m.reference_id);
                   return (
-                    <tr key={m.id} className="border-b border-line last:border-0">
+                    <tr key={m.id} className="border-b border-line last:border-0 hover:bg-canvas">
                       <td className="px-5 py-2.5 text-muted">{formatDateTime(m.created_at)}</td>
-                      <td className="px-5 py-2.5 text-ink">{REASON_LABEL[m.reason] ?? m.reason}</td>
+                      <td className="px-5 py-2.5">
+                        {href ? (
+                          <Link href={href} className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline">
+                            {REASON_LABEL[m.reason] ?? m.reason} <ExternalLink className="h-3.5 w-3.5" />
+                          </Link>
+                        ) : (
+                          <span className="text-ink">{REASON_LABEL[m.reason] ?? m.reason}</span>
+                        )}
+                      </td>
                       <td className={`px-5 py-2.5 text-right tabular-nums ${delta > 0 ? "text-danger" : "text-ok"}`}>
                         {delta > 0 ? "+" : ""}{formatMoney(delta)}
                       </td>
