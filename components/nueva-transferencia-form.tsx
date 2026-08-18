@@ -9,8 +9,9 @@ import { buscarVarianteTransferencia, crearTransferencia } from "@/app/(app)/tra
 type Ref = { id: string; name: string };
 type Item = { variantId: string; name: string; label: string | null; quantity: number; available: number };
 
-const input =
-  "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
+const inputBase =
+  "rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
+const input = `w-full ${inputBase}`;
 const label = "mb-1.5 block text-sm font-medium text-ink";
 
 export function NuevaTransferenciaForm({ warehouses }: { warehouses: Ref[] }) {
@@ -115,9 +116,9 @@ export function NuevaTransferenciaForm({ warehouses }: { warehouses: Ref[] }) {
                 <input
                   type="number" min={1} max={i.available} value={i.quantity}
                   onChange={(e) => setQty(i.variantId, Number(e.target.value) || 0)}
-                  className={`${input} w-24 py-1.5`}
+                  className={`${inputBase} w-20 shrink-0 py-1.5 text-center`}
                 />
-                <button onClick={() => setQty(i.variantId, 0)} className="text-faint hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => setQty(i.variantId, 0)} className="shrink-0 text-faint hover:text-danger"><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
