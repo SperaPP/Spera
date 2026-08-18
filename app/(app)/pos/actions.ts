@@ -44,6 +44,35 @@ export async function buscarProductos(query: string, priceListId: string | null)
   });
 }
 
+/** Lista productos para la grilla del POS: por defecto (sin query) prioriza los que
+ *  tienen foto; con query filtra por nombre. Devuelve precio en la lista indicada. */
+export async function listarProductosPOS(query: string, priceListId: string | null) {
+  const q = query.trim();
+  const sb = await createClient();
+  let req = sb
+    .from("products")
+    .select("id, name, product_images(path, is_primary), product_variants(id, size, color, sku, barcode), price_list_items(price, variant_id, price_list_id)")
+    .eq("active", true);
+  if (priceListId) req = req.eq("price_list_items.price_list_id", priceListId);
+  req = q.length >= 2
+    ? req.ilike("name", `%${q}%`).order("name").limit(40)
+    : req.order("has_image", { ascending: false }).order("name").limit(40);
+
+  const { data } = await req;
+  return (data ?? []).map((p) => {
+    const items = (p.price_list_items ?? []) as { price: number; variant_id: string | null }[];
+    const price = priceListId ? (items.find((i) => i.variant_id === null)?.price ?? null) : null;
+    return {
+      id: p.id,
+      name: p.name,
+      price,
+      image: imageUrl(p.product_images as { path: string; is_primary: boolean }[] | null),
+      variants: ((p.product_variants ?? []) as { id: string; size: string | null; color: string | null; sku: string | null; barcode: string | null }[])
+        .map((v) => ({ id: v.id, label: label(v.size, v.color), sku: v.sku })),
+    };
+  });
+}
+
 /** Busca una variante por código de barras o SKU (para el lector). */
 export async function buscarPorCodigo(code: string, priceListId: string | null) {
   const c = code.trim();

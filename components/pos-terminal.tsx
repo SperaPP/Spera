@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard, Receipt, Gift, RefreshCw } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { buscarProductos, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, crearClienteRapido } from "@/app/(app)/pos/actions";
+import { listarProductosPOS, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, crearClienteRapido } from "@/app/(app)/pos/actions";
+
+type GridProduct = Awaited<ReturnType<typeof listarProductosPOS>>[number];
 import { abrirCaja, cerrarCaja } from "@/app/(app)/caja/actions";
 import type { PosStore } from "@/app/(app)/pos/page";
 
@@ -199,7 +201,8 @@ function Terminal({
   const wholesale = store.isWholesale;
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Awaited<ReturnType<typeof buscarProductos>>>([]);
+  const [results, setResults] = useState<GridProduct[]>([]);
+  const [variantPick, setVariantPick] = useState<GridProduct | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [closing, setClosing] = useState(false);
   const [couponCode, setCouponCode] = useState("");
@@ -232,11 +235,17 @@ function Terminal({
   const remaining = Math.round((total - paid) * 100) / 100;
   const overpay = remaining < 0 ? -remaining : 0;
 
+  // Grilla de productos: carga por defecto (con foto) y filtra al buscar.
+  useEffect(() => {
+    listarProductosPOS(query, priceListId).then(setResults);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceListId]);
+
   function onSearch(v: string) {
     setQuery(v);
     if (debounce.current) clearTimeout(debounce.current);
     debounce.current = setTimeout(async () => {
-      setResults(v.trim().length >= 2 ? await buscarProductos(v, priceListId) : []);
+      setResults(await listarProductosPOS(v, priceListId));
     }, 250);
   }
   function addItem(variantId: string, name: string, label: string | null, price: number | null, image: string | null) {
@@ -246,6 +255,16 @@ function Terminal({
       if (i >= 0) { const next = [...prev]; next[i] = { ...next[i], quantity: next[i].quantity + 1 }; return next; }
       return [...prev, { variantId, name, label, quantity: 1, unitPrice: price ?? 0, image }];
     });
+  }
+  function onTile(p: GridProduct) {
+    if (wholesale && !customer) return toast.error("Identificá al cliente antes de cargar productos.");
+    if (p.variants.length <= 1) {
+      const v = p.variants[0];
+      if (!v) return toast.error("El producto no tiene variantes.");
+      addItem(v.id, p.name, v.label, p.price, p.image);
+    } else {
+      setVariantPick(p);
+    }
   }
   function setQty(variantId: string, qty: number) {
     setCart((prev) => prev.flatMap((x) => (x.variantId === variantId ? (qty <= 0 ? [] : [{ ...x, quantity: qty }]) : [x])));
@@ -339,58 +358,77 @@ function Terminal({
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_400px]">
-        {/* Izquierda: búsqueda + carrito */}
-        <div className="space-y-5">
-          <div className={`${card} p-4`}>
-            <div className="flex flex-col gap-2.5 sm:flex-row">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-faint" />
-                <input className={`${input} h-12 pl-11 text-base`} placeholder="Buscar producto…" value={query} onChange={(e) => onSearch(e.target.value)} />
-              </div>
-              <div className="relative sm:w-56">
-                <ScanLine className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-faint" />
-                <input className={`${input} h-12 pl-11`} placeholder="Escanear código"
-                  onKeyDown={(e) => { if (e.key === "Enter") { const v = (e.target as HTMLInputElement).value.trim(); if (v) { onScan(v); (e.target as HTMLInputElement).value = ""; } } }} />
-              </div>
+        {/* Izquierda: búsqueda + grilla de productos */}
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2.5 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-faint" />
+              <input className={`${input} h-12 pl-11 text-base shadow-sm`} placeholder="Buscar producto…" value={query} onChange={(e) => onSearch(e.target.value)} />
             </div>
-            {wholesale && !customer && <p className="mt-2.5 text-xs font-medium text-warn">Identificá al cliente para ver los precios de su perfil.</p>}
-            {results.length > 0 && (
-              <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
-                {results.map((r) => (
-                  <div key={r.id} className="rounded-xl border border-line p-3 transition-colors hover:border-line-strong">
-                    <div className="flex items-center gap-3">
-                      <Thumb src={r.image} size="h-12 w-12" />
-                      <span className="flex-1 truncate text-sm font-medium text-ink">{r.name}</span>
-                      <span className={`text-sm font-semibold tabular-nums ${r.price != null ? "text-ink" : "text-faint"}`}>{r.price != null ? formatMoney(r.price) : "sin precio"}</span>
-                    </div>
-                    <div className="mt-2.5 flex flex-wrap gap-1.5 pl-[3.75rem]">
-                      {r.variants.map((v) => (
-                        <button key={v.id} onClick={() => addItem(v.id, r.name, v.label, r.price, r.image)} className="rounded-lg border border-line-strong px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent">
-                          {v.label ?? "Agregar"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="relative sm:w-56">
+              <ScanLine className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-faint" />
+              <input className={`${input} h-12 pl-11 shadow-sm`} placeholder="Escanear código"
+                onKeyDown={(e) => { if (e.key === "Enter") { const v = (e.target as HTMLInputElement).value.trim(); if (v) { onScan(v); (e.target as HTMLInputElement).value = ""; } } }} />
+            </div>
           </div>
+          {wholesale && !customer && <p className="text-xs font-medium text-warn">Identificá al cliente para ver los precios de su perfil.</p>}
+
+          {results.length === 0 ? (
+            <div className={`${card} flex flex-col items-center py-20 text-center`}>
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-canvas text-faint"><Search className="h-5 w-5" /></span>
+              <p className="mt-3 text-sm text-muted">{query.trim() ? "Sin resultados para esa búsqueda." : "No hay productos para mostrar."}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+              {results.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => onTile(p)}
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md"
+                >
+                  <div className="relative aspect-square w-full bg-canvas">
+                    {p.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.image} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-faint"><ImageOff className="h-7 w-7" /></span>
+                    )}
+                    {p.variants.length > 1 && (
+                      <span className="absolute right-2 top-2 rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">{p.variants.length} var.</span>
+                    )}
+                  </div>
+                  <div className="flex flex-1 flex-col p-3">
+                    <div className="line-clamp-2 text-sm font-medium leading-snug text-ink">{p.name}</div>
+                    <div className={`mt-auto pt-2 text-sm font-semibold tabular-nums ${p.price != null ? "text-ink" : "text-faint"}`}>{p.price != null ? formatMoney(p.price) : "sin precio"}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Derecha: el pedido (carrito + cobro) fijo */}
+        <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+          {wholesale
+            ? <ClienteMayorista customer={customer} setCustomer={setCustomer} profiles={wholesaleProfiles} />
+            : <ClienteMostrador data={retailData} onOpen={() => setShowRetail(true)} onClear={() => setRetailData(null)} />}
 
           <div className={card}>
             <div className="flex items-center gap-2 border-b border-line px-5 py-3.5">
               <ShoppingCart className="h-4 w-4 text-muted" />
-              <span className="text-sm font-semibold text-ink">Carrito</span>
+              <span className="text-sm font-semibold text-ink">Pedido</span>
               {cart.length > 0 && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent">{cart.length}</span>}
+              {cart.length > 0 && <button onClick={() => setCart([])} className="ml-auto text-xs font-medium text-muted hover:text-danger">Vaciar</button>}
             </div>
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center px-4 py-14 text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-canvas text-faint"><ShoppingCart className="h-5 w-5" /></span>
-                <p className="mt-3 text-sm text-muted">Buscá o escaneá productos para agregarlos.</p>
+              <div className="flex flex-col items-center px-4 py-12 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-canvas text-faint"><ShoppingCart className="h-5 w-5" /></span>
+                <p className="mt-3 text-sm text-muted">Tocá un producto para agregarlo.</p>
               </div>
             ) : (
-              <div className="divide-y divide-line">
+              <div className="max-h-[38vh] divide-y divide-line overflow-y-auto">
                 {cart.map((i) => (
-                  <div key={i.variantId} className="flex items-center gap-3 px-5 py-3">
+                  <div key={i.variantId} className="flex items-center gap-3 px-4 py-3">
                     <Thumb src={i.image} size="h-11 w-11" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-ink">{i.name}</div>
@@ -398,23 +436,16 @@ function Terminal({
                     </div>
                     <div className="flex items-center rounded-lg border border-line-strong">
                       <button onClick={() => setQty(i.variantId, i.quantity - 1)} className="p-1.5 text-muted transition-colors hover:text-ink"><Minus className="h-3.5 w-3.5" /></button>
-                      <span className="w-8 text-center text-sm font-medium tabular-nums">{i.quantity}</span>
+                      <span className="w-7 text-center text-sm font-medium tabular-nums">{i.quantity}</span>
                       <button onClick={() => setQty(i.variantId, i.quantity + 1)} className="p-1.5 text-muted transition-colors hover:text-ink"><Plus className="h-3.5 w-3.5" /></button>
                     </div>
-                    <div className="w-24 text-right text-sm font-semibold tabular-nums text-ink">{formatMoney(i.quantity * i.unitPrice)}</div>
+                    <div className="w-20 text-right text-sm font-semibold tabular-nums text-ink">{formatMoney(i.quantity * i.unitPrice)}</div>
                     <button onClick={() => setQty(i.variantId, 0)} className="text-faint transition-colors hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </div>
-
-        {/* Derecha: panel de cobro fijo */}
-        <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          {wholesale
-            ? <ClienteMayorista customer={customer} setCustomer={setCustomer} profiles={wholesaleProfiles} />
-            : <ClienteMostrador data={retailData} onOpen={() => setShowRetail(true)} onClear={() => setRetailData(null)} />}
 
           <div className={`${card} p-5`}>
             <div className="flex justify-between text-sm">
@@ -482,6 +513,32 @@ function Terminal({
           </button>
         </div>
       </div>
+
+      {variantPick && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setVariantPick(null)}>
+          <div className="w-full max-w-md rounded-2xl border border-line bg-card p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <Thumb src={variantPick.image} size="h-12 w-12" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-ink">{variantPick.name}</div>
+                <div className="text-xs text-muted">{variantPick.price != null ? formatMoney(variantPick.price) : "sin precio"} · elegí la variante</div>
+              </div>
+              <button onClick={() => setVariantPick(null)} className="rounded-md p-1 text-muted hover:text-ink"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {variantPick.variants.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => { addItem(v.id, variantPick.name, v.label, variantPick.price, variantPick.image); setVariantPick(null); }}
+                  className="rounded-xl border border-line-strong px-3 py-2.5 text-sm font-medium text-ink transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent"
+                >
+                  {v.label ?? "Único"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showRetail && <RetailDataModal mode="edit" data={retailData} onClose={() => setShowRetail(false)} onSave={(d) => { setRetailData(d); setShowRetail(false); }} />}
       {checkout && (
