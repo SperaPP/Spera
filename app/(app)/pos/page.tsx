@@ -22,7 +22,8 @@ export type PosStore = {
   openingAmount: number;
   openedAt: string | null;
   stale: boolean;
-  hasOpenAtStore: boolean; // ya hay una caja abierta en el local (si abro, sería de apoyo)
+  titularOpen: boolean;    // ya hay una caja titular abierta en el local (si abro, sería de apoyo)
+  iAmTitular: boolean;     // el usuario puede abrir la caja titular
   openApoyoCount: number;  // cajas de apoyo abiertas (el titular no puede cerrar con apoyos abiertas)
   pettyCash: number;       // caja chica del local (arrastre; fondo de la caja titular)
   safeBalance: number;     // caja fuerte del local
@@ -85,7 +86,7 @@ export default async function PosPage() {
   const { data: auth } = await sb.auth.getUser();
 
   const [{ data: profile }, { data: isAdmin }, { data: stores }, { data: sessions }, { data: priceLists }, { data: profiles }, { data: methods }] = await Promise.all([
-    auth?.user ? sb.from("profiles").select("store_id").eq("id", auth.user.id).maybeSingle() : Promise.resolve({ data: null }),
+    auth?.user ? sb.from("profiles").select("store_id, is_cash_titular").eq("id", auth.user.id).maybeSingle() : Promise.resolve({ data: null }),
     sb.rpc("is_admin"),
     sb.from("stores").select("id, name, is_wholesale").eq("has_cash_register", true).eq("active", true).order("name"),
     sb.from("cash_sessions").select("id, store_id, role, opening_amount, opened_at, opened_by").eq("status", "abierta"),
@@ -103,6 +104,7 @@ export default async function PosPage() {
 
   const allOpen = sessions ?? [];
   const myId = auth?.user?.id ?? null;
+  const iAmTitular = (profile as { is_cash_titular?: boolean } | null)?.is_cash_titular === true;
   // Caja del usuario actual (una sola abierta por usuario).
   const mySession = myId ? allOpen.find((s) => s.opened_by === myId) ?? null : null;
   const todayAR = new Date().toLocaleDateString("en-CA", { timeZone: AR_TZ });
@@ -146,7 +148,8 @@ export default async function PosPage() {
       openingAmount: sess ? Number(sess.opening_amount) : 0,
       openedAt: sess?.opened_at ?? null,
       stale: sess ? arDay(sess.opened_at) !== todayAR : false,
-      hasOpenAtStore: openHere.length > 0,
+      titularOpen: openHere.some((o) => o.role === "titular"),
+      iAmTitular,
       openApoyoCount,
       pettyCash: pettyByStore.get(s.id) ?? 0,
       safeBalance: safeByStore.get(s.id) ?? 0,

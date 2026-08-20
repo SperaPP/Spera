@@ -105,8 +105,36 @@ function CajaVieja({ store, storeSelector }: { store: PosStore; storeSelector: R
 function AbrirCaja({ store, storeSelector }: { store: PosStore; storeSelector: React.ReactNode }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  // Si ya hay una caja abierta en el local, ésta sería de apoyo (solo vende).
-  const apoyo = store.hasOpenAtStore;
+  // Si ya hay una caja titular abierta, ésta sería de apoyo (solo vende).
+  const apoyo = store.titularOpen;
+  // Sin titular abierta y sin permiso de titular → no puede abrir todavía.
+  const blocked = !store.titularOpen && !store.iAmTitular;
+
+  if (blocked) {
+    return (
+      <div className="mx-auto max-w-lg">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Punto de venta</h1>
+          {storeSelector}
+        </div>
+        <div className="rounded-2xl border border-line bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-muted" />
+            <h2 className="font-medium text-ink">{store.name}</h2>
+            <span className="ml-auto rounded-full bg-canvas px-2.5 py-0.5 text-xs font-medium text-muted">Sin caja abierta</span>
+          </div>
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-warn/30 bg-warn-bg px-4 py-3">
+            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-warn" />
+            <div>
+              <p className="text-sm font-semibold text-ink">Todavía no hay una caja titular abierta</p>
+              <p className="mt-0.5 text-sm text-muted">Esperá a que un cajero titular abra la caja del local. Recién ahí vas a poder abrir una caja de apoyo para vender.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-5 flex items-center justify-between gap-3">

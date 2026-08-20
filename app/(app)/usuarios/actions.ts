@@ -76,6 +76,21 @@ export async function asignarRol(userId: string, roleId: string | null): Promise
   return { ok: true };
 }
 
+/** Marca si un usuario puede abrir la caja titular del local. */
+export async function setCajaTitular(userId: string, value: boolean): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+  // Editar el perfil de OTRO usuario requiere service-role.
+  const admin = createAdminClient();
+  const { error } = await admin.from("profiles").update({ is_cash_titular: value }).eq("id", userId).eq("organization_id", orgId);
+  if (error) return { error: error.message };
+  revalidatePath("/usuarios");
+  return { ok: true };
+}
+
 /** El admin le pone una contraseña nueva a un usuario de su organización. */
 export async function resetearPassword(userId: string, newPassword: string): Promise<ActionState> {
   const denied = await requireAdmin();

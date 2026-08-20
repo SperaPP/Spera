@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { UserCircle, KeyRound, X } from "lucide-react";
-import { asignarRol, asignarSucursal, resetearPassword } from "@/app/(app)/usuarios/actions";
+import { UserCircle, KeyRound, X, Crown } from "lucide-react";
+import { asignarRol, asignarSucursal, resetearPassword, setCajaTitular } from "@/app/(app)/usuarios/actions";
 
-type User = { id: string; email: string; name: string; roleId: string | null; storeId: string | null };
+type User = { id: string; email: string; name: string; roleId: string | null; storeId: string | null; isCashTitular: boolean };
 type Role = { id: string; name: string };
 type Store = { id: string; name: string };
 
@@ -16,6 +16,16 @@ export function UsuariosManager({ users, roles, stores }: { users: User[]; roles
   const [pending, start] = useTransition();
   const [resetId, setResetId] = useState<string | null>(null);
   const [pass, setPass] = useState("");
+  const [titular, setTitular] = useState<Record<string, boolean>>(() => Object.fromEntries(users.map((u) => [u.id, u.isCashTitular])));
+
+  function toggleTitular(userId: string, value: boolean) {
+    setTitular((t) => ({ ...t, [userId]: value }));
+    start(async () => {
+      const r = await setCajaTitular(userId, value);
+      if (r.error) { toast.error(r.error); setTitular((t) => ({ ...t, [userId]: !value })); }
+      else toast.success(value ? "Marcado como cajero titular" : "Ya no es cajero titular");
+    });
+  }
 
   function assign(userId: string, roleId: string) {
     start(async () => {
@@ -53,6 +63,14 @@ export function UsuariosManager({ users, roles, stores }: { users: User[]; roles
                 {u.name && <div className="truncate text-xs text-muted">{u.email}</div>}
               </div>
               <button
+                onClick={() => toggleTitular(u.id, !titular[u.id])}
+                disabled={pending}
+                title={titular[u.id] ? "Cajero titular (puede abrir la caja titular del local)" : "Marcar como cajero titular"}
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${titular[u.id] ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-muted hover:bg-canvas"}`}
+              >
+                <Crown className="h-3.5 w-3.5" /> Titular
+              </button>
+              <button
                 onClick={() => { setResetId(resetId === u.id ? null : u.id); setPass(""); }}
                 title="Cambiar contraseña"
                 className="rounded-md p-1.5 text-muted transition-colors hover:bg-canvas hover:text-ink"
@@ -87,7 +105,8 @@ export function UsuariosManager({ users, roles, stores }: { users: User[]; roles
           </div>
         ))}
       </div>
-      <div className="border-t border-line px-4 py-3">
+      <div className="space-y-1 border-t border-line px-4 py-3">
+        <p className="text-xs text-muted"><span className="inline-flex items-center gap-1 font-medium text-ink"><Crown className="h-3 w-3" /> Titular</span>: puede abrir la caja titular del local (maneja caja chica, cierre y reparto). Los demás solo abren cajas de apoyo, y únicamente si ya hay una titular abierta.</p>
         <p className="text-xs text-muted">Para sumar un usuario nuevo: crealo en Supabase (Authentication → Add user) y después asignale el rol acá.</p>
       </div>
     </div>

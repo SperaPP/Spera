@@ -11,7 +11,7 @@ export default async function UsuariosPage() {
   const [{ data: roles }, { data: perms }, { data: profiles }, { data: stores }] = await Promise.all([
     sb.from("roles").select("id, name").order("name"),
     sb.from("role_permissions").select("role_id, module, can_view, can_edit"),
-    sb.from("profiles").select("id, email, full_name, role_id, store_id").order("email"),
+    sb.from("profiles").select("id, email, full_name, role_id, store_id, is_cash_titular").order("email"),
     sb.from("stores").select("id, name").eq("active", true).order("name"),
   ]);
 
@@ -22,7 +22,7 @@ export default async function UsuariosPage() {
 
   const users = (profiles ?? []).map((p) => ({
     id: p.id, email: p.email ?? "", name: p.full_name ?? "", roleId: p.role_id as string | null,
-    storeId: (p.store_id as string | null) ?? null,
+    storeId: (p.store_id as string | null) ?? null, isCashTitular: p.is_cash_titular === true,
   }));
 
   return (
