@@ -124,9 +124,8 @@ export default async function ProductoDetallePage({
 
         <PrecioEditor
           productId={product.id}
-          platinum={priceByList.get("Platinum") ?? null}
-          publico={priceByList.get("Publico") ?? null}
           mayorista={priceByList.get("Mayorista") ?? null}
+          publico={priceByList.get("Publico") ?? null}
           canEdit={editable}
         />
       </div>

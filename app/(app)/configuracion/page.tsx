@@ -3,7 +3,6 @@ import { CatalogManager } from "@/components/catalog-manager";
 import { MediosPagoManager } from "@/components/medios-pago-manager";
 import { TiposClienteManager } from "@/components/tipos-cliente-manager";
 import { DepositosManager, LocalesManager } from "@/components/locales-depositos-manager";
-import { ReglasPreciosManager } from "@/components/reglas-precios-manager";
 import { CuponesManager } from "@/components/cupones-manager";
 import { MetodosDespachoManager } from "@/components/metodos-despacho-manager";
 
@@ -30,18 +29,6 @@ export default async function ConfiguracionPage() {
     sb.from("stores").select("id, name, active, has_cash_register, warehouses(name)").order("name"),
   ]);
 
-  const { data: rules } = await sb.from("pricing_rules").select("category_id, publico_markup_pct, mayorista_discount_pct");
-  const defaultRuleRow = (rules ?? []).find((r) => r.category_id == null);
-  const defaultRule = {
-    markup: Number(defaultRuleRow?.publico_markup_pct ?? 110),
-    discount: Number(defaultRuleRow?.mayorista_discount_pct ?? 50),
-  };
-  const overrides: Record<string, { markup: number; discount: number }> = {};
-  for (const r of rules ?? []) {
-    if (r.category_id != null) overrides[r.category_id] = { markup: Number(r.publico_markup_pct), discount: Number(r.mayorista_discount_pct) };
-  }
-  const activeCategories = (categorias ?? []).filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }));
-
   const { data: coupons } = await sb
     .from("coupons")
     .select("id, code, discount_type, discount_value, min_amount, max_uses, used_count, expires_at, active")
@@ -63,7 +50,10 @@ export default async function ConfiguracionPage() {
       </div>
 
       <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Precios</h2>
-      <ReglasPreciosManager defaultRule={defaultRule} categories={activeCategories} overrides={overrides} />
+      <div className="rounded-xl border border-line bg-card p-5 text-sm text-muted">
+        Dos listas: <span className="font-medium text-ink">Mayorista</span> (base, se carga a mano en cada producto) y{" "}
+        <span className="font-medium text-ink">Publico</span> = Mayorista × 2 (se calcula solo). Sin excepciones por categoría.
+      </div>
 
       <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Cupones</h2>
       <CuponesManager coupons={(coupons ?? []).map((c) => ({

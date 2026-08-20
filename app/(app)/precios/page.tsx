@@ -18,14 +18,14 @@ export default async function PreciosPage() {
       .eq("price_list_id", l.id)
       .is("variant_id", null);
     const usedBy = (types ?? []).filter((t) => t.price_list_id === l.id).map((t) => t.name);
-    infos.push({ id: l.id, name: l.name, priced: count ?? 0, usedBy });
+    infos.push({ id: l.id, name: l.name, priced: count ?? 0, usedBy, derived: l.name === "Publico" });
   }
 
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Listas de precios</h1>
       <p className="mt-1 mb-6 text-sm text-muted">
-        Cada tipo de cliente usa una lista. Exportá a Excel, editá los precios y volvé a importar.
+        Mayorista es la base (se edita acá o en cada producto). Publico se calcula solo (Mayorista × 2). Exportá a Excel, editá Mayorista y volvé a importar.
       </p>
       <PreciosManager lists={infos} totalProducts={totalProducts ?? 0} />
     </div>

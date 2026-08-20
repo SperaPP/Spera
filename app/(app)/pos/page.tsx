@@ -157,10 +157,10 @@ export default async function PosPage() {
     });
   }
 
-  // Lista Publico para mostrador; perfiles Mayorista/Platinum para el flujo mayorista.
+  // Lista Publico para mostrador; perfil Mayorista para el flujo mayorista.
   const retailPriceListId = (priceLists ?? []).find((l) => l.name === "Publico")?.id ?? null;
   const wholesaleProfiles = (profiles ?? [])
-    .filter((p) => p.name === "Mayorista" || p.name === "Platinum")
+    .filter((p) => p.name === "Mayorista")
     .map((p) => ({ customerTypeId: p.id, name: p.name, priceListId: p.price_list_id as string | null }));
 
   return (

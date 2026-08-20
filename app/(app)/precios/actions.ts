@@ -59,6 +59,11 @@ export async function importarPrecios(listId: string, rawRows: unknown): Promise
   const { data: orgId } = await sb.rpc("current_org_id");
   if (!orgId) return { error: "Sin organización" };
 
+  // Publico se calcula solo (Mayorista × 2): no se importa directo.
+  const { data: list } = await sb.from("price_lists").select("name").eq("id", listId).maybeSingle();
+  if (list?.name === "Publico") return { error: "Publico se calcula solo (Mayorista × 2). Importá la lista Mayorista." };
+  const isMayorista = list?.name === "Mayorista";
+
   const ids = rows.map((r) => r.id);
   // Limpio los precios de producto previos de estos productos en la lista, en chunks.
   for (let i = 0; i < ids.length; i += 200) {
@@ -71,6 +76,11 @@ export async function importarPrecios(listId: string, rawRows: unknown): Promise
   for (let i = 0; i < items.length; i += 500) {
     const { error } = await sb.from("price_list_items").insert(items.slice(i, i + 500));
     if (error) return { error: error.message };
+  }
+
+  // Al importar Mayorista, derivo Publico (= Mayorista × 2) de cada producto.
+  if (isMayorista) {
+    for (const id of ids) await sb.rpc("apply_product_pricing", { p_product_id: id });
   }
 
   revalidatePath("/precios");

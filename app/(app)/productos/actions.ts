@@ -62,7 +62,7 @@ export async function crearProducto(
 
   if (error) return { error: error.message };
 
-  // El precio cargado es Platinum (base): derivar Publico y Mayorista.
+  // El precio cargado es Mayorista (base): derivar Publico (= Mayorista × 2).
   const newId = data as string;
   if (d.prices.some((p) => p.price != null)) {
     await sb.rpc("apply_product_pricing", { p_product_id: newId });
@@ -137,13 +137,13 @@ export async function agregarValorCatalogo(
   return { ok: true, item: data };
 }
 
-// ── Precio Platinum (base) → deriva Publico y Mayorista ────────
-export async function setPrecioPlatinum(productId: string, platinum: number): Promise<ActionState> {
+// ── Precio Mayorista (base) → deriva Publico (= Mayorista × 2) ──
+export async function setPrecioMayorista(productId: string, mayorista: number): Promise<ActionState> {
   const denied = await requireCan("productos", true);
   if (denied) return denied;
-  if (!isFinite(platinum) || platinum < 0) return { error: "Precio inválido" };
+  if (!isFinite(mayorista) || mayorista < 0) return { error: "Precio inválido" };
   const sb = await createClient();
-  const { error } = await sb.rpc("apply_product_pricing", { p_product_id: productId, p_platinum: platinum });
+  const { error } = await sb.rpc("apply_product_pricing", { p_product_id: productId, p_base: mayorista });
   if (error) return { error: error.message };
   revalidatePath(`/productos/${productId}`);
   revalidatePath("/precios");

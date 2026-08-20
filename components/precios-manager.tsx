@@ -1,19 +1,15 @@
 ﻿"use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useTransition } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { Download, Upload, Plus, Tags } from "lucide-react";
-import { exportarPrecios, importarPrecios, crearLista } from "@/app/(app)/precios/actions";
+import { Download, Upload, Tags } from "lucide-react";
+import { exportarPrecios, importarPrecios } from "@/app/(app)/precios/actions";
 
-export type ListaInfo = { id: string; name: string; priced: number; usedBy: string[] };
-
-const input =
-  "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
+export type ListaInfo = { id: string; name: string; priced: number; usedBy: string[]; derived: boolean };
 
 export function PreciosManager({ lists, totalProducts }: { lists: ListaInfo[]; totalProducts: number }) {
   const [pending, start] = useTransition();
-  const [newList, setNewList] = useState("");
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   function exportar(l: ListaInfo) {
@@ -63,6 +59,7 @@ export function PreciosManager({ lists, totalProducts }: { lists: ListaInfo[]; t
                 <p className="mt-1 text-sm text-muted">
                   {l.priced.toLocaleString("es-AR")} de {totalProducts.toLocaleString("es-AR")} con precio
                   {l.usedBy.length > 0 && <> · usada por {l.usedBy.join(", ")}</>}
+                  {l.derived && <> · <span className="font-medium text-ink">= Mayorista × 2</span> (se calcula solo)</>}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -73,46 +70,30 @@ export function PreciosManager({ lists, totalProducts }: { lists: ListaInfo[]; t
                 >
                   <Download className="h-4 w-4" /> Exportar
                 </button>
-                <input
-                  ref={(el) => { fileInputs.current[l.id] = el; }}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) importar(l, f); e.target.value = ""; }}
-                />
-                <button
-                  onClick={() => fileInputs.current[l.id]?.click()}
-                  disabled={pending}
-                  className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60"
-                >
-                  <Upload className="h-4 w-4" /> Importar
-                </button>
+                {!l.derived && (
+                  <>
+                    <input
+                      ref={(el) => { fileInputs.current[l.id] = el; }}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) importar(l, f); e.target.value = ""; }}
+                    />
+                    <button
+                      onClick={() => fileInputs.current[l.id]?.click()}
+                      disabled={pending}
+                      className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60"
+                    >
+                      <Upload className="h-4 w-4" /> Importar
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
         ))}
       </div>
-
-      <div className="rounded-xl border border-line bg-card p-5">
-        <h2 className="mb-3 text-sm font-medium text-ink">Nueva lista de precios</h2>
-        <div className="flex gap-2">
-          <input
-            className={input}
-            value={newList}
-            onChange={(e) => setNewList(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && newList.trim()) start(async () => { const r = await crearLista(newList.trim()); if (r.error) toast.error(r.error); else { toast.success("Lista creada."); setNewList(""); } }); }}
-            placeholder="Ej. VIP, Tiendanube, Distribuidor…"
-          />
-          <button
-            onClick={() => start(async () => { const r = await crearLista(newList.trim()); if (r.error) toast.error(r.error); else { toast.success("Lista creada."); setNewList(""); } })}
-            disabled={pending || !newList.trim()}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60"
-          >
-            <Plus className="h-4 w-4" /> Crear
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-muted">Para asignar una lista a un tipo de cliente, lo haremos desde Configuración.</p>
-      </div>
+      <p className="text-xs text-muted">Al importar la lista <span className="font-medium text-ink">Mayorista</span>, el Publico se recalcula solo (× 2).</p>
     </div>
   );
 }

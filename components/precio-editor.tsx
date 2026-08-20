@@ -4,33 +4,33 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/format";
-import { setPrecioPlatinum } from "@/app/(app)/productos/actions";
+import { setPrecioMayorista } from "@/app/(app)/productos/actions";
 
 export function PrecioEditor({
   productId,
-  platinum,
-  publico,
   mayorista,
+  publico,
   canEdit,
 }: {
   productId: string;
-  platinum: number | null;
-  publico: number | null;
   mayorista: number | null;
+  publico: number | null;
   canEdit: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(platinum != null ? String(platinum) : "");
+  const [val, setVal] = useState(mayorista != null ? String(mayorista) : "");
+
+  const preview = val.trim() !== "" && isFinite(Number(val)) ? Math.round(Number(val) * 2) : null;
 
   function save() {
     const n = Number(val);
     if (!isFinite(n) || n < 0) return toast.error("Precio inválido.");
     start(async () => {
-      const r = await setPrecioPlatinum(productId, n);
+      const r = await setPrecioMayorista(productId, n);
       if (r.error) { toast.error(r.error); return; }
-      toast.success("Precio actualizado. Publico y Mayorista recalculados.");
+      toast.success("Precio actualizado. Publico recalculado (×2).");
       setEditing(false);
       router.refresh();
     });
@@ -40,13 +40,12 @@ export function PrecioEditor({
     <div className="mt-4 border-t border-line pt-4">
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-          <Price label="Platinum" value={platinum} accent />
-          <Price label="Publico" value={publico} />
-          <Price label="Mayorista" value={mayorista} />
+          <Price label="Mayorista (base)" value={mayorista} accent />
+          <Price label="Publico (×2)" value={publico} />
         </div>
         {canEdit && !editing && (
           <button type="button" onClick={() => setEditing(true)} className="shrink-0 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
-            {platinum != null ? "Editar precio" : "Cargar precio"}
+            {mayorista != null ? "Editar precio" : "Cargar precio"}
           </button>
         )}
       </div>
@@ -54,7 +53,7 @@ export function PrecioEditor({
       {editing && (
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Precio Platinum (base)</label>
+            <label className="mb-1 block text-xs font-medium text-muted">Precio Mayorista (base)</label>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted">$</span>
               <input autoFocus type="number" min={0} value={val} onChange={(e) => setVal(e.target.value)}
@@ -66,7 +65,7 @@ export function PrecioEditor({
             {pending ? "Guardando…" : "Guardar"}
           </button>
           <button type="button" onClick={() => setEditing(false)} className="rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
-          <p className="w-full text-xs text-muted">Publico y Mayorista se recalculan automáticamente según la categoría.</p>
+          <p className="w-full text-xs text-muted">Publico se calcula solo: {preview != null ? <span className="font-medium text-ink">{formatMoney(preview)}</span> : "Mayorista × 2"}.</p>
         </div>
       )}
     </div>

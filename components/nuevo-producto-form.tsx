@@ -390,7 +390,7 @@ export function NuevoProductoForm({
       {priceLists.length > 0 && (
         <div className={card}>
           <h2 className="mb-1 text-sm font-medium text-ink">Precio</h2>
-          <p className="mb-4 text-xs text-muted">Cargá el precio <span className="font-medium text-ink">Platinum</span> (base, IVA incluido). Publico y Mayorista se calculan solos según la categoría. Es opcional: podés dejarlo vacío y cargarlo después.</p>
+          <p className="mb-4 text-xs text-muted">Cargá el precio <span className="font-medium text-ink">Mayorista</span> (base, IVA incluido). Publico se calcula solo (× 2). Es opcional: podés dejarlo vacío y cargarlo después.</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {priceLists.map((pl) => (
               <div key={pl.id}>
