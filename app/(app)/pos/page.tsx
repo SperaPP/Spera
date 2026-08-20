@@ -18,23 +18,28 @@ export type PosStore = {
   name: string;
   isWholesale: boolean;
   sessionId: string | null;
+  role: "titular" | "apoyo" | null;
   openingAmount: number;
   openedAt: string | null;
   stale: boolean;
-  pettyCash: number;   // caja chica arrastrada (para la apertura)
-  safeBalance: number; // caja fuerte del local
-  summary: PosSummary | null;
+  hasOpenAtStore: boolean; // ya hay una caja abierta en el local (si abro, sería de apoyo)
+  openApoyoCount: number;  // cajas de apoyo abiertas (el titular no puede cerrar con apoyos abiertas)
+  pettyCash: number;       // caja chica del local (arrastre; fondo de la caja titular)
+  safeBalance: number;     // caja fuerte del local
+  summary: PosSummary | null; // titular: consolidado local; apoyo: propio
 };
 
 const AR_TZ = "America/Argentina/Buenos_Aires";
 const arDay = (ts: string) => new Date(ts).toLocaleDateString("en-CA", { timeZone: AR_TZ });
 
+/** Arqueo sobre uno o varios turnos (el titular consolida su turno + las cajas de apoyo). */
 async function computeSummary(
   sb: Awaited<ReturnType<typeof createClient>>,
-  sessionId: string,
+  sessionIds: string[],
   openingAmount: number
 ): Promise<PosSummary> {
-  const { data: sales } = await sb.from("sales").select("id, total").eq("cash_session_id", sessionId).eq("status", "completada");
+  if (sessionIds.length === 0) return { sales: 0, sold: 0, cash: 0, expectedCash: openingAmount, byMethod: [] };
+  const { data: sales } = await sb.from("sales").select("id, total").in("cash_session_id", sessionIds).eq("status", "completada");
   const ids = (sales ?? []).map((x) => x.id);
   const grossSold = (sales ?? []).reduce((a, x) => a + Number(x.total), 0);
 
@@ -55,8 +60,8 @@ async function computeSummary(
   }
   const sold = grossSold - cambio;
 
-  // Cobranzas en efectivo de este turno entran al arqueo.
-  const { data: receipts } = await sb.from("receipts").select("id").eq("cash_session_id", sessionId);
+  // Cobranzas en efectivo de estos turnos entran al arqueo.
+  const { data: receipts } = await sb.from("receipts").select("id").in("cash_session_id", sessionIds);
   const rids = (receipts ?? []).map((r) => r.id);
   if (rids.length) {
     const { data: rpays } = await sb.from("receipt_payments").select("amount, payment_methods(name, affects_cash)").in("receipt_id", rids);
@@ -83,9 +88,7 @@ export default async function PosPage() {
     auth?.user ? sb.from("profiles").select("store_id").eq("id", auth.user.id).maybeSingle() : Promise.resolve({ data: null }),
     sb.rpc("is_admin"),
     sb.from("stores").select("id, name, is_wholesale").eq("has_cash_register", true).eq("active", true).order("name"),
-    auth?.user
-      ? sb.from("cash_sessions").select("id, store_id, opening_amount, opened_at").eq("status", "abierta").eq("opened_by", auth.user.id)
-      : Promise.resolve({ data: [] as { id: string; store_id: string; opening_amount: number; opened_at: string }[] }),
+    sb.from("cash_sessions").select("id, store_id, role, opening_amount, opened_at, opened_by").eq("status", "abierta"),
     sb.from("price_lists").select("id, name").eq("active", true),
     sb.from("customer_types").select("id, name, price_list_id").eq("active", true).order("name"),
     sb.from("payment_methods").select("id, name, kind").eq("active", true).order("position"),
@@ -98,13 +101,15 @@ export default async function PosPage() {
   if (myStoreId) operable = operable.filter((s) => s.id === myStoreId);
   else if (isAdmin !== true) operable = [];
 
+  const allOpen = sessions ?? [];
+  const myId = auth?.user?.id ?? null;
   // Caja del usuario actual (una sola abierta por usuario).
-  const mySession = (sessions ?? [])[0] ?? null;
+  const mySession = myId ? allOpen.find((s) => s.opened_by === myId) ?? null : null;
   const todayAR = new Date().toLocaleDateString("en-CA", { timeZone: AR_TZ });
 
-  // Caja chica del cajero (arrastre) + caja fuerte por local.
+  // Caja chica (arrastre) + caja fuerte, ambas por local.
   const [{ data: petty }, { data: safes }] = await Promise.all([
-    auth?.user ? sb.from("petty_cash").select("store_id, balance").eq("cashier_id", auth.user.id) : Promise.resolve({ data: [] as { store_id: string; balance: number }[] }),
+    sb.from("store_petty").select("store_id, balance"),
     sb.from("store_safe").select("store_id, balance"),
   ]);
   const pettyByStore = new Map((petty ?? []).map((p) => [p.store_id, Number(p.balance)]));
@@ -112,18 +117,40 @@ export default async function PosPage() {
 
   const posStores: PosStore[] = [];
   for (const s of operable) {
+    const openHere = allOpen.filter((o) => o.store_id === s.id);
     const sess = mySession && mySession.store_id === s.id ? mySession : null;
+    const role = (sess?.role as "titular" | "apoyo" | undefined) ?? null;
+
+    // Cajas de apoyo abiertas (el titular no puede cerrar mientras haya alguna).
+    const openApoyoCount = openHere.filter((o) => o.role === "apoyo" && o.id !== sess?.id).length;
+
+    let summary: PosSummary | null = null;
+    if (sess) {
+      if (role === "titular") {
+        // Consolida el turno del titular con las cajas de apoyo de este período (abiertas o cerradas).
+        const { data: apoyos } = await sb.from("cash_sessions")
+          .select("id").eq("store_id", s.id).eq("role", "apoyo").gte("opened_at", sess.opened_at).neq("id", sess.id);
+        const ids = [sess.id, ...(apoyos ?? []).map((a) => a.id)];
+        summary = await computeSummary(sb, ids, Number(sess.opening_amount));
+      } else {
+        summary = await computeSummary(sb, [sess.id], Number(sess.opening_amount));
+      }
+    }
+
     posStores.push({
       id: s.id,
       name: s.name,
       isWholesale: s.is_wholesale ?? false,
       sessionId: sess?.id ?? null,
+      role,
       openingAmount: sess ? Number(sess.opening_amount) : 0,
       openedAt: sess?.opened_at ?? null,
       stale: sess ? arDay(sess.opened_at) !== todayAR : false,
+      hasOpenAtStore: openHere.length > 0,
+      openApoyoCount,
       pettyCash: pettyByStore.get(s.id) ?? 0,
       safeBalance: safeByStore.get(s.id) ?? 0,
-      summary: sess ? await computeSummary(sb, sess.id, Number(sess.opening_amount)) : null,
+      summary,
     });
   }
 

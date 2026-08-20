@@ -105,6 +105,8 @@ function CajaVieja({ store, storeSelector }: { store: PosStore; storeSelector: R
 function AbrirCaja({ store, storeSelector }: { store: PosStore; storeSelector: React.ReactNode }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  // Si ya hay una caja abierta en el local, ésta sería de apoyo (solo vende).
+  const apoyo = store.hasOpenAtStore;
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-5 flex items-center justify-between gap-3">
@@ -115,34 +117,51 @@ function AbrirCaja({ store, storeSelector }: { store: PosStore; storeSelector: R
         <div className="flex items-center gap-2">
           <Wallet className="h-4 w-4 text-muted" />
           <h2 className="font-medium text-ink">{store.name}</h2>
-          <span className="ml-auto rounded-full bg-canvas px-2.5 py-0.5 text-xs font-medium text-muted">Caja cerrada</span>
+          <span className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-medium ${apoyo ? "bg-accent-soft text-accent" : "bg-canvas text-muted"}`}>
+            {apoyo ? "Caja de apoyo" : "Caja titular"}
+          </span>
         </div>
-        <p className="mt-3 text-sm text-muted">Al abrir arrancás con la caja chica que dejaste en tu último cierre.</p>
-        <div className="mt-4 flex items-center justify-between rounded-xl bg-canvas px-4 py-3">
-          <span className="text-sm text-muted">Caja chica (fondo)</span>
-          <span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(store.pettyCash)}</span>
-        </div>
-        {store.pettyCash === 0 && <p className="mt-2 text-xs text-muted">No tenés caja chica. Si es tu primer día, pedile a administración que cargue el fondo inicial.</p>}
+
+        {apoyo ? (
+          <>
+            <p className="mt-3 text-sm text-muted">Ya hay una caja abierta en el local. Abrís una <span className="font-medium text-ink">caja de apoyo</span>: solo vendés. La caja titular maneja la caja chica, el cierre y el reparto a la caja fuerte. Tu efectivo se rinde a la caja titular.</p>
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-canvas px-4 py-3">
+              <span className="text-sm text-muted">Fondo</span>
+              <span className="text-lg font-semibold tabular-nums text-ink">Sin fondo</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mt-3 text-sm text-muted">Sos la <span className="font-medium text-ink">caja titular</span> del local. Arrancás con la caja chica que quedó del último cierre; al cerrar repartís cuánto queda en caja chica y cuánto pasa a la caja fuerte.</p>
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-canvas px-4 py-3">
+              <span className="text-sm text-muted">Caja chica (fondo)</span>
+              <span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(store.pettyCash)}</span>
+            </div>
+            {store.pettyCash === 0 && <p className="mt-2 text-xs text-muted">El local no tiene caja chica cargada. Si es el primer día, pedile a administración que cargue el fondo inicial con un ajuste de caja.</p>}
+          </>
+        )}
+
         <button
           disabled={pending}
           onClick={() => start(async () => {
             const r = await abrirCaja(store.id);
             if (r.error) { toast.error(r.error); return; }
-            toast.success("Caja abierta."); router.refresh();
+            toast.success(apoyo ? "Caja de apoyo abierta." : "Caja abierta."); router.refresh();
           })}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-accent-fg hover:bg-accent-hover disabled:opacity-60"
         >
-          <Unlock className="h-4 w-4" /> {pending ? "Abriendo…" : "Abrir caja"}
+          <Unlock className="h-4 w-4" /> {pending ? "Abriendo…" : apoyo ? "Abrir caja de apoyo" : "Abrir caja"}
         </button>
       </div>
     </div>
   );
 }
 
-// ── Panel de cierre de caja (reparto caja chica / caja fuerte) ─
+// ── Panel de cierre de caja ───────────────────────────────────
 function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => void }) {
   const router = useRouter();
   const sum = store.summary;
+  const apoyo = store.role === "apoyo";
   const [declared, setDeclared] = useState("");
   const [kept, setKept] = useState(String(store.openingAmount));
   const [notes, setNotes] = useState("");
@@ -153,23 +172,35 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
   const diff = declared !== "" && sum ? declaredN - sum.expectedCash : null;
   const toSafe = Math.max(0, declaredN - keptN);
   const keptTooBig = declared !== "" && keptN > declaredN;
+  const blockedByApoyos = !apoyo && store.openApoyoCount > 0;
 
   return (
     <div className="mb-5 rounded-2xl border border-line bg-card p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         <Lock className="h-4 w-4 text-muted" />
-        <h2 className="font-medium text-ink">Cerrar caja · {store.name}</h2>
+        <h2 className="font-medium text-ink">{apoyo ? "Cerrar caja de apoyo" : "Cerrar caja"} · {store.name}</h2>
         <span className="ml-auto text-xs text-muted">Abierta {store.openedAt ? formatDateTime(store.openedAt) : ""}</span>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile label="Fondo" value={formatMoney(store.openingAmount)} />
+
+      {apoyo && (
+        <p className="mb-3 text-xs text-muted">Sos caja de apoyo: contá tu efectivo y entregáselo a la caja titular. El reparto a caja chica/fuerte lo hace la titular al cerrar.</p>
+      )}
+      {blockedByApoyos && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-warn/30 bg-warn-bg px-3 py-2 text-sm text-ink">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+          <span>Hay {store.openApoyoCount} caja{store.openApoyoCount > 1 ? "s" : ""} de apoyo abierta{store.openApoyoCount > 1 ? "s" : ""}. Como titular, cerrá primero las de apoyo para poder cerrar y repartir.</span>
+        </div>
+      )}
+
+      <div className={`grid grid-cols-2 gap-3 ${apoyo ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
+        {!apoyo && <Tile label="Fondo (caja chica)" value={formatMoney(store.openingAmount)} />}
         <Tile label="Vendido" value={formatMoney(sum?.sold ?? 0)} />
         <Tile label="Efectivo cobrado" value={formatMoney(sum?.cash ?? 0)} />
         <Tile label="Efectivo esperado" value={formatMoney(sum?.expectedCash ?? 0)} accent />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
-        <div>
+      {apoyo ? (
+        <div className="mt-4 border-t border-line pt-4">
           <label className="mb-1.5 block text-sm font-medium text-ink">Efectivo contado</label>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted">$</span>
@@ -177,20 +208,33 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
           </div>
           {diff !== null && <p className={`mt-1.5 text-xs ${diff === 0 ? "text-ok" : "text-warn"}`}>{diff === 0 ? "Cuadra exacto" : `Diferencia con lo esperado: ${formatMoney(diff)}`}</p>}
         </div>
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">Dejo en caja chica</label>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted">$</span>
-            <input type="number" min={0} className={input} value={kept} onChange={(e) => setKept(e.target.value)} placeholder="0" />
+      ) : (
+        <>
+          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-ink">Efectivo contado (todo el local)</label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted">$</span>
+                <input type="number" min={0} className={input} value={declared} onChange={(e) => setDeclared(e.target.value)} placeholder="0" />
+              </div>
+              {diff !== null && <p className={`mt-1.5 text-xs ${diff === 0 ? "text-ok" : "text-warn"}`}>{diff === 0 ? "Cuadra exacto" : `Diferencia con lo esperado: ${formatMoney(diff)}`}</p>}
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-ink">Dejo en caja chica</label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted">$</span>
+                <input type="number" min={0} className={input} value={kept} onChange={(e) => setKept(e.target.value)} placeholder="0" />
+              </div>
+              {keptTooBig && <p className="mt-1.5 text-xs text-danger">No podés dejar más de lo contado.</p>}
+            </div>
           </div>
-          {keptTooBig && <p className="mt-1.5 text-xs text-danger">No podés dejar más de lo contado.</p>}
-        </div>
-      </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-canvas px-4 py-3 text-sm">
-        <span className="text-muted">A caja fuerte: <span className="font-semibold text-ink">{formatMoney(toSafe)}</span></span>
-        <span className="text-muted">Caja fuerte del local: {formatMoney(store.safeBalance)} → <span className="font-semibold text-accent">{formatMoney(store.safeBalance + toSafe)}</span></span>
-      </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-canvas px-4 py-3 text-sm">
+            <span className="text-muted">A caja fuerte: <span className="font-semibold text-ink">{formatMoney(toSafe)}</span></span>
+            <span className="text-muted">Caja fuerte del local: {formatMoney(store.safeBalance)} → <span className="font-semibold text-accent">{formatMoney(store.safeBalance + toSafe)}</span></span>
+          </div>
+        </>
+      )}
 
       <div className="mt-3">
         <label className="mb-1.5 block text-sm font-medium text-ink">Notas (opcional)</label>
@@ -200,15 +244,15 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
       <div className="mt-4 flex justify-end gap-3">
         <button onClick={onDone} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
         <button
-          disabled={pending || declared === "" || keptTooBig}
+          disabled={pending || declared === "" || (!apoyo && (keptTooBig || blockedByApoyos))}
           onClick={() => start(async () => {
-            const r = await cerrarCaja(store.sessionId!, declaredN, keptN, notes);
+            const r = await cerrarCaja(store.sessionId!, declaredN, apoyo ? 0 : keptN, notes);
             if (r.error) { toast.error(r.error); return; }
-            toast.success(`Caja cerrada. ${formatMoney(toSafe)} a caja fuerte.`); router.refresh();
+            toast.success(apoyo ? "Caja de apoyo cerrada." : `Caja cerrada. ${formatMoney(toSafe)} a caja fuerte.`); router.refresh();
           })}
           className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
         >
-          <Lock className="h-4 w-4" /> {pending ? "Cerrando…" : "Cerrar caja"}
+          <Lock className="h-4 w-4" /> {pending ? "Cerrando…" : apoyo ? "Cerrar caja de apoyo" : "Cerrar caja"}
         </button>
       </div>
     </div>
@@ -379,6 +423,7 @@ function Terminal({
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${wholesale ? "bg-accent-soft text-accent" : "bg-ink/[0.06] text-muted"}`}>
             {wholesale ? "Mayorista" : "Mostrador"}
           </span>
+          {store.role === "apoyo" && <span className="rounded-full bg-warn-bg px-3 py-1 text-xs font-semibold text-warn">Caja de apoyo</span>}
         </div>
         <div className="flex items-center gap-2">
           {storeSelector}

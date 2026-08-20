@@ -34,32 +34,21 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
   const [{ data: stores }, { data: safes }, { data: petty }, { data: profiles }, { data: deliveries }] = await Promise.all([
     sb.from("stores").select("id, name").eq("has_cash_register", true).eq("active", true).order("name"),
     sb.from("store_safe").select("store_id, balance"),
-    sb.from("petty_cash").select("store_id, cashier_id, balance"),
+    sb.from("store_petty").select("store_id, balance"),
     sb.from("profiles").select("id, full_name, email, store_id"),
     sb.from("central_deliveries").select("id, amount, notes, delivered_at, delivered_by, stores(name)").order("delivered_at", { ascending: false }).limit(15),
   ]);
 
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email || "—"]));
   const safeByStore = new Map((safes ?? []).map((s) => [s.store_id, Number(s.balance)]));
-  const cashiersByStore = new Map<string, { id: string; name: string }[]>();
-  for (const p of profiles ?? []) {
-    if (!p.store_id) continue;
-    if (!cashiersByStore.has(p.store_id)) cashiersByStore.set(p.store_id, []);
-    cashiersByStore.get(p.store_id)!.push({ id: p.id, name: p.full_name || p.email || "—" });
-  }
-  const pettyByStore = new Map<string, { cashierId: string; name: string; balance: number }[]>();
-  for (const p of petty ?? []) {
-    if (!pettyByStore.has(p.store_id)) pettyByStore.set(p.store_id, []);
-    pettyByStore.get(p.store_id)!.push({ cashierId: p.cashier_id, name: nameById.get(p.cashier_id) ?? "—", balance: Number(p.balance) });
-  }
+  const pettyByStore = new Map((petty ?? []).map((p) => [p.store_id, Number(p.balance)]));
   const storeRows = (stores ?? []).map((s) => ({
-    id: s.id, name: s.name, safe: safeByStore.get(s.id) ?? 0,
-    petty: pettyByStore.get(s.id) ?? [], cashiers: cashiersByStore.get(s.id) ?? [],
+    id: s.id, name: s.name, safe: safeByStore.get(s.id) ?? 0, petty: pettyByStore.get(s.id) ?? 0,
   }));
 
   // ── Períodos ────────────────────────────────────────────────
   let req = sb.from("cash_sessions")
-    .select("id, store_id, status, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, opened_by, stores(name)")
+    .select("id, store_id, status, role, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, opened_by, stores(name)")
     .order("opened_at", { ascending: false }).limit(80);
   if (filter !== "todas") req = req.eq("status", filter);
   const { data: sessions } = await req;
@@ -91,7 +80,7 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Caja</h1>
-          <p className="mt-1 text-sm text-muted">Caja chica por cajero, caja fuerte por local y entregas a Casa Central.</p>
+          <p className="mt-1 text-sm text-muted">Caja chica y caja fuerte por local, y entregas a Casa Central.</p>
         </div>
         <Link href="/caja/cierres" className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
           <History className="h-4 w-4" /> Historial de cierres
@@ -100,7 +89,7 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
 
       {storeRows.length > 0 && (
         <>
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-faint">Cajas fuertes por local</h2>
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-faint">Cajas por local</h2>
           <div className="mb-8"><CajaAdmin stores={storeRows} canAdmin={canAdmin} /></div>
         </>
       )}
@@ -143,7 +132,12 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
                 return (
                   <tr key={s.id} className="border-b border-line last:border-0 hover:bg-canvas">
                     <td className="px-4 py-3 font-medium text-ink">{relName(s.stores) ?? "—"}</td>
-                    <td className="px-4 py-3 text-muted">{s.opened_by ? nameById.get(s.opened_by) ?? "—" : "—"}</td>
+                    <td className="px-4 py-3 text-muted">
+                      <span className="flex items-center gap-1.5">
+                        {s.opened_by ? nameById.get(s.opened_by) ?? "—" : "—"}
+                        {s.role === "apoyo" && <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium uppercase text-faint">apoyo</span>}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-muted">{formatDateTime(s.opened_at)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(expected)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{declared == null ? "—" : formatMoney(declared)}</td>

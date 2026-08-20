@@ -7,8 +7,7 @@ import { Vault, Send, SlidersHorizontal, X } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import { ajustarCaja, entregarACentral } from "@/app/(app)/caja/actions";
 
-type Cashier = { id: string; name: string };
-type StoreRow = { id: string; name: string; safe: number; petty: { cashierId: string; name: string; balance: number }[]; cashiers: Cashier[] };
+type StoreRow = { id: string; name: string; safe: number; petty: number };
 
 const input =
   "w-full rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-4 focus:ring-accent/15";
@@ -20,7 +19,6 @@ export function CajaAdmin({ stores, canAdmin }: { stores: StoreRow[]; canAdmin: 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {stores.map((s) => {
-        const pettyTotal = s.petty.reduce((a, p) => a + p.balance, 0);
         return (
           <div key={s.id} className="rounded-2xl border border-line bg-card p-5 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
@@ -33,17 +31,10 @@ export function CajaAdmin({ stores, canAdmin }: { stores: StoreRow[]; canAdmin: 
                 <div className="mt-0.5 text-xl font-bold tabular-nums text-accent">{formatMoney(s.safe)}</div>
               </div>
               <div className="rounded-lg bg-canvas px-3 py-2.5">
-                <div className="text-xs text-muted">Caja chica (total)</div>
-                <div className="mt-0.5 text-xl font-bold tabular-nums text-ink">{formatMoney(pettyTotal)}</div>
+                <div className="text-xs text-muted">Caja chica</div>
+                <div className="mt-0.5 text-xl font-bold tabular-nums text-ink">{formatMoney(s.petty)}</div>
               </div>
             </div>
-            {s.petty.length > 0 && (
-              <div className="mt-3 space-y-0.5 border-t border-line pt-3 text-sm">
-                {s.petty.map((p) => (
-                  <div key={p.cashierId} className="flex justify-between"><span className="text-muted">{p.name}</span><span className="tabular-nums text-ink">{formatMoney(p.balance)}</span></div>
-                ))}
-              </div>
-            )}
             {canAdmin && (
               <div className="mt-4 flex gap-2">
                 <button onClick={() => setEntregar(s)} disabled={s.safe <= 0} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50">
@@ -105,30 +96,18 @@ function EntregarModal({ store, onClose }: { store: StoreRow; onClose: () => voi
 function AjusteModal({ store, onClose }: { store: StoreRow; onClose: () => void }) {
   const router = useRouter();
   const [target, setTarget] = useState<"chica" | "fuerte">("chica");
-  const [cashierId, setCashierId] = useState(store.cashiers[0]?.id ?? "");
   const [delta, setDelta] = useState("");
   const [reason, setReason] = useState("");
   const [pending, start] = useTransition();
   return (
     <Modal title={`Ajuste de caja · ${store.name}`} onClose={onClose}>
       <p className="text-xs text-muted">Sumá o restá efectivo (usá negativo para restar). Fondo inicial o corrección de errores. Queda registrado.</p>
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-muted">Destino</label>
-          <select className={input} value={target} onChange={(e) => setTarget(e.target.value as "chica" | "fuerte")}>
-            <option value="chica">Caja chica (cajero)</option>
-            <option value="fuerte">Caja fuerte (local)</option>
-          </select>
-        </div>
-        {target === "chica" && (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Cajero</label>
-            <select className={input} value={cashierId} onChange={(e) => setCashierId(e.target.value)}>
-              {store.cashiers.length === 0 && <option value="">Sin cajeros asignados</option>}
-              {store.cashiers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        )}
+      <div className="mt-3">
+        <label className="mb-1 block text-xs font-medium text-muted">Destino</label>
+        <select className={input} value={target} onChange={(e) => setTarget(e.target.value as "chica" | "fuerte")}>
+          <option value="chica">Caja chica (local)</option>
+          <option value="fuerte">Caja fuerte (local)</option>
+        </select>
       </div>
       <div className="mt-3">
         <label className="mb-1 block text-xs font-medium text-muted">Monto (+ suma / − resta)</label>
@@ -144,9 +123,8 @@ function AjusteModal({ store, onClose }: { store: StoreRow; onClose: () => void 
           onClick={() => {
             const n = Number(delta);
             if (!isFinite(n) || n === 0) return toast.error("Ingresá un monto distinto de cero.");
-            if (target === "chica" && !cashierId) return toast.error("Elegí el cajero.");
             start(async () => {
-              const r = await ajustarCaja({ storeId: store.id, target, cashierId: target === "chica" ? cashierId : null, delta: n, reason });
+              const r = await ajustarCaja({ storeId: store.id, target, delta: n, reason });
               if (r.error) { toast.error(r.error); return; }
               toast.success("Ajuste aplicado."); onClose(); router.refresh();
             });

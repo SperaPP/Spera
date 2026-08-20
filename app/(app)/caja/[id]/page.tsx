@@ -17,7 +17,7 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
 
   const { data: s } = await sb
     .from("cash_sessions")
-    .select("id, status, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, notes, opened_by, stores(name)")
+    .select("id, status, role, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, notes, opened_by, stores(name)")
     .eq("id", id).single();
   if (!s) notFound();
 
@@ -66,7 +66,10 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
               {s.closed_at && <span>Cerrada {formatDateTime(s.closed_at)}</span>}
             </div>
           </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${(STATUS[s.status] ?? STATUS.abierta).cls}`}>{(STATUS[s.status] ?? STATUS.abierta).label}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${s.role === "apoyo" ? "bg-canvas text-muted" : "bg-accent-soft text-accent"}`}>{s.role === "apoyo" ? "Apoyo" : "Titular"}</span>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${(STATUS[s.status] ?? STATUS.abierta).cls}`}>{(STATUS[s.status] ?? STATUS.abierta).label}</span>
+          </div>
         </div>
         {s.notes && <p className="mt-3 border-t border-line pt-3 text-sm text-muted">Notas: {s.notes}</p>}
       </div>

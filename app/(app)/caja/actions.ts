@@ -16,18 +16,6 @@ export async function abrirCaja(storeId: string): Promise<ActionState> {
   return { ok: true };
 }
 
-/** Administración marca un período cerrado como Entregado (viajó a central). */
-export async function marcarEntregada(sessionId: string): Promise<ActionState> {
-  const denied = await requireCan("caja", true);
-  if (denied) return denied;
-  const sb = await createClient();
-  const { error } = await sb.rpc("deliver_cash_session", { p_session_id: sessionId });
-  if (error) return { error: error.message };
-  revalidatePath("/caja");
-  revalidatePath(`/caja/${sessionId}`);
-  return { ok: true };
-}
-
 export async function cerrarCaja(
   sessionId: string,
   declaredAmount: number,
@@ -51,15 +39,13 @@ export async function cerrarCaja(
 }
 
 // ── Administración de caja ─────────────────────────────────────
-export async function ajustarCaja(input: { storeId: string; target: "chica" | "fuerte"; cashierId: string | null; delta: number; reason: string }): Promise<ActionState> {
+export async function ajustarCaja(input: { storeId: string; target: "chica" | "fuerte"; delta: number; reason: string }): Promise<ActionState> {
   const denied = await requireCan("caja_admin", true);
   if (denied) return denied;
   if (!isFinite(input.delta) || input.delta === 0) return { error: "Ingresá un monto distinto de cero" };
-  if (input.target === "chica" && !input.cashierId) return { error: "Elegí el cajero" };
   const sb = await createClient();
   const { error } = await sb.rpc("adjust_cash", {
     p_store_id: input.storeId, p_target: input.target,
-    p_cashier: input.target === "chica" ? input.cashierId : null,
     p_delta: input.delta, p_reason: input.reason || null,
   });
   if (error) return { error: error.message };
