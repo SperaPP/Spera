@@ -16,6 +16,7 @@ export const MODULES: { key: string; label: string }[] = [
   { key: "clientes", label: "Clientes" },
   { key: "precios", label: "Precios" },
   { key: "caja", label: "Caja" },
+  { key: "caja_admin", label: "Administración de caja" },
   { key: "cobranzas", label: "Cobranzas" },
   { key: "reportes", label: "Reportes" },
   { key: "configuracion", label: "Configuración" },

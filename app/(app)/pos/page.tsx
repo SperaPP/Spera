@@ -21,6 +21,8 @@ export type PosStore = {
   openingAmount: number;
   openedAt: string | null;
   stale: boolean;
+  pettyCash: number;   // caja chica arrastrada (para la apertura)
+  safeBalance: number; // caja fuerte del local
   summary: PosSummary | null;
 };
 
@@ -100,6 +102,14 @@ export default async function PosPage() {
   const mySession = (sessions ?? [])[0] ?? null;
   const todayAR = new Date().toLocaleDateString("en-CA", { timeZone: AR_TZ });
 
+  // Caja chica del cajero (arrastre) + caja fuerte por local.
+  const [{ data: petty }, { data: safes }] = await Promise.all([
+    auth?.user ? sb.from("petty_cash").select("store_id, balance").eq("cashier_id", auth.user.id) : Promise.resolve({ data: [] as { store_id: string; balance: number }[] }),
+    sb.from("store_safe").select("store_id, balance"),
+  ]);
+  const pettyByStore = new Map((petty ?? []).map((p) => [p.store_id, Number(p.balance)]));
+  const safeByStore = new Map((safes ?? []).map((s) => [s.store_id, Number(s.balance)]));
+
   const posStores: PosStore[] = [];
   for (const s of operable) {
     const sess = mySession && mySession.store_id === s.id ? mySession : null;
@@ -111,6 +121,8 @@ export default async function PosPage() {
       openingAmount: sess ? Number(sess.opening_amount) : 0,
       openedAt: sess?.opened_at ?? null,
       stale: sess ? arDay(sess.opened_at) !== todayAR : false,
+      pettyCash: pettyByStore.get(s.id) ?? 0,
+      safeBalance: safeByStore.get(s.id) ?? 0,
       summary: sess ? await computeSummary(sb, sess.id, Number(sess.opening_amount)) : null,
     });
   }

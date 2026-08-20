@@ -104,7 +104,6 @@ function CajaVieja({ store, storeSelector }: { store: PosStore; storeSelector: R
 // ── Apertura de caja embebida ─────────────────────────────────
 function AbrirCaja({ store, storeSelector }: { store: PosStore; storeSelector: React.ReactNode }) {
   const router = useRouter();
-  const [amount, setAmount] = useState("");
   const [pending, start] = useTransition();
   return (
     <div className="mx-auto max-w-lg">
@@ -118,40 +117,43 @@ function AbrirCaja({ store, storeSelector }: { store: PosStore; storeSelector: R
           <h2 className="font-medium text-ink">{store.name}</h2>
           <span className="ml-auto rounded-full bg-canvas px-2.5 py-0.5 text-xs font-medium text-muted">Caja cerrada</span>
         </div>
-        <p className="mt-3 text-sm text-muted">Abrí el turno de caja para empezar a vender. Ingresá el efectivo con el que arrancás.</p>
-        <div className="mt-4 flex items-end gap-3">
-          <div className="flex-1">
-            <label className="mb-1.5 block text-sm font-medium text-ink">Fondo inicial</label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted">$</span>
-              <input type="number" min={0} className={input} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
-            </div>
-          </div>
-          <button
-            disabled={pending}
-            onClick={() => start(async () => {
-              const r = await abrirCaja(store.id, Number(amount) || 0);
-              if (r.error) { toast.error(r.error); return; }
-              toast.success("Caja abierta."); router.refresh();
-            })}
-            className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
-          >
-            <Unlock className="h-4 w-4" /> {pending ? "Abriendo…" : "Abrir caja"}
-          </button>
+        <p className="mt-3 text-sm text-muted">Al abrir arrancás con la caja chica que dejaste en tu último cierre.</p>
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-canvas px-4 py-3">
+          <span className="text-sm text-muted">Caja chica (fondo)</span>
+          <span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(store.pettyCash)}</span>
         </div>
+        {store.pettyCash === 0 && <p className="mt-2 text-xs text-muted">No tenés caja chica. Si es tu primer día, pedile a administración que cargue el fondo inicial.</p>}
+        <button
+          disabled={pending}
+          onClick={() => start(async () => {
+            const r = await abrirCaja(store.id);
+            if (r.error) { toast.error(r.error); return; }
+            toast.success("Caja abierta."); router.refresh();
+          })}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+        >
+          <Unlock className="h-4 w-4" /> {pending ? "Abriendo…" : "Abrir caja"}
+        </button>
       </div>
     </div>
   );
 }
 
-// ── Panel de cierre de caja ───────────────────────────────────
+// ── Panel de cierre de caja (reparto caja chica / caja fuerte) ─
 function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => void }) {
   const router = useRouter();
   const sum = store.summary;
   const [declared, setDeclared] = useState("");
+  const [kept, setKept] = useState(String(store.openingAmount));
   const [notes, setNotes] = useState("");
   const [pending, start] = useTransition();
-  const diff = declared !== "" && sum ? Number(declared) - sum.expectedCash : null;
+
+  const declaredN = Number(declared) || 0;
+  const keptN = Number(kept) || 0;
+  const diff = declared !== "" && sum ? declaredN - sum.expectedCash : null;
+  const toSafe = Math.max(0, declaredN - keptN);
+  const keptTooBig = declared !== "" && keptN > declaredN;
+
   return (
     <div className="mb-5 rounded-2xl border border-line bg-card p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
@@ -165,6 +167,7 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
         <Tile label="Efectivo cobrado" value={formatMoney(sum?.cash ?? 0)} />
         <Tile label="Efectivo esperado" value={formatMoney(sum?.expectedCash ?? 0)} accent />
       </div>
+
       <div className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-ink">Efectivo contado</label>
@@ -172,21 +175,36 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
             <span className="text-sm text-muted">$</span>
             <input type="number" min={0} className={input} value={declared} onChange={(e) => setDeclared(e.target.value)} placeholder="0" />
           </div>
-          {diff !== null && <p className={`mt-1.5 text-xs ${diff === 0 ? "text-ok" : "text-warn"}`}>{diff === 0 ? "Cuadra exacto" : `Diferencia: ${formatMoney(diff)}`}</p>}
+          {diff !== null && <p className={`mt-1.5 text-xs ${diff === 0 ? "text-ok" : "text-warn"}`}>{diff === 0 ? "Cuadra exacto" : `Diferencia con lo esperado: ${formatMoney(diff)}`}</p>}
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">Notas (opcional)</label>
-          <input className={input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observaciones del cierre" />
+          <label className="mb-1.5 block text-sm font-medium text-ink">Dejo en caja chica</label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted">$</span>
+            <input type="number" min={0} className={input} value={kept} onChange={(e) => setKept(e.target.value)} placeholder="0" />
+          </div>
+          {keptTooBig && <p className="mt-1.5 text-xs text-danger">No podés dejar más de lo contado.</p>}
         </div>
       </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-canvas px-4 py-3 text-sm">
+        <span className="text-muted">A caja fuerte: <span className="font-semibold text-ink">{formatMoney(toSafe)}</span></span>
+        <span className="text-muted">Caja fuerte del local: {formatMoney(store.safeBalance)} → <span className="font-semibold text-accent">{formatMoney(store.safeBalance + toSafe)}</span></span>
+      </div>
+
+      <div className="mt-3">
+        <label className="mb-1.5 block text-sm font-medium text-ink">Notas (opcional)</label>
+        <input className={input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observaciones del cierre" />
+      </div>
+
       <div className="mt-4 flex justify-end gap-3">
         <button onClick={onDone} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
         <button
-          disabled={pending || declared === ""}
+          disabled={pending || declared === "" || keptTooBig}
           onClick={() => start(async () => {
-            const r = await cerrarCaja(store.sessionId!, Number(declared) || 0, notes);
+            const r = await cerrarCaja(store.sessionId!, declaredN, keptN, notes);
             if (r.error) { toast.error(r.error); return; }
-            toast.success("Caja cerrada."); router.refresh();
+            toast.success(`Caja cerrada. ${formatMoney(toSafe)} a caja fuerte.`); router.refresh();
           })}
           className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
         >
