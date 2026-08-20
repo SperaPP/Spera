@@ -9,6 +9,7 @@ type Variant = { id: string; sku: string | null; label: string | null };
 
 // Tamaños comunes de la Brother QL-800 (ancho × alto en mm).
 const SIZES = [
+  { key: "40x29", label: "40 × 29 mm", w: 40, h: 29 },
   { key: "62x29", label: "62 × 29 mm (DK-1209)", w: 62, h: 29 },
   { key: "90x29", label: "90 × 29 mm (DK-1201)", w: 90, h: 29 },
   { key: "62x40", label: "62 × 40 mm", w: 62, h: 40 },
@@ -21,7 +22,7 @@ const ctl = "rounded-lg border border-line-strong bg-card px-2 py-1.5 text-sm te
 
 export function EtiquetasPrint({ productName, variants }: { productName: string; variants: Variant[] }) {
   const printable = variants.filter((v) => v.sku);
-  const [sizeKey, setSizeKey] = useState("62x29");
+  const [sizeKey, setSizeKey] = useState("40x29");
   const [customW, setCustomW] = useState("70");
   const [customH, setCustomH] = useState("45");
   const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(printable.map((v) => [v.id, "1"])));
@@ -114,8 +115,8 @@ export function EtiquetasPrint({ productName, variants }: { productName: string;
               className="etq-label flex flex-col overflow-hidden rounded border border-neutral-300 bg-white text-neutral-900"
               style={{ width: `${w}mm`, height: `${h}mm`, padding: "1.5mm" }}
             >
-              <div className="w-full text-center font-bold leading-none" style={{ fontSize: `${nameSize}mm` }}>{productName}</div>
-              {l.label && <div className="mt-[0.5mm] w-full text-center font-semibold leading-none" style={{ fontSize: `${varSize}mm` }}>{l.label}</div>}
+              <div className="w-full overflow-hidden text-center font-bold leading-none" style={{ fontSize: `${nameSize}mm`, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word" }}>{productName}</div>
+              {l.label && <div className="mt-[0.5mm] w-full truncate text-center font-semibold leading-none" style={{ fontSize: `${varSize}mm` }}>{l.label}</div>}
               <div className="mt-[1mm] min-h-0 w-full flex-1">
                 <Barcode value={l.sku!} fill />
               </div>
