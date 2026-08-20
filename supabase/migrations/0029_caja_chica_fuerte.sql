@@ -55,15 +55,23 @@ create table if not exists public.central_deliveries (
   delivered_by    uuid references auth.users(id)
 );
 
-do $$
-declare t text;
-begin
-  foreach t in array array['petty_cash','store_safe','cash_adjustments','central_deliveries'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists %I_all on public.%I', t, t);
-    execute format('create policy %I_all on public.%I for all using (organization_id = public.current_org_id()) with check (organization_id = public.current_org_id())', t, t);
-  end loop;
-end $$;
+alter table public.petty_cash         enable row level security;
+alter table public.store_safe         enable row level security;
+alter table public.cash_adjustments   enable row level security;
+alter table public.central_deliveries enable row level security;
+
+drop policy if exists petty_cash_all on public.petty_cash;
+create policy petty_cash_all on public.petty_cash for all
+  using (organization_id = public.current_org_id()) with check (organization_id = public.current_org_id());
+drop policy if exists store_safe_all on public.store_safe;
+create policy store_safe_all on public.store_safe for all
+  using (organization_id = public.current_org_id()) with check (organization_id = public.current_org_id());
+drop policy if exists cash_adjustments_all on public.cash_adjustments;
+create policy cash_adjustments_all on public.cash_adjustments for all
+  using (organization_id = public.current_org_id()) with check (organization_id = public.current_org_id());
+drop policy if exists central_deliveries_all on public.central_deliveries;
+create policy central_deliveries_all on public.central_deliveries for all
+  using (organization_id = public.current_org_id()) with check (organization_id = public.current_org_id());
 
 -- Permiso de administración de caja (entregas/ajustes) para el futuro rol Administración.
 insert into public.role_permissions (organization_id, role_id, module, can_view, can_edit)
