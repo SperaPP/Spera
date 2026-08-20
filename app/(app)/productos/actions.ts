@@ -72,6 +72,7 @@ export async function crearProducto(
   return { ok: true, id: newId };
 }
 
+const locField = z.number().int().min(0).max(9999).nullable();
 const editSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1, "Ingresá un nombre"),
@@ -81,6 +82,9 @@ const editSchema = z.object({
   taxRate: z.number().min(0).max(100),
   active: z.boolean(),
   lifecycle: z.enum(["actual", "discontinuo"]),
+  locFila: locField,
+  locEstante: locField,
+  locCubiculo: locField,
 });
 
 export type EditarProductoInput = z.infer<typeof editSchema>;
@@ -102,6 +106,9 @@ export async function editarProducto(input: EditarProductoInput): Promise<Action
     tax_rate: d.taxRate,
     active: d.active,
     lifecycle: d.lifecycle,
+    loc_fila: d.locFila,
+    loc_estante: d.locEstante,
+    loc_cubiculo: d.locCubiculo,
   }).eq("id", d.id);
   if (error) return { error: error.message };
 

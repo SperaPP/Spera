@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Receipt } from "lucide-react";
+import { Receipt, Eye, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
@@ -64,6 +64,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                 <th className="px-4 py-3 text-right font-medium">Ítems</th>
                 <th className="px-4 py-3 text-right font-medium">Total</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
+                <th className="px-4 py-3 text-right font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -85,6 +86,16 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                       const f = FULFILL[s.fulfillment_status] ?? { label: s.fulfillment_status, cls: "bg-canvas text-muted" };
                       return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${f.cls}`}>{f.label}</span>;
                     })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Link href={`/ventas/${s.id}`} title="Ver venta" className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong text-muted transition-colors hover:bg-canvas hover:text-ink">
+                        <Eye className="h-4 w-4" />
+                      </Link>
+                      <Link href={`/ventas/${s.id}/armado`} target="_blank" title="Imprimir pedido para el depósito (A4)" className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong text-muted transition-colors hover:bg-canvas hover:text-accent">
+                        <Printer className="h-4 w-4" />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}

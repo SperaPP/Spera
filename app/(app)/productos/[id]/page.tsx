@@ -29,7 +29,7 @@ export default async function ProductoDetallePage({
   const { data: product } = await sb
     .from("products")
     .select(
-      "id, name, description, variation_type, tax_rate, active, lifecycle, external_id, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active)"
+      "id, name, description, variation_type, tax_rate, active, lifecycle, external_id, loc_fila, loc_estante, loc_cubiculo, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active)"
     )
     .eq("id", id)
     .single();
@@ -100,6 +100,12 @@ export default async function ProductoDetallePage({
               )}
               <span>·</span>
               <span>IVA {product.tax_rate}%</span>
+              {(product.loc_fila != null || product.loc_estante != null || product.loc_cubiculo != null) && (
+                <>
+                  <span>·</span>
+                  <span>Ubicación {product.loc_fila ?? "–"} · {product.loc_estante ?? "–"} · {product.loc_cubiculo ?? "–"}</span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">

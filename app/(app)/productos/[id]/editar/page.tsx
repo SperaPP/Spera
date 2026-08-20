@@ -9,7 +9,7 @@ export default async function EditarProductoPage({ params }: { params: Promise<{
   const sb = await createClient();
 
   const [{ data: product }, { data: categories }, { data: fabricTypes }] = await Promise.all([
-    sb.from("products").select("id, name, description, category_id, fabric_type_id, tax_rate, active, lifecycle").eq("id", id).single(),
+    sb.from("products").select("id, name, description, category_id, fabric_type_id, tax_rate, active, lifecycle, loc_fila, loc_estante, loc_cubiculo").eq("id", id).single(),
     sb.from("categories").select("id, name").eq("active", true).order("name"),
     sb.from("fabric_types").select("id, name").eq("active", true).order("name"),
   ]);
@@ -34,6 +34,9 @@ export default async function EditarProductoPage({ params }: { params: Promise<{
           taxRate: Number(product.tax_rate),
           active: product.active,
           lifecycle: (product.lifecycle ?? "actual") as "actual" | "discontinuo",
+          locFila: product.loc_fila == null ? "" : String(product.loc_fila),
+          locEstante: product.loc_estante == null ? "" : String(product.loc_estante),
+          locCubiculo: product.loc_cubiculo == null ? "" : String(product.loc_cubiculo),
         }}
         categories={categories ?? []}
         fabricTypes={fabricTypes ?? []}
