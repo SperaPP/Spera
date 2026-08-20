@@ -3,14 +3,12 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { EntregarButton } from "@/components/entregar-button";
 
 function rel<T>(r: unknown): T | null { return (Array.isArray(r) ? r[0] : r) as T | null; }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   abierta: { label: "Abierta", cls: "bg-warn-bg text-warn" },
-  cerrada: { label: "Cerrada", cls: "bg-accent-soft text-accent" },
-  entregada: { label: "Entregada", cls: "bg-ok-bg text-ok" },
+  cerrada: { label: "Cerrada", cls: "bg-ok-bg text-ok" },
 };
 
 export default async function PeriodoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,7 +17,7 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
 
   const { data: s } = await sb
     .from("cash_sessions")
-    .select("id, status, opening_amount, opened_at, closed_at, declared_amount, notes, entregada_at, opened_by, stores(name)")
+    .select("id, status, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, notes, opened_by, stores(name)")
     .eq("id", id).single();
   if (!s) notFound();
 
@@ -66,13 +64,9 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
               {openerName && <span>Cajero: {openerName.full_name || openerName.email}</span>}
               <span>Abierta {formatDateTime(s.opened_at)}</span>
               {s.closed_at && <span>Cerrada {formatDateTime(s.closed_at)}</span>}
-              {s.entregada_at && <span>Entregada {formatDateTime(s.entregada_at)}</span>}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${(STATUS[s.status] ?? STATUS.abierta).cls}`}>{(STATUS[s.status] ?? STATUS.abierta).label}</span>
-            {s.status === "cerrada" && <EntregarButton sessionId={s.id} />}
-          </div>
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${(STATUS[s.status] ?? STATUS.abierta).cls}`}>{(STATUS[s.status] ?? STATUS.abierta).label}</span>
         </div>
         {s.notes && <p className="mt-3 border-t border-line pt-3 text-sm text-muted">Notas: {s.notes}</p>}
       </div>
@@ -84,6 +78,13 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
         <Tile label="Declarado" value={declared == null ? "—" : formatMoney(declared)} />
         <Tile label="Diferencia" value={diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatMoney(diff)}`} tone={diff == null ? undefined : diff === 0 ? "ok" : "danger"} />
       </div>
+
+      {s.kept_amount != null && (
+        <div className="mb-5 flex flex-wrap gap-x-6 gap-y-1 rounded-xl bg-canvas px-4 py-3 text-sm">
+          <span className="text-muted">Quedó en caja chica: <span className="font-medium text-ink">{formatMoney(Number(s.kept_amount))}</span></span>
+          <span className="text-muted">Pasó a caja fuerte: <span className="font-medium text-accent">{formatMoney(Number(s.to_safe_amount ?? 0))}</span></span>
+        </div>
+      )}
 
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
         <h2 className="mb-3 text-sm font-medium text-ink">Por medio de pago</h2>

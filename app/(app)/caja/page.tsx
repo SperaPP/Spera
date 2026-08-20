@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { Wallet, ChevronRight, History } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getPermissions } from "@/lib/auth";
+import { canEdit } from "@/lib/permissions";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { CajaAdmin } from "@/components/caja-admin";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -14,13 +17,11 @@ function affectsCash(r: unknown): boolean {
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   abierta: { label: "Abierta", cls: "bg-warn-bg text-warn" },
-  cerrada: { label: "Cerrada", cls: "bg-accent-soft text-accent" },
-  entregada: { label: "Entregada", cls: "bg-ok-bg text-ok" },
+  cerrada: { label: "Cerrada", cls: "bg-ok-bg text-ok" },
 };
 const TABS = [
-  { key: "cerrada", label: "Por entregar" },
+  { key: "cerrada", label: "Cerradas" },
   { key: "abierta", label: "Abiertas" },
-  { key: "entregada", label: "Entregadas" },
   { key: "todas", label: "Todas" },
 ];
 
@@ -28,88 +29,83 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
   const { estado } = await searchParams;
   const filter = estado && TABS.some((t) => t.key === estado) ? estado : "cerrada";
   const sb = await createClient();
+  const canAdmin = canEdit(await getPermissions(), "caja_admin");
 
-  let req = sb
-    .from("cash_sessions")
-    .select("id, store_id, status, opening_amount, opened_at, closed_at, declared_amount, opened_by, stores(name)")
-    .order("opened_at", { ascending: false }).limit(100);
+  const [{ data: stores }, { data: safes }, { data: petty }, { data: profiles }, { data: deliveries }] = await Promise.all([
+    sb.from("stores").select("id, name").eq("has_cash_register", true).eq("active", true).order("name"),
+    sb.from("store_safe").select("store_id, balance"),
+    sb.from("petty_cash").select("store_id, cashier_id, balance"),
+    sb.from("profiles").select("id, full_name, email, store_id"),
+    sb.from("central_deliveries").select("id, amount, notes, delivered_at, delivered_by, stores(name)").order("delivered_at", { ascending: false }).limit(15),
+  ]);
+
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email || "—"]));
+  const safeByStore = new Map((safes ?? []).map((s) => [s.store_id, Number(s.balance)]));
+  const cashiersByStore = new Map<string, { id: string; name: string }[]>();
+  for (const p of profiles ?? []) {
+    if (!p.store_id) continue;
+    if (!cashiersByStore.has(p.store_id)) cashiersByStore.set(p.store_id, []);
+    cashiersByStore.get(p.store_id)!.push({ id: p.id, name: p.full_name || p.email || "—" });
+  }
+  const pettyByStore = new Map<string, { cashierId: string; name: string; balance: number }[]>();
+  for (const p of petty ?? []) {
+    if (!pettyByStore.has(p.store_id)) pettyByStore.set(p.store_id, []);
+    pettyByStore.get(p.store_id)!.push({ cashierId: p.cashier_id, name: nameById.get(p.cashier_id) ?? "—", balance: Number(p.balance) });
+  }
+  const storeRows = (stores ?? []).map((s) => ({
+    id: s.id, name: s.name, safe: safeByStore.get(s.id) ?? 0,
+    petty: pettyByStore.get(s.id) ?? [], cashiers: cashiersByStore.get(s.id) ?? [],
+  }));
+
+  // ── Períodos ────────────────────────────────────────────────
+  let req = sb.from("cash_sessions")
+    .select("id, store_id, status, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, opened_by, stores(name)")
+    .order("opened_at", { ascending: false }).limit(80);
   if (filter !== "todas") req = req.eq("status", filter);
   const { data: sessions } = await req;
   const sList = sessions ?? [];
   const ids = sList.map((s) => s.id);
 
-  // Efectivo por período (fondo + ventas y cobranzas en efectivo), batcheado.
   const cashBySession = new Map<string, number>();
   if (ids.length) {
     const { data: sales } = await sb.from("sales").select("id, cash_session_id, total").in("cash_session_id", ids).eq("status", "completada");
     const saleSession = new Map<string, string>();
-    for (const s of sales ?? []) saleSession.set(s.id, s.cash_session_id);
-    const saleIds = (sales ?? []).map((s) => s.id);
+    for (const x of sales ?? []) saleSession.set(x.id, x.cash_session_id);
+    const saleIds = (sales ?? []).map((x) => x.id);
     if (saleIds.length) {
       const { data: sp } = await sb.from("sale_payments").select("sale_id, amount, payment_methods(affects_cash)").in("sale_id", saleIds);
-      for (const p of sp ?? []) {
-        if (!affectsCash(p.payment_methods)) continue;
-        const sess = saleSession.get(p.sale_id);
-        if (sess) cashBySession.set(sess, (cashBySession.get(sess) ?? 0) + Number(p.amount));
-      }
+      for (const p of sp ?? []) { if (!affectsCash(p.payment_methods)) continue; const ss = saleSession.get(p.sale_id); if (ss) cashBySession.set(ss, (cashBySession.get(ss) ?? 0) + Number(p.amount)); }
     }
-    const { data: receipts } = await sb.from("receipts").select("id, cash_session_id").in("cash_session_id", ids);
+    const { data: recs } = await sb.from("receipts").select("id, cash_session_id").in("cash_session_id", ids);
     const recSession = new Map<string, string>();
-    for (const r of receipts ?? []) recSession.set(r.id, r.cash_session_id);
-    const recIds = (receipts ?? []).map((r) => r.id);
+    for (const r of recs ?? []) recSession.set(r.id, r.cash_session_id);
+    const recIds = (recs ?? []).map((r) => r.id);
     if (recIds.length) {
       const { data: rp } = await sb.from("receipt_payments").select("receipt_id, amount, payment_methods(affects_cash)").in("receipt_id", recIds);
-      for (const p of rp ?? []) {
-        if (!affectsCash(p.payment_methods)) continue;
-        const sess = recSession.get(p.receipt_id);
-        if (sess) cashBySession.set(sess, (cashBySession.get(sess) ?? 0) + Number(p.amount));
-      }
+      for (const p of rp ?? []) { if (!affectsCash(p.payment_methods)) continue; const ss = recSession.get(p.receipt_id); if (ss) cashBySession.set(ss, (cashBySession.get(ss) ?? 0) + Number(p.amount)); }
     }
   }
-
-  // Nombres de cajeros.
-  const openerIds = [...new Set(sList.map((s) => s.opened_by).filter(Boolean) as string[])];
-  const nameById = new Map<string, string>();
-  if (openerIds.length) {
-    const { data: profs } = await sb.from("profiles").select("id, full_name, email").in("id", openerIds);
-    for (const p of profs ?? []) nameById.set(p.id, p.full_name || p.email || "—");
-  }
-
-  // Pendiente de entregar por local (períodos cerrados: efectivo declarado).
-  const { data: pend } = await sb.from("cash_sessions").select("declared_amount, stores(name)").eq("status", "cerrada");
-  const pendingByStore = new Map<string, number>();
-  for (const p of pend ?? []) {
-    const store = relName(p.stores) ?? "—";
-    pendingByStore.set(store, (pendingByStore.get(store) ?? 0) + Number(p.declared_amount ?? 0));
-  }
-  const totalPending = [...pendingByStore.values()].reduce((a, v) => a + v, 0);
 
   return (
     <div>
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Caja</h1>
-          <p className="mt-1 text-sm text-muted">Períodos de caja por cajero. Revisá y entregá a administración.</p>
+          <p className="mt-1 text-sm text-muted">Caja chica por cajero, caja fuerte por local y entregas a Casa Central.</p>
         </div>
         <Link href="/caja/cierres" className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
-          <History className="h-4 w-4" /> Historial
+          <History className="h-4 w-4" /> Historial de cierres
         </Link>
       </div>
 
-      {pendingByStore.size > 0 && (
-        <div className="mb-5 rounded-xl border border-accent/30 bg-accent-soft/40 p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-ink">Pendiente de entregar</span>
-            <span className="text-lg font-bold tabular-nums text-accent">{formatMoney(totalPending)}</span>
-          </div>
-          <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
-            {[...pendingByStore.entries()].map(([store, amt]) => (
-              <span key={store} className="text-muted">{store}: <span className="font-medium text-ink">{formatMoney(amt)}</span></span>
-            ))}
-          </div>
-        </div>
+      {storeRows.length > 0 && (
+        <>
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-faint">Cajas fuertes por local</h2>
+          <div className="mb-8"><CajaAdmin stores={storeRows} canAdmin={canAdmin} /></div>
+        </>
       )}
 
+      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-faint">Períodos por cajero</h2>
       <div className="mb-4 flex flex-wrap gap-2">
         {TABS.map((t) => (
           <Link key={t.key} href={`/caja?estado=${t.key}`}
@@ -120,7 +116,7 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
       </div>
 
       {sList.length === 0 ? (
-        <div className="flex flex-col items-center rounded-xl border border-dashed border-line-strong bg-card py-16 text-center">
+        <div className="flex flex-col items-center rounded-xl border border-dashed border-line-strong bg-card py-14 text-center">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent"><Wallet className="h-5 w-5" /></span>
           <p className="mt-3 font-medium text-ink">No hay períodos en este estado.</p>
         </div>
@@ -134,17 +130,15 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
                 <th className="px-4 py-3 font-medium">Abierta</th>
                 <th className="px-4 py-3 text-right font-medium">Efvo. esperado</th>
                 <th className="px-4 py-3 text-right font-medium">Declarado</th>
-                <th className="px-4 py-3 text-right font-medium">Dif.</th>
+                <th className="px-4 py-3 text-right font-medium">A fuerte</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {sList.map((s) => {
-                const opening = Number(s.opening_amount);
-                const expected = opening + (cashBySession.get(s.id) ?? 0);
+                const expected = Number(s.opening_amount) + (cashBySession.get(s.id) ?? 0);
                 const declared = s.declared_amount == null ? null : Number(s.declared_amount);
-                const diff = declared == null ? null : declared - expected;
                 const st = STATUS[s.status] ?? STATUS.abierta;
                 return (
                   <tr key={s.id} className="border-b border-line last:border-0 hover:bg-canvas">
@@ -153,12 +147,10 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
                     <td className="px-4 py-3 text-muted">{formatDateTime(s.opened_at)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(expected)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{declared == null ? "—" : formatMoney(declared)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{diff == null ? <span className="text-muted">—</span> : <span className={diff === 0 ? "text-ok" : "text-danger"}>{diff > 0 ? "+" : ""}{formatMoney(diff)}</span>}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted">{s.to_safe_amount == null ? "—" : formatMoney(Number(s.to_safe_amount))}</td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span></td>
                     <td className="px-4 py-3 text-right">
-                      <Link href={`/caja/${s.id}`} className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
-                        {s.status === "cerrada" ? "Revisar / Entregar" : "Ver"} <ChevronRight className="h-3.5 w-3.5" />
-                      </Link>
+                      <Link href={`/caja/${s.id}`} className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">Ver <ChevronRight className="h-3.5 w-3.5" /></Link>
                     </td>
                   </tr>
                 );
@@ -166,6 +158,23 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
             </tbody>
           </table>
         </div>
+      )}
+
+      {(deliveries ?? []).length > 0 && (
+        <>
+          <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Entregas a Casa Central</h2>
+          <div className="divide-y divide-line rounded-xl border border-line bg-card">
+            {(deliveries ?? []).map((d) => (
+              <div key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
+                <span className="font-medium text-ink">{relName(d.stores) ?? "—"}</span>
+                <span className="font-semibold tabular-nums text-accent">{formatMoney(Number(d.amount))}</span>
+                <span className="text-muted">{formatDateTime(d.delivered_at)}</span>
+                {d.delivered_by && <span className="text-xs text-muted">{nameById.get(d.delivered_by) ?? ""}</span>}
+                {d.notes && <span className="text-xs text-muted">· {d.notes}</span>}
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
