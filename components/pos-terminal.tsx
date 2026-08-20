@@ -669,7 +669,6 @@ function Terminal({
           mode="checkout"
           data={retailData}
           onClose={() => setCheckout(false)}
-          onSkip={() => { setCheckout(false); finalizar(null); }}
           onSave={(d) => { setRetailData(d); setCheckout(false); finalizar(toSnapshot(d)); }}
         />
       )}
@@ -678,60 +677,55 @@ function Terminal({
 }
 
 // ── Cliente mostrador (datos opcionales) ──────────────────────
-function ClienteMostrador({ data, onOpen, onClear }: { data: { name: string; apellido: string; doc: string } | null; onOpen: () => void; onClear: () => void }) {
-  const has = data && (data.name || data.apellido || data.doc);
+function ClienteMostrador({ data, onOpen, onClear }: { data: RetailForm | null; onOpen: () => void; onClear: () => void }) {
+  const has = data && (data.name || data.apellido || data.doc || data.phone || data.email);
   return (
     <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-ink">Cliente</span>
-        <button onClick={onOpen} className="text-xs text-accent hover:underline">{has ? "Editar datos" : "Datos (opcional)"}</button>
+        <button onClick={onOpen} className="text-xs text-accent hover:underline">{has ? "Editar datos" : "Cargar datos"}</button>
       </div>
       {has ? (
         <div className="mt-1.5 flex items-center justify-between text-sm">
-          <span className="text-ink">{[data!.name, data!.apellido].filter(Boolean).join(" ") || "Sin nombre"}{data!.doc ? ` · ${data!.doc}` : ""}</span>
+          <span className="text-ink">{[data!.name, data!.apellido].filter(Boolean).join(" ") || data!.phone || data!.email || "Sin nombre"}{data!.doc ? ` · ${data!.doc}` : ""}</span>
           <button onClick={onClear} className="text-faint hover:text-danger"><X className="h-3.5 w-3.5" /></button>
         </div>
       ) : (
-        <p className="mt-1 text-xs text-muted">Consumidor final. Podés registrar datos para la factura (opcional).</p>
+        <p className="mt-1 text-xs text-muted">Consumidor final. Al cobrar se pide <span className="font-medium text-ink">teléfono o email</span>.</p>
       )}
     </div>
   );
 }
 
-function RetailDataModal({ data, mode, onClose, onSave, onSkip }: {
+function RetailDataModal({ data, mode, onClose, onSave }: {
   data: RetailForm | null;
   mode: "edit" | "checkout";
   onClose: () => void;
   onSave: (d: RetailForm) => void;
-  onSkip?: () => void;
 }) {
   const [f, setF] = useState<RetailForm>(data ?? { name: "", apellido: "", doc: "", phone: "", email: "" });
   const set = (k: keyof RetailForm, v: string) => setF((p) => ({ ...p, [k]: v }));
   const checkout = mode === "checkout";
+  const hasContact = !!(f.phone.trim() || f.email.trim());
+  const blocked = checkout && !hasContact;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border border-line bg-card p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-sm font-medium text-ink">Datos del cliente (opcional)</h2>
-        <p className="mt-1 text-xs text-muted">{checkout ? "Registralos para enviarle la factura por mail cuando activemos facturación, o cobrá sin datos." : "Para poder enviar la factura por mail cuando activemos facturación. Todo es opcional."}</p>
+        <h2 className="text-sm font-medium text-ink">Datos del cliente</h2>
+        <p className="mt-1 text-xs text-muted">{checkout ? "Dejá teléfono o email (uno de los dos es obligatorio) para poder cobrar y enviarle la factura cuando activemos facturación." : "Para poder enviar la factura por mail cuando activemos facturación. Todo es opcional."}</p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div><label className="mb-1 block text-xs font-medium text-muted">Nombre</label><input autoFocus className={input} value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
           <div><label className="mb-1 block text-xs font-medium text-muted">Apellido</label><input className={input} value={f.apellido} onChange={(e) => set("apellido", e.target.value)} /></div>
           <div><label className="mb-1 block text-xs font-medium text-muted">DNI</label><input className={input} value={f.doc} onChange={(e) => set("doc", e.target.value)} /></div>
-          <div><label className="mb-1 block text-xs font-medium text-muted">Teléfono</label><input className={input} value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
-          <div className="col-span-2"><label className="mb-1 block text-xs font-medium text-muted">Email</label><input type="email" className={input} value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
+          <div><label className="mb-1 block text-xs font-medium text-muted">Teléfono{checkout && <span className="text-warn"> *</span>}</label><input className={input} value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
+          <div className="col-span-2"><label className="mb-1 block text-xs font-medium text-muted">Email{checkout && <span className="text-warn"> *</span>}</label><input type="email" className={input} value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
         </div>
+        {checkout && <p className={`mt-2 text-xs ${blocked ? "text-warn" : "text-muted"}`}>{blocked ? "Ingresá teléfono o email para poder cobrar." : "Con teléfono o email alcanza."}</p>}
         <div className="mt-5 flex justify-end gap-3">
-          {checkout ? (
-            <>
-              <button onClick={onSkip} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cobrar sin datos</button>
-              <button onClick={() => onSave(f)} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover">Guardar y cobrar</button>
-            </>
-          ) : (
-            <>
-              <button onClick={onClose} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
-              <button onClick={() => onSave(f)} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover">Guardar</button>
-            </>
-          )}
+          <button onClick={onClose} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
+          <button onClick={() => { if (checkout && !hasContact) return; onSave(f); }} disabled={blocked} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50">
+            {checkout ? "Guardar y cobrar" : "Guardar"}
+          </button>
         </div>
       </div>
     </div>

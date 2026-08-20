@@ -227,6 +227,14 @@ export async function crearVenta(input: CrearVentaInput): Promise<ActionState & 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const d = parsed.data;
 
+  // Mostrador (consumidor final): teléfono o email obligatorio.
+  if (d.customerId === null) {
+    const c = d.customerData;
+    if (!(c?.phone?.trim() || c?.email?.trim())) {
+      return { error: "En mostrador es obligatorio el teléfono o el email del cliente." };
+    }
+  }
+
   const sb = await createClient();
   const { data: id, error } = await sb.rpc("create_sale", {
     p_store_id: d.storeId,
