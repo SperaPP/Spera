@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Package, ImageOff } from "lucide-react";
+import { Plus, Package, ImageOff, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProductosFilters } from "@/components/productos-filters";
 
@@ -15,10 +15,11 @@ const PAGE_SIZE = 100;
 export default async function ProductosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; cat?: string; foto?: string; estado?: string; ciclo?: string }>;
+  searchParams: Promise<{ q?: string; cat?: string; foto?: string; estado?: string; ciclo?: string; page?: string }>;
 }) {
-  const { q, cat, foto, estado, ciclo } = await searchParams;
+  const { q, cat, foto, estado, ciclo, page: pageParam } = await searchParams;
   const query = (q ?? "").trim();
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
 
   const sel = "id, name, variation_type, active, has_image, lifecycle, categories(name), product_variants(count)";
@@ -42,7 +43,21 @@ export default async function ProductosPage({
   }
 
   let rows: Row[] = [];
+  let filteredCount = 0;
   if (!query || (idList && idList.length)) {
+    // Conteo filtrado (para la paginación en modo navegación).
+    if (!query) {
+      let cReq = sb.from("products").select("*", { count: "exact", head: true });
+      if (cat) cReq = cReq.eq("category_id", cat);
+      if (foto === "sin") cReq = cReq.eq("has_image", false);
+      else if (foto === "con") cReq = cReq.eq("has_image", true);
+      if (estado === "activo") cReq = cReq.eq("active", true);
+      else if (estado === "inactivo") cReq = cReq.eq("active", false);
+      if (ciclo === "actual") cReq = cReq.eq("lifecycle", "actual");
+      else if (ciclo === "discontinuo") cReq = cReq.eq("lifecycle", "discontinuo");
+      const { count } = await cReq;
+      filteredCount = count ?? 0;
+    }
     let req = sb.from("products").select(sel);
     if (idList) req = req.in("id", idList);
     if (cat) req = req.eq("category_id", cat);
@@ -54,9 +69,22 @@ export default async function ProductosPage({
     else if (ciclo === "discontinuo") req = req.eq("lifecycle", "discontinuo");
     const { data } = query
       ? await req.order("name").limit(PAGE_SIZE)
-      : await req.order("created_at", { ascending: false }).limit(PAGE_SIZE);
+      : await req.order("created_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     rows = (data ?? []) as Row[];
   }
+
+  const pageCount = query ? 1 : Math.max(1, Math.ceil(filteredCount / PAGE_SIZE));
+  const pageHref = (n: number) => {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    if (cat) sp.set("cat", cat);
+    if (foto) sp.set("foto", foto);
+    if (estado) sp.set("estado", estado);
+    if (ciclo) sp.set("ciclo", ciclo);
+    if (n > 1) sp.set("page", String(n));
+    const s = sp.toString();
+    return s ? `/productos?${s}` : "/productos";
+  };
 
   const [{ count: total }, { count: sinFoto }, { data: categories }] = await Promise.all([
     sb.from("products").select("*", { count: "exact", head: true }),
@@ -152,6 +180,31 @@ export default async function ProductosPage({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {pageCount > 1 && (
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            {((page - 1) * PAGE_SIZE + 1).toLocaleString("es-AR")}–{Math.min(page * PAGE_SIZE, filteredCount).toLocaleString("es-AR")} de {filteredCount.toLocaleString("es-AR")}
+          </p>
+          <div className="flex items-center gap-2">
+            {page > 1 ? (
+              <Link href={pageHref(page - 1)} className="flex items-center gap-1 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+                <ChevronLeft className="h-4 w-4" /> Anterior
+              </Link>
+            ) : (
+              <span className="flex cursor-not-allowed items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-faint"><ChevronLeft className="h-4 w-4" /> Anterior</span>
+            )}
+            <span className="text-sm text-muted">Página {page} de {pageCount.toLocaleString("es-AR")}</span>
+            {page < pageCount ? (
+              <Link href={pageHref(page + 1)} className="flex items-center gap-1 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+                Siguiente <ChevronRight className="h-4 w-4" />
+              </Link>
+            ) : (
+              <span className="flex cursor-not-allowed items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-faint">Siguiente <ChevronRight className="h-4 w-4" /></span>
+            )}
+          </div>
         </div>
       )}
     </div>

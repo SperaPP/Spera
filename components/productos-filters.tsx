@@ -21,6 +21,7 @@ export function ProductosFilters({ categories }: { categories: Ref[] }) {
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(sp.toString());
     if (value) next.set(key, value); else next.delete(key);
+    next.delete("page"); // al cambiar un filtro, volvés a la primera página
     push(next);
   }
   function onSearch(v: string) {
