@@ -54,7 +54,8 @@ end $$;
 -- Resetea el uso de cupones (mantiene las definiciones).
 update public.coupons set used_count = 0;
 
--- Vacía las fotos del bucket de Storage.
-delete from storage.objects where bucket_id = 'product-images';
-
 commit;
+
+-- Las fotos NO se borran acá: Supabase bloquea el delete directo de storage.objects.
+-- Vaciá el bucket aparte con:  node --env-file=.env.local scripts/wipe-photos.mjs --commit
+-- (o desde el Dashboard → Storage → product-images).
