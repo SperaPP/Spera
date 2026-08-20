@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireCan, type ActionState } from "@/lib/auth";
+import { isValidEmail, isValidPhone } from "@/lib/validation";
 
 const label = (size: string | null, color: string | null) =>
   [size, color].filter(Boolean).join(" / ") || null;
@@ -227,12 +228,14 @@ export async function crearVenta(input: CrearVentaInput): Promise<ActionState & 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   const d = parsed.data;
 
-  // Mostrador (consumidor final): teléfono o email obligatorio.
+  // Mostrador (consumidor final): teléfono o email obligatorio, con formato válido.
   if (d.customerId === null) {
     const c = d.customerData;
     if (!(c?.phone?.trim() || c?.email?.trim())) {
       return { error: "En mostrador es obligatorio el teléfono o el email del cliente." };
     }
+    if (c?.email?.trim() && !isValidEmail(c.email)) return { error: "El email no tiene un formato válido." };
+    if (c?.phone?.trim() && !isValidPhone(c.phone)) return { error: "El teléfono no es válido (entre 8 y 15 dígitos)." };
   }
 
   const sb = await createClient();

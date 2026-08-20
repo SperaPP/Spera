@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard, Receipt, Gift, RefreshCw } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { isValidEmail, isValidPhone } from "@/lib/validation";
 import { listarProductosPOS, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, crearClienteRapido } from "@/app/(app)/pos/actions";
 
 type GridProduct = Awaited<ReturnType<typeof listarProductosPOS>>[number];
@@ -707,7 +708,9 @@ function RetailDataModal({ data, mode, onClose, onSave }: {
   const set = (k: keyof RetailForm, v: string) => setF((p) => ({ ...p, [k]: v }));
   const checkout = mode === "checkout";
   const hasContact = !!(f.phone.trim() || f.email.trim());
-  const blocked = checkout && !hasContact;
+  const emailBad = !!f.email.trim() && !isValidEmail(f.email);
+  const phoneBad = !!f.phone.trim() && !isValidPhone(f.phone);
+  const blocked = (checkout && !hasContact) || emailBad || phoneBad;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border border-line bg-card p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
@@ -717,13 +720,22 @@ function RetailDataModal({ data, mode, onClose, onSave }: {
           <div><label className="mb-1 block text-xs font-medium text-muted">Nombre</label><input autoFocus className={input} value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
           <div><label className="mb-1 block text-xs font-medium text-muted">Apellido</label><input className={input} value={f.apellido} onChange={(e) => set("apellido", e.target.value)} /></div>
           <div><label className="mb-1 block text-xs font-medium text-muted">DNI</label><input className={input} value={f.doc} onChange={(e) => set("doc", e.target.value)} /></div>
-          <div><label className="mb-1 block text-xs font-medium text-muted">Teléfono{checkout && <span className="text-warn"> *</span>}</label><input className={input} value={f.phone} onChange={(e) => set("phone", e.target.value)} /></div>
-          <div className="col-span-2"><label className="mb-1 block text-xs font-medium text-muted">Email{checkout && <span className="text-warn"> *</span>}</label><input type="email" className={input} value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted">Teléfono{checkout && <span className="text-warn"> *</span>}</label>
+            <input className={input} value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Ej. 11 5555 4444" />
+            {phoneBad && <p className="mt-1 text-xs text-danger">Teléfono inválido (entre 8 y 15 dígitos).</p>}
+          </div>
+          <div className="col-span-2">
+            <label className="mb-1 block text-xs font-medium text-muted">Email{checkout && <span className="text-warn"> *</span>}</label>
+            <input type="email" className={input} value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="nombre@correo.com" />
+            {emailBad && <p className="mt-1 text-xs text-danger">Email inválido.</p>}
+          </div>
         </div>
-        {checkout && <p className={`mt-2 text-xs ${blocked ? "text-warn" : "text-muted"}`}>{blocked ? "Ingresá teléfono o email para poder cobrar." : "Con teléfono o email alcanza."}</p>}
+        {checkout && !hasContact && <p className="mt-2 text-xs text-warn">Ingresá teléfono o email para poder cobrar.</p>}
+        {checkout && hasContact && !emailBad && !phoneBad && <p className="mt-2 text-xs text-muted">Con teléfono o email alcanza.</p>}
         <div className="mt-5 flex justify-end gap-3">
           <button onClick={onClose} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
-          <button onClick={() => { if (checkout && !hasContact) return; onSave(f); }} disabled={blocked} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50">
+          <button onClick={() => { if (blocked) return; onSave(f); }} disabled={blocked} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50">
             {checkout ? "Guardar y cobrar" : "Guardar"}
           </button>
         </div>
