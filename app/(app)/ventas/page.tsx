@@ -3,6 +3,7 @@ import { Receipt, Eye, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
+import { FacturarButton } from "@/components/facturar-button";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -95,6 +96,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                       <Link href={`/ventas/${s.id}/armado`} target="_blank" title="Imprimir pedido para el depósito (A4)" className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong text-muted transition-colors hover:bg-canvas hover:text-accent">
                         <Printer className="h-4 w-4" />
                       </Link>
+                      <FacturarButton />
                     </div>
                   </td>
                 </tr>
