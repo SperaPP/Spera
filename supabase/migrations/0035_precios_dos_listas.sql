@@ -15,6 +15,13 @@ where p.name = 'Platinum' and c.customer_type_id = p.id;
 
 delete from public.customer_types where name = 'Platinum';
 
+-- Repunto las ventas que apuntaban a la lista Platinum → Mayorista (FK sin cascade).
+update public.sales s
+set price_list_id = m.id
+from public.price_lists p
+join public.price_lists m on m.organization_id = p.organization_id and m.name = 'Mayorista'
+where p.name = 'Platinum' and s.price_list_id = p.id;
+
 -- Borro la lista Platinum y sus precios.
 delete from public.price_list_items pli
 using public.price_lists pl
