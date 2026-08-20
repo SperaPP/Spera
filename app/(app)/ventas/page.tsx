@@ -5,16 +5,26 @@ import { formatMoney, formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
 import { FacturarButton } from "@/components/facturar-button";
 import { ImprimirArmadoButton } from "@/components/imprimir-armado-button";
+import { VentasFilters } from "@/components/ventas-filters";
+
+const AR_OFFSET = "-03:00";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
   return (o as { name: string } | null)?.name ?? null;
 }
 
-export default async function VentasPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
+type VentasParams = { q?: string; store?: string; desde?: string; hasta?: string; impreso?: string; estado?: string };
+
+export default async function VentasPage({ searchParams }: { searchParams: Promise<VentasParams> }) {
+  const { q, store, desde, hasta, impreso, estado } = await searchParams;
   const query = (q ?? "").trim();
   const sb = await createClient();
+
+  const [{ data: isAdmin }, { data: stores }] = await Promise.all([
+    sb.rpc("is_admin"),
+    sb.from("stores").select("id, name").eq("active", true).order("name"),
+  ]);
 
   const sel = "id, number, status, fulfillment_status, created_at, total, armado_printed_at, customers(name), stores(name), sale_items(count)";
   const FULFILL: Record<string, { label: string; cls: string }> = {
@@ -35,6 +45,16 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
     else req = req.eq("id", "00000000-0000-0000-0000-000000000000");
   }
 
+  // Filtros
+  if (store) req = req.eq("store_id", store);
+  if (desde) req = req.gte("created_at", `${desde}T00:00:00${AR_OFFSET}`);
+  if (hasta) req = req.lte("created_at", `${hasta}T23:59:59${AR_OFFSET}`);
+  if (impreso === "si") req = req.not("armado_printed_at", "is", null);
+  else if (impreso === "no") req = req.is("armado_printed_at", null);
+  if (estado === "anulada") req = req.eq("status", "anulada");
+  else if (estado === "completado") req = req.neq("status", "anulada").in("fulfillment_status", ["entregado", "despachado"]);
+  else if (estado === "pendiente" || estado === "controlado") req = req.neq("status", "anulada").eq("fulfillment_status", estado);
+
   const { data: rows } = await req;
 
   return (
@@ -42,8 +62,11 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Ventas</h1>
       <p className="mt-1 mb-4 text-sm text-muted">Historial de ventas del punto de venta.</p>
 
-      <div className="mb-4">
+      <div className="mb-3">
         <ProductSearch basePath="/ventas" placeholder="Buscar por N° de venta o cliente…" />
+      </div>
+      <div className="mb-4">
+        <VentasFilters stores={stores ?? []} />
       </div>
 
       {(rows ?? []).length === 0 ? (
@@ -94,7 +117,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                       <Link href={`/ventas/${s.id}`} title="Ver venta" className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong text-muted transition-colors hover:bg-canvas hover:text-ink">
                         <Eye className="h-4 w-4" />
                       </Link>
-                      <ImprimirArmadoButton saleId={s.id} printed={s.armado_printed_at != null} />
+                      <ImprimirArmadoButton saleId={s.id} printed={s.armado_printed_at != null} isAdmin={isAdmin === true} />
                       <FacturarButton />
                     </div>
                   </td>

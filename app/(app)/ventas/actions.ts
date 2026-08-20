@@ -34,3 +34,25 @@ export async function marcarArmadoImpreso(saleId: string): Promise<ActionState &
   revalidatePath("/ventas");
   return { ok: true, alreadyPrinted: already };
 }
+
+/** Reimprime una orden ya impresa. Reservado a administración; deja registro. */
+export async function reimprimirArmado(saleId: string): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+  const { data: auth } = await sb.auth.getUser();
+
+  const { data: prev } = await sb.from("sales").select("armado_reprint_count").eq("id", saleId).maybeSingle();
+  const { error } = await sb.from("sales").update({
+    armado_reprint_count: (prev?.armado_reprint_count ?? 0) + 1,
+    armado_last_reprint_at: new Date().toISOString(),
+    armado_last_reprint_by: auth?.user?.id ?? null,
+  }).eq("id", saleId).eq("organization_id", orgId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/ventas");
+  return { ok: true };
+}

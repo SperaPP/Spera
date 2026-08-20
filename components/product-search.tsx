@@ -14,8 +14,8 @@ export function ProductSearch({ basePath = "/productos", placeholder = "Buscar p
     setQ(v);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      const params = new URLSearchParams();
-      if (v.trim()) params.set("q", v.trim());
+      const params = new URLSearchParams(sp.toString());
+      if (v.trim()) params.set("q", v.trim()); else params.delete("q");
       const qs = params.toString();
       router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
     }, 300);
