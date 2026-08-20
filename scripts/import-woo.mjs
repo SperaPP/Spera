@@ -135,7 +135,8 @@ if (FIX) {
   process.exit(0);
 }
 
-// ── Modo precios: carga el precio de Woo en la lista Mayorista (precio por producto) ──
+// ── Modo precios: el precio de Woo es PUBLICO → guarda Mayorista = round(Publico/2) ──
+//    Después correr `select public.recalc_all_pricing();` para derivar Publico = Mayorista*2.
 if (PRICES) {
   const { data: pl } = await sb.from("price_lists").select("id").eq("organization_id", org.id).eq("name", "Mayorista").single();
   if (!pl) { console.log("No existe la lista 'Mayorista'."); process.exit(1); }
@@ -175,7 +176,9 @@ if (PRICES) {
         await sleep(120);
       }
       if (!price || isNaN(price)) { noPrice++; continue; }
-      rows.push({ organization_id: org.id, price_list_id: pl.id, product_id: pid, variant_id: null, price });
+      // El precio de Woo es PUBLICO → la base Mayorista = round(Publico / 2).
+      const mayorista = Math.round(price / 2);
+      rows.push({ organization_id: org.id, price_list_id: pl.id, product_id: pid, variant_id: null, price: mayorista });
       withPrice++;
       if (rows.length >= 500) await flush();
       if (processed % 300 === 0) console.log(`  … ${processed} procesados`);
@@ -183,7 +186,7 @@ if (PRICES) {
     page++;
   }
   await flush();
-  console.log(`\n✓ Precios Mayorista cargados: ${withPrice}. Sin precio en Woo: ${noPrice}.`);
+  console.log(`\n✓ Precios Mayorista (= Publico/2) cargados: ${withPrice}. Sin precio en Woo: ${noPrice}.`);
   process.exit(0);
 }
 
