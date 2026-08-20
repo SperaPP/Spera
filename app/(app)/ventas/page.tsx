@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Receipt, Eye, Printer } from "lucide-react";
+import { Receipt, Eye } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
 import { FacturarButton } from "@/components/facturar-button";
+import { ImprimirArmadoButton } from "@/components/imprimir-armado-button";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -15,7 +16,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   const query = (q ?? "").trim();
   const sb = await createClient();
 
-  const sel = "id, number, status, fulfillment_status, created_at, total, customers(name), stores(name), sale_items(count)";
+  const sel = "id, number, status, fulfillment_status, created_at, total, armado_printed_at, customers(name), stores(name), sale_items(count)";
   const FULFILL: Record<string, { label: string; cls: string }> = {
     entregado: { label: "Completado", cls: "bg-ok-bg text-ok" },
     despachado: { label: "Completado", cls: "bg-ok-bg text-ok" },
@@ -93,9 +94,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                       <Link href={`/ventas/${s.id}`} title="Ver venta" className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong text-muted transition-colors hover:bg-canvas hover:text-ink">
                         <Eye className="h-4 w-4" />
                       </Link>
-                      <Link href={`/ventas/${s.id}/armado`} target="_blank" title="Imprimir pedido para el depósito (A4)" className="flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong text-muted transition-colors hover:bg-canvas hover:text-accent">
-                        <Printer className="h-4 w-4" />
-                      </Link>
+                      <ImprimirArmadoButton saleId={s.id} printed={s.armado_printed_at != null} />
                       <FacturarButton />
                     </div>
                   </td>
