@@ -72,7 +72,6 @@ export async function crearProducto(
   return { ok: true, id: newId };
 }
 
-const locField = z.number().int().min(0).max(9999).nullable();
 const editSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1, "Ingresá un nombre"),
@@ -82,9 +81,6 @@ const editSchema = z.object({
   taxRate: z.number().min(0).max(100),
   active: z.boolean(),
   lifecycle: z.enum(["actual", "discontinuo"]),
-  locFila: locField,
-  locEstante: locField,
-  locCubiculo: locField,
 });
 
 export type EditarProductoInput = z.infer<typeof editSchema>;
@@ -106,9 +102,6 @@ export async function editarProducto(input: EditarProductoInput): Promise<Action
     tax_rate: d.taxRate,
     active: d.active,
     lifecycle: d.lifecycle,
-    loc_fila: d.locFila,
-    loc_estante: d.locEstante,
-    loc_cubiculo: d.locCubiculo,
   }).eq("id", d.id);
   if (error) return { error: error.message };
 
@@ -191,6 +184,30 @@ export async function toggleVariante(variantId: string, active: boolean, product
   const { error } = await sb.from("product_variants").update({ active }).eq("id", variantId);
   if (error) return { error: error.message };
   revalidatePath(`/productos/${productId}`);
+  return { ok: true };
+}
+
+const ubicSchema = z.object({
+  variantId: z.string().uuid(),
+  productId: z.string().uuid(),
+  fila: z.number().int().min(0).max(9999).nullable(),
+  estante: z.number().int().min(0).max(9999).nullable(),
+  cubiculo: z.number().int().min(0).max(9999).nullable(),
+});
+
+/** Ubicación en depósito de una variante (Fila - Estante - Cubículo). */
+export async function setUbicacionVariante(input: z.infer<typeof ubicSchema>): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  const parsed = ubicSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const d = parsed.data;
+  const sb = await createClient();
+  const { error } = await sb.from("product_variants")
+    .update({ loc_fila: d.fila, loc_estante: d.estante, loc_cubiculo: d.cubiculo })
+    .eq("id", d.variantId);
+  if (error) return { error: error.message };
+  revalidatePath(`/productos/${d.productId}`);
   return { ok: true };
 }
 

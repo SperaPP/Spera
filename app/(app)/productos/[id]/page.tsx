@@ -29,7 +29,7 @@ export default async function ProductoDetallePage({
   const { data: product } = await sb
     .from("products")
     .select(
-      "id, name, description, variation_type, tax_rate, active, lifecycle, external_id, loc_fila, loc_estante, loc_cubiculo, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active)"
+      "id, name, description, variation_type, tax_rate, active, lifecycle, external_id, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active, loc_fila, loc_estante, loc_cubiculo)"
     )
     .eq("id", id)
     .single();
@@ -38,6 +38,7 @@ export default async function ProductoDetallePage({
 
   const variants = (product.product_variants ?? []) as {
     id: string; size: string | null; color: string | null; sku: string | null; barcode: string | null; active: boolean;
+    loc_fila: number | null; loc_estante: number | null; loc_cubiculo: number | null;
   }[];
   const variantIds = variants.map((v) => v.id);
 
@@ -100,12 +101,6 @@ export default async function ProductoDetallePage({
               )}
               <span>·</span>
               <span>IVA {product.tax_rate}%</span>
-              {(product.loc_fila != null || product.loc_estante != null || product.loc_cubiculo != null) && (
-                <>
-                  <span>·</span>
-                  <span>Ubicación {product.loc_fila ?? "–"} · {product.loc_estante ?? "–"} · {product.loc_cubiculo ?? "–"}</span>
-                </>
-              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -150,6 +145,7 @@ export default async function ProductoDetallePage({
         variants={variants.map((v) => ({
           id: v.id, size: v.size, color: v.color, sku: v.sku, barcode: v.barcode,
           active: v.active, stock: stockByVariant.get(v.id) ?? 0,
+          locFila: v.loc_fila, locEstante: v.loc_estante, locCubiculo: v.loc_cubiculo,
         }))}
         canEdit={editable}
       />

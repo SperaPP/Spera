@@ -11,7 +11,7 @@ export default async function ArmadoPage({ params }: { params: Promise<{ id: str
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, created_at, customers(name), stores(name), organizations(name), sale_items(product_name, variant_label, quantity, product_variants(sku, products(loc_fila, loc_estante, loc_cubiculo)))")
+    .select("id, number, created_at, customers(name), stores(name), organizations(name), sale_items(product_name, variant_label, quantity, product_variants(sku, loc_fila, loc_estante, loc_cubiculo))")
     .eq("id", id)
     .single();
   if (!sale) notFound();
@@ -19,16 +19,15 @@ export default async function ArmadoPage({ params }: { params: Promise<{ id: str
   const items: ArmadoItem[] = ((sale.sale_items ?? []) as Array<{
     product_name: string; variant_label: string | null; quantity: number; product_variants: unknown;
   }>).map((it) => {
-    const variant = rel<{ sku: string | null; products: unknown }>(it.product_variants);
-    const product = rel<{ loc_fila: number | null; loc_estante: number | null; loc_cubiculo: number | null }>(variant?.products);
+    const variant = rel<{ sku: string | null; loc_fila: number | null; loc_estante: number | null; loc_cubiculo: number | null }>(it.product_variants);
     return {
       productName: it.product_name,
       variantLabel: it.variant_label,
       sku: variant?.sku ?? null,
       quantity: it.quantity,
-      fila: product?.loc_fila ?? null,
-      estante: product?.loc_estante ?? null,
-      cubiculo: product?.loc_cubiculo ?? null,
+      fila: variant?.loc_fila ?? null,
+      estante: variant?.loc_estante ?? null,
+      cubiculo: variant?.loc_cubiculo ?? null,
     };
   });
 

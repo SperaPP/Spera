@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Printer, Plus, X, Trash2 } from "lucide-react";
+import { Printer, Plus, X, Trash2, Check } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { agregarVariante, toggleVariante, borrarVariante } from "@/app/(app)/productos/actions";
+import { agregarVariante, toggleVariante, borrarVariante, setUbicacionVariante } from "@/app/(app)/productos/actions";
 
 type Ref = { id: string; name: string };
 type Variant = {
@@ -17,7 +17,14 @@ type Variant = {
   barcode: string | null;
   active: boolean;
   stock: number;
+  locFila: number | null;
+  locEstante: number | null;
+  locCubiculo: number | null;
 };
+
+type Loc = { f: string; e: string; c: string };
+const locStr = (v: number | null) => (v == null ? "" : String(v));
+const toInt = (s: string): number | null => { const n = parseInt(s, 10); return Number.isFinite(n) && n >= 0 ? n : null; };
 
 const input =
   "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
@@ -49,6 +56,9 @@ export function VariantesManager({
   const [nColor, setNColor] = useState("");
   const [nSku, setNSku] = useState("");
   const [nStock, setNStock] = useState("");
+  const [loc, setLoc] = useState<Record<string, Loc>>(() =>
+    Object.fromEntries(variants.map((v) => [v.id, { f: locStr(v.locFila), e: locStr(v.locEstante), c: locStr(v.locCubiculo) }]))
+  );
 
   const usesSize = variationType === "size" || variationType === "size_color";
   const usesColor = variationType === "color" || variationType === "size_color";
@@ -80,6 +90,25 @@ export function VariantesManager({
       setBusyId(null);
       if (res.error) { toast.error(res.error); return; }
       toast.success(v.active ? "Variante desactivada." : "Variante activada.");
+      router.refresh();
+    });
+  }
+
+  const locDirty = (v: Variant) => {
+    const l = loc[v.id] ?? { f: "", e: "", c: "" };
+    return toInt(l.f) !== v.locFila || toInt(l.e) !== v.locEstante || toInt(l.c) !== v.locCubiculo;
+  };
+  function setLocField(id: string, k: keyof Loc, val: string) {
+    setLoc((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { f: "", e: "", c: "" }), [k]: val } }));
+  }
+  function guardarUbic(v: Variant) {
+    const l = loc[v.id] ?? { f: "", e: "", c: "" };
+    setBusyId(v.id);
+    startTransition(async () => {
+      const res = await setUbicacionVariante({ variantId: v.id, productId, fila: toInt(l.f), estante: toInt(l.e), cubiculo: toInt(l.c) });
+      setBusyId(null);
+      if (res.error) { toast.error(res.error); return; }
+      toast.success("Ubicación guardada.");
       router.refresh();
     });
   }
@@ -162,6 +191,7 @@ export function VariantesManager({
               <th className="px-5 py-2.5 font-medium">SKU</th>
               <th className="px-5 py-2.5 font-medium">Código de barras</th>
               <th className="px-5 py-2.5 text-right font-medium">Stock</th>
+              <th className="px-5 py-2.5 font-medium">Ubicación<div className="text-[10px] font-normal normal-case text-faint">Fila · Est · Cub</div></th>
               <th className="px-5 py-2.5 font-medium">Estado</th>
               {canEdit && <th className="px-5 py-2.5 text-right font-medium">Acciones</th>}
             </tr>
@@ -184,6 +214,39 @@ export function VariantesManager({
                   <td className="px-5 py-2.5 font-mono text-xs text-ink">{v.sku ?? "—"}</td>
                   <td className="px-5 py-2.5 font-mono text-xs text-muted">{v.barcode ?? "—"}</td>
                   <td className="px-5 py-2.5 text-right tabular-nums text-ink">{v.stock}</td>
+                  <td className="px-5 py-2.5">
+                    {canEdit ? (
+                      <div className="flex items-center gap-1">
+                        {(["f", "e", "c"] as const).map((k) => (
+                          <input
+                            key={k}
+                            type="number"
+                            min={0}
+                            inputMode="numeric"
+                            value={(loc[v.id] ?? { f: "", e: "", c: "" })[k]}
+                            onChange={(e) => setLocField(v.id, k, e.target.value)}
+                            placeholder="–"
+                            className="w-11 rounded-md border border-line-strong bg-card px-1.5 py-1 text-center text-xs tabular-nums text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+                          />
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => guardarUbic(v)}
+                          disabled={busy || !locDirty(v)}
+                          title="Guardar ubicación"
+                          className="rounded-md border border-line-strong p-1 text-accent transition-colors hover:bg-accent-soft disabled:opacity-30"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-xs tabular-nums text-muted">
+                        {v.locFila == null && v.locEstante == null && v.locCubiculo == null
+                          ? "—"
+                          : `${v.locFila ?? "–"} · ${v.locEstante ?? "–"} · ${v.locCubiculo ?? "–"}`}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-5 py-2.5">
                     {v.active ? (
                       <span className="rounded-full bg-ok-bg px-2 py-0.5 text-xs font-medium text-ok">Activa</span>
