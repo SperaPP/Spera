@@ -32,10 +32,11 @@ export function EtiquetasPrint({ productName, variants }: { productName: string;
   const w = sizeKey === "custom" ? Math.max(10, Number(customW) || 70) : preset.w;
   const h = sizeKey === "custom" ? Math.max(10, Number(customH) || 45) : preset.h;
 
-  // Tamaños de fuente que escalan con la etiqueta (mm).
-  const nameSize = Math.max(3, Math.min(w / 11, h / 5));
+  // Tamaños de fuente que escalan con la etiqueta (mm). Compactos para dejarle
+  // más alto/ancho al código de barras (clave para que escanee en etiqueta chica).
+  const nameSize = Math.max(2.6, Math.min(w / 13, h / 6));
   const varSize = nameSize * 0.72;
-  const skuSize = Math.max(2, nameSize * 0.45);
+  const skuSize = Math.max(1.9, nameSize * 0.5);
 
   const num = (id: string) => Math.max(0, Math.min(99, Number(qty[id]) || 0));
   const labels = printable.flatMap((v) => Array.from({ length: num(v.id) }, (_, i) => ({ ...v, key: `${v.id}-${i}` })));
@@ -113,11 +114,11 @@ export function EtiquetasPrint({ productName, variants }: { productName: string;
             <div
               key={l.key}
               className="etq-label flex flex-col overflow-hidden rounded border border-neutral-300 bg-white text-neutral-900"
-              style={{ width: `${w}mm`, height: `${h}mm`, padding: "1.5mm" }}
+              style={{ width: `${w}mm`, height: `${h}mm`, padding: "1mm" }}
             >
               <div className="w-full overflow-hidden text-center font-bold leading-none" style={{ fontSize: `${nameSize}mm`, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word" }}>{productName}</div>
               {l.label && <div className="mt-[0.5mm] w-full truncate text-center font-semibold leading-none" style={{ fontSize: `${varSize}mm` }}>{l.label}</div>}
-              <div className="mt-[1mm] min-h-0 w-full flex-1">
+              <div className="mt-[0.5mm] min-h-0 w-full flex-1">
                 <Barcode value={l.sku!} fill />
               </div>
               <div className="mt-[0.5mm] w-full text-center tracking-widest leading-none" style={{ fontSize: `${skuSize}mm` }}>{l.sku}</div>
