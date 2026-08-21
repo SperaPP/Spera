@@ -11,6 +11,7 @@ import { listarProductosPOS, buscarPorCodigo, crearVenta, validarCupon, buscarCl
 
 type GridProduct = Awaited<ReturnType<typeof listarProductosPOS>>[number];
 import { abrirCaja, cerrarCaja } from "@/app/(app)/caja/actions";
+import { NuevoCambioForm } from "@/components/nuevo-cambio-form";
 import type { PosStore } from "@/app/(app)/pos/page";
 
 type Method = { id: string; name: string; kind: string };
@@ -324,6 +325,7 @@ function Terminal({
   const [showRetail, setShowRetail] = useState(false);
   const [checkout, setCheckout] = useState(false);
   const [lastSale, setLastSale] = useState<{ id: string; number: number } | null>(null);
+  const [mode, setMode] = useState<"vender" | "cambio">("vender");
   const [pending, start] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -456,9 +458,14 @@ function Terminal({
         </div>
         <div className="flex items-center gap-2">
           {storeSelector}
-          <Link href={`/cambios?store=${store.id}`} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-line-strong bg-card px-3 py-2 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-canvas">
-            <RefreshCw className="h-4 w-4 shrink-0" /> Cambio
-          </Link>
+          <div className="flex shrink-0 overflow-hidden rounded-xl border border-line-strong text-sm font-medium shadow-sm">
+            <button onClick={() => setMode("vender")} className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${mode === "vender" ? "bg-accent text-accent-fg" : "bg-card text-ink hover:bg-canvas"}`}>
+              <ShoppingCart className="h-4 w-4 shrink-0" /> Vender
+            </button>
+            <button onClick={() => setMode("cambio")} className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${mode === "cambio" ? "bg-accent text-accent-fg" : "bg-card text-ink hover:bg-canvas"}`}>
+              <RefreshCw className="h-4 w-4 shrink-0" /> Cambio
+            </button>
+          </div>
           <button onClick={() => setClosing((s) => !s)} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-line-strong bg-card px-3 py-2 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-canvas">
             <Lock className="h-4 w-4 shrink-0" /> Cerrar caja
           </button>
@@ -467,7 +474,7 @@ function Terminal({
 
       {closing && <CerrarCajaPanel store={store} onDone={() => setClosing(false)} />}
 
-      {lastSale && (
+      {mode === "vender" && lastSale && (
         <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-ok/30 bg-ok-bg px-4 py-3 shadow-sm">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ok/15 text-ok"><Receipt className="h-4 w-4" /></span>
           <span className="text-sm font-semibold text-ink">Venta #{lastSale.number} registrada</span>
@@ -483,6 +490,16 @@ function Terminal({
         </div>
       )}
 
+      {mode === "cambio" && (
+        <NuevoCambioForm
+          openStores={[{ id: store.id, name: store.name, sessionId: store.sessionId! }]}
+          locked
+          retailPriceListId={retailPriceListId}
+          paymentMethods={paymentMethods}
+        />
+      )}
+
+      {mode === "vender" && (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_400px]">
         {/* Izquierda: búsqueda + grilla de productos */}
         <div className="space-y-4">
@@ -637,6 +654,7 @@ function Terminal({
           </button>
         </div>
       </div>
+      )}
 
       {variantPick && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setVariantPick(null)}>
