@@ -91,6 +91,51 @@ export async function setCajaTitular(userId: string, value: boolean): Promise<Ac
   return { ok: true };
 }
 
+/** Alta de usuario: crea la cuenta de acceso + su perfil (rol, sucursal, titular). */
+export async function crearUsuario(input: {
+  email: string; password: string; fullName: string;
+  roleId: string | null; storeId: string | null; isCashTitular: boolean;
+}): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
+  const email = input.email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Email inválido" };
+  if (!input.password || input.password.length < 6) return { error: "La contraseña debe tener al menos 6 caracteres" };
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+
+  if (input.roleId) {
+    const { data: role } = await sb.from("roles").select("id").eq("id", input.roleId).maybeSingle();
+    if (!role) return { error: "Rol inválido" };
+  }
+  if (input.storeId) {
+    const { data: store } = await sb.from("stores").select("id").eq("id", input.storeId).maybeSingle();
+    if (!store) return { error: "Sucursal inválida" };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.createUser({
+    email, password: input.password, email_confirm: true,
+    user_metadata: { full_name: input.fullName.trim() || email },
+  });
+  if (error) return { error: error.message.includes("already") ? "Ya existe un usuario con ese email" : error.message };
+  const uid = data.user?.id;
+  if (!uid) return { error: "No se pudo crear el usuario" };
+
+  // El trigger ya creó el profile en la org; le seteamos rol/sucursal/titular.
+  const { error: pErr } = await admin.from("profiles").update({
+    role_id: input.roleId, store_id: input.storeId,
+    is_cash_titular: input.isCashTitular, full_name: input.fullName.trim() || email,
+  }).eq("id", uid).eq("organization_id", orgId);
+  if (pErr) return { error: pErr.message };
+
+  revalidatePath("/usuarios");
+  return { ok: true };
+}
+
 /** El admin le pone una contraseña nueva a un usuario de su organización. */
 export async function resetearPassword(userId: string, newPassword: string): Promise<ActionState> {
   const denied = await requireAdmin();

@@ -107,7 +107,7 @@ export function UsuariosManager({ users, roles, stores }: { users: User[]; roles
       </div>
       <div className="space-y-1 border-t border-line px-4 py-3">
         <p className="text-xs text-muted"><span className="inline-flex items-center gap-1 font-medium text-ink"><Crown className="h-3 w-3" /> Titular</span>: puede abrir la caja titular del local (maneja caja chica, cierre y reparto). Los demás solo abren cajas de apoyo, y únicamente si ya hay una titular abierta.</p>
-        <p className="text-xs text-muted">Para sumar un usuario nuevo: crealo en Supabase (Authentication → Add user) y después asignale el rol acá.</p>
+        <p className="text-xs text-muted">Para sumar un usuario nuevo usá <span className="font-medium text-ink">Nuevo usuario</span> arriba. Acá podés cambiarle el rol, la sucursal, marcar cajero titular o resetear la contraseña.</p>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { RolesManager } from "@/components/roles-manager";
 import { UsuariosManager } from "@/components/usuarios-manager";
+import { NuevoUsuarioForm } from "@/components/nuevo-usuario-form";
 
 export default async function UsuariosPage() {
   const sb = await createClient();
@@ -33,6 +34,7 @@ export default async function UsuariosPage() {
       <RolesManager roles={roles ?? []} permsByRole={permsByRole} />
 
       <h2 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-faint">Usuarios</h2>
+      <NuevoUsuarioForm roles={roles ?? []} stores={stores ?? []} />
       <UsuariosManager users={users} roles={roles ?? []} stores={stores ?? []} />
     </div>
   );
