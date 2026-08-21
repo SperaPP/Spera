@@ -21,18 +21,17 @@ export function Barcode({ value, heightMm = 10, fill = false }: { value: string;
       const w = parseFloat(svg.getAttribute("width") || "0");
       const h = parseFloat(svg.getAttribute("height") || "0");
       if (w && h) svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-      // Proporción natural (NO estirar): estirar a lo ancho deforma la relación
-      // barra ancha/angosta del CODE39 y el lector no decodifica. "meet" ajusta
-      // el código al espacio manteniendo las proporciones, centrado.
-      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      // "none" con viewBox VÁLIDO: escala X uniforme (mantiene la relación barra
+      // ancha/angosta del CODE39 → decodifica bien) y estira SOLO el alto. Así el
+      // código llena todo el ancho y todo el alto disponible = barras altas =
+      // mucho más fácil/rápido de escanear.
+      svg.setAttribute("preserveAspectRatio", "none");
       svg.removeAttribute("width");
       svg.removeAttribute("height");
     } catch {
       /* valor no codificable */
     }
   }, [value]);
-  // fill (etiqueta): ancho 100% + alto automático (proporcional) → el código entra
-  // COMPLETO a todo el ancho, más bajo, sin empastar el térmico. crispEdges: sin
-  // suavizado, bordes nítidos.
-  return <svg ref={ref} shapeRendering="crispEdges" style={{ width: "100%", height: fill ? "auto" : `${heightMm}mm`, display: "block", shapeRendering: "crispEdges" }} />;
+  // fill (etiqueta): llena ancho y alto del contenedor; crispEdges: bordes nítidos.
+  return <svg ref={ref} shapeRendering="crispEdges" style={{ width: "100%", height: fill ? "100%" : `${heightMm}mm`, display: "block", shapeRendering: "crispEdges" }} />;
 }
