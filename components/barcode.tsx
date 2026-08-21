@@ -18,7 +18,10 @@ export function Barcode({ value, heightMm = 10, fill = false }: { value: string;
       const w = svg.getAttribute("width");
       const h = svg.getAttribute("height");
       if (w && h) svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-      svg.setAttribute("preserveAspectRatio", "none");
+      // Proporción natural (NO estirar): estirar a lo ancho deforma la relación
+      // barra ancha/angosta del CODE39 y el lector no decodifica. "meet" ajusta
+      // el código al espacio manteniendo las proporciones, centrado.
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
       svg.removeAttribute("width");
       svg.removeAttribute("height");
     } catch {
