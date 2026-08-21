@@ -9,6 +9,7 @@ type Variant = { id: string; sku: string | null; label: string | null };
 
 // Tamaños comunes de la Brother QL-800 (ancho × alto en mm).
 const SIZES = [
+  { key: "42x29", label: "42 × 29 mm", w: 42, h: 29 },
   { key: "40x29", label: "40 × 29 mm", w: 40, h: 29 },
   { key: "62x29", label: "62 × 29 mm (DK-1209)", w: 62, h: 29 },
   { key: "90x29", label: "90 × 29 mm (DK-1201)", w: 90, h: 29 },
@@ -22,7 +23,7 @@ const ctl = "rounded-lg border border-line-strong bg-card px-2 py-1.5 text-sm te
 
 export function EtiquetasPrint({ productName, variants }: { productName: string; variants: Variant[] }) {
   const printable = variants.filter((v) => v.sku);
-  const [sizeKey, setSizeKey] = useState("40x29");
+  const [sizeKey, setSizeKey] = useState("42x29");
   const [customW, setCustomW] = useState("70");
   const [customH, setCustomH] = useState("45");
   const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(printable.map((v) => [v.id, "1"])));

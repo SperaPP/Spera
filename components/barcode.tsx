@@ -25,5 +25,7 @@ export function Barcode({ value, heightMm = 10, fill = false }: { value: string;
       /* valor no codificable */
     }
   }, [value]);
-  return <svg ref={ref} style={{ width: "100%", height: fill ? "100%" : `${heightMm}mm`, display: "block" }} />;
+  // shapeRendering crispEdges: sin anti-aliasing → barras nítidas al imprimir
+  // (el suavizado deja bordes grises/difusos que el lector no engancha).
+  return <svg ref={ref} shapeRendering="crispEdges" style={{ width: "100%", height: fill ? "100%" : `${heightMm}mm`, display: "block", shapeRendering: "crispEdges" }} />;
 }
