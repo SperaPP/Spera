@@ -34,7 +34,7 @@ async function shapeProducts(sb: Awaited<ReturnType<typeof createClient>>, produ
 
 /** Escanea un código → devuelve el producto (con variantes + stock) y la variante escaneada. */
 export async function escanearConteo(code: string, warehouseId: string):
-  Promise<{ ok: true; variantId: string; product: CountProduct } | { ok: false; error: string }> {
+  Promise<{ ok: true; variantId: string; product: CountProduct } | { ok: false; error: string; notFound?: boolean }> {
   const c = code.trim();
   if (!c) return { ok: false, error: "Código vacío." };
   if (!warehouseId) return { ok: false, error: "Elegí la sucursal." };
@@ -42,7 +42,7 @@ export async function escanearConteo(code: string, warehouseId: string):
   const sel = "id, product_id";
   let { data: v } = await sb.from("product_variants").select(sel).eq("barcode", c).limit(1).maybeSingle();
   if (!v) ({ data: v } = await sb.from("product_variants").select(sel).eq("sku", c).limit(1).maybeSingle());
-  if (!v) return { ok: false, error: `Código ${c}: sin resultados.` };
+  if (!v) return { ok: false, notFound: true, error: `Código ${c}: sin resultados.` };
   const [product] = await shapeProducts(sb, [v.product_id], warehouseId);
   if (!product) return { ok: false, error: "Producto no encontrado." };
   return { ok: true, variantId: v.id, product };

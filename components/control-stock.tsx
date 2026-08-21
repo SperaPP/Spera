@@ -2,10 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ScanLine, Plus, Minus, ClipboardCheck, RotateCcw } from "lucide-react";
+import { ScanLine, Plus, Minus, ClipboardCheck, RotateCcw, Printer, AlertTriangle, Trash2 } from "lucide-react";
 import { escanearConteo, cargarCategoriaConteo, aplicarConteo, type CountProduct } from "@/app/(app)/stock/control/actions";
 
 type Ref = { id: string; name: string };
+
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 const input =
   "w-full rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-4 focus:ring-accent/15";
@@ -16,9 +18,10 @@ export function ControlStock({ warehouses, categories, canApply }: { warehouses:
   const [catId, setCatId] = useState("");
   const [scope, setScope] = useState<CountProduct[]>([]);
   const [counted, setCounted] = useState<Record<string, number>>({});
+  const [unknown, setUnknown] = useState<Record<string, number>>({}); // código → veces escaneado
   const [pending, start] = useTransition();
 
-  function reset() { setScope([]); setCounted({}); setCatId(""); }
+  function reset() { setScope([]); setCounted({}); setUnknown({}); setCatId(""); }
   function changeWh(id: string) { setWhId(id); reset(); }
 
   function addProducts(prods: CountProduct[]) {
@@ -29,14 +32,25 @@ export function ControlStock({ warehouses, categories, canApply }: { warehouses:
   }
 
   function scan(code: string) {
-    if (!code.trim()) return;
+    const c = code.trim();
+    if (!c) return;
     start(async () => {
-      const r = await escanearConteo(code, whId);
-      if (!r.ok) { toast.error(r.error); return; }
+      const r = await escanearConteo(c, whId);
+      if (!r.ok) {
+        if (r.notFound) {
+          // No se pudo identificar: lo registro abajo para que el operador lo vea.
+          setUnknown((u) => ({ ...u, [c]: (u[c] ?? 0) + 1 }));
+          toast.warning(`Sin identificar: ${c}`);
+        } else {
+          toast.error(r.error);
+        }
+        return;
+      }
       addProducts([r.product]);
       setCounted((p) => ({ ...p, [r.variantId]: (p[r.variantId] ?? 0) + 1 }));
     });
   }
+  function delUnknown(code: string) { setUnknown((u) => { const n = { ...u }; delete n[code]; return n; }); }
   function loadCategory() {
     if (!catId) return;
     start(async () => {
@@ -63,6 +77,45 @@ export function ControlStock({ warehouses, categories, canApply }: { warehouses:
       toast.success(`Stock ajustado: ${r.count} variante(s).`);
       reset();
     });
+  }
+
+  const unknownEntries = Object.entries(unknown);
+
+  function imprimirControl() {
+    if (scope.length === 0 && unknownEntries.length === 0) return toast.error("No hay nada para imprimir.");
+    const whName = warehouses.find((w) => w.id === whId)?.name ?? "—";
+    const fecha = new Date().toLocaleString("es-AR");
+    const rows = scope.flatMap((p) => p.variants.map((v) => {
+      const c = counted[v.variantId] ?? 0;
+      const d = c - v.system;
+      const cls = d === 0 ? "" : d < 0 ? "neg" : "pos";
+      const dtxt = d === 0 ? "OK" : d > 0 ? `+${d}` : `${d}`;
+      return `<tr><td>${esc(p.name)}</td><td>${esc(v.label ?? "Única")}</td><td class="mono">${esc(v.sku ?? "—")}</td><td class="num">${v.system}</td><td class="num">${c}</td><td class="num ${cls}">${dtxt}</td></tr>`;
+    })).join("");
+    const unkRows = unknownEntries.map(([code, n]) => `<tr><td class="mono">${esc(code)}</td><td class="num">${n}</td></tr>`).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Control de stock</title><style>
+      @page{size:A4 portrait;margin:12mm}
+      *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0}
+      h1{font-size:18px;margin:0}.sub{font-size:12px;color:#444;margin-top:2px}
+      .meta{margin:6px 0 12px;font-size:12px;display:flex;gap:24px;flex-wrap:wrap}
+      table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+      th{text-align:left;border-bottom:2px solid #000;padding:5px 6px;font-size:11px;text-transform:uppercase}
+      td{border-bottom:1px solid #ccc;padding:5px 6px}
+      .num{text-align:right;font-variant-numeric:tabular-nums}.mono{font-family:monospace;font-size:11px}
+      .neg{color:#b00;font-weight:bold}.pos{color:#a60;font-weight:bold}
+      h2{font-size:13px;margin:16px 0 4px}.warn{color:#a60}
+      .firma{margin-top:28px;font-size:12px}
+    </style></head><body>
+      <h1>Control de stock</h1>
+      <div class="sub">${esc(whName)}</div>
+      <div class="meta"><span>Fecha: <b>${esc(fecha)}</b></span><span>Productos: <b>${scope.length}</b></span><span>Variantes con diferencia: <b>${diffs.length}</b></span><span>Sin identificar: <b>${unknownEntries.length}</b></span></div>
+      <table><thead><tr><th>Producto</th><th>Variante</th><th>SKU</th><th class="num">Sistema</th><th class="num">Contado</th><th class="num">Dif.</th></tr></thead><tbody>${rows || '<tr><td colspan="6">Sin productos contados.</td></tr>'}</tbody></table>
+      ${unknownEntries.length ? `<h2 class="warn">Productos sin identificar</h2><table><thead><tr><th>Código escaneado</th><th class="num">Veces</th></tr></thead><tbody>${unkRows}</tbody></table>` : ""}
+      <div class="firma">Controló: ____________________________    Firma: ____________________</div>
+    </body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) return toast.error("Habilitá las ventanas emergentes para imprimir.");
+    w.document.write(html); w.document.close(); w.focus(); w.print();
   }
 
   return (
@@ -94,7 +147,7 @@ export function ControlStock({ warehouses, categories, canApply }: { warehouses:
         <p className="mt-2 text-xs text-muted">Al escanear un producto entra al conteo con todas sus variantes. Las variantes que no cuentes de ese producto quedan en 0.</p>
       </div>
 
-      {scope.length === 0 ? (
+      {scope.length === 0 && unknownEntries.length === 0 ? (
         <div className="flex flex-col items-center rounded-xl border border-dashed border-line-strong bg-card py-14 text-center">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent"><ClipboardCheck className="h-5 w-5" /></span>
           <p className="mt-3 font-medium text-ink">Empezá a escanear o cargá una categoría.</p>
@@ -130,13 +183,33 @@ export function ControlStock({ warehouses, categories, canApply }: { warehouses:
             </div>
           ))}
 
+          {unknownEntries.length > 0 && (
+            <div className="overflow-hidden rounded-xl border border-warn/40 bg-warn-bg/40">
+              <div className="flex items-center gap-2 border-b border-warn/30 px-4 py-2.5 text-sm font-medium text-ink">
+                <AlertTriangle className="h-4 w-4 text-warn" /> Productos sin identificar
+                <span className="ml-auto text-xs font-normal text-muted">no entran en el ajuste — revisar</span>
+              </div>
+              <div className="divide-y divide-line">
+                {unknownEntries.map(([code, n]) => (
+                  <div key={code} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="font-mono text-sm text-ink">{code}</span>
+                    {n > 1 && <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">×{n}</span>}
+                    <button onClick={() => delUnknown(code)} className="ml-auto text-faint hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className={`${card} flex flex-wrap items-center gap-3`}>
             <div className="text-sm">
               <span className="text-muted">Productos: </span><span className="font-medium text-ink">{scope.length}</span>
               <span className="ml-4 text-muted">Con diferencia: </span><span className={`font-medium ${diffs.length ? "text-warn" : "text-ok"}`}>{diffs.length}</span>
+              {unknownEntries.length > 0 && <><span className="ml-4 text-muted">Sin identificar: </span><span className="font-medium text-warn">{unknownEntries.length}</span></>}
             </div>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={reset} className="flex items-center gap-1.5 rounded-xl border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-canvas"><RotateCcw className="h-4 w-4" /> Limpiar</button>
+              <button onClick={imprimirControl} className="flex items-center gap-1.5 rounded-xl border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-canvas"><Printer className="h-4 w-4" /> Imprimir control</button>
               <button onClick={aplicar} disabled={pending || !canApply} title={canApply ? "" : "Requiere permiso de Control de stock"} className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50">
                 {pending ? "Aplicando…" : "Aplicar ajuste"}
               </button>
