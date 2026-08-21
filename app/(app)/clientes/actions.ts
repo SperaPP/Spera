@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireCan, type ActionState } from "@/lib/auth";
+import { requireCan, requireAdmin, type ActionState } from "@/lib/auth";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Ingresá un nombre"),
@@ -78,5 +78,17 @@ export async function editarCliente(input: EditarClienteInput): Promise<ActionSt
 
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${d.id}`);
+  return { ok: true };
+}
+
+/** Ajuste manual del saldo de cuenta corriente (reservado a administración). */
+export async function ajustarSaldoCliente(customerId: string, delta: number, reason: string): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  if (!isFinite(delta) || delta === 0) return { error: "Ingresá un monto distinto de cero" };
+  const sb = await createClient();
+  const { error } = await sb.rpc("adjust_customer_balance", { p_customer_id: customerId, p_delta: delta, p_reason: reason || null });
+  if (error) return { error: error.message };
+  revalidatePath(`/clientes/${customerId}`);
   return { ok: true };
 }

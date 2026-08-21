@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, HandCoins, Pencil, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { AjusteSaldoButton } from "@/components/ajuste-saldo-button";
 
 /** Link al comprobante que originó el movimiento de cuenta corriente. */
 function movHref(referenceType: string | null, referenceId: string | null): string | null {
@@ -38,9 +39,10 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
   const { id } = await params;
   const sb = await createClient();
 
-  const [{ data: customer }, { data: movs }] = await Promise.all([
+  const [{ data: customer }, { data: movs }, { data: isAdmin }] = await Promise.all([
     sb.from("customers").select("id, name, fiscal_condition, balance, doc_type, doc_number, email, phone, customer_types(name)").eq("id", id).single(),
-    sb.from("customer_movements").select("id, delta, reason, created_at, reference_type, reference_id").eq("customer_id", id).order("created_at", { ascending: true }),
+    sb.from("customer_movements").select("id, delta, reason, note, created_at, reference_type, reference_id").eq("customer_id", id).order("created_at", { ascending: true }),
+    sb.rpc("is_admin"),
   ]);
   if (!customer) notFound();
 
@@ -89,6 +91,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
               <HandCoins className="h-4 w-4" />
               Cobrar
             </Link>
+            {isAdmin === true && <AjusteSaldoButton customerId={customer.id} balance={balance} />}
           </div>
         </div>
 
@@ -132,6 +135,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
                         ) : (
                           <span className="text-ink">{REASON_LABEL[m.reason] ?? m.reason}</span>
                         )}
+                        {m.note && <div className="text-xs text-muted">{m.note}</div>}
                       </td>
                       <td className={`px-5 py-2.5 text-right tabular-nums ${delta > 0 ? "text-danger" : "text-ok"}`}>
                         {delta > 0 ? "+" : ""}{formatMoney(delta)}
