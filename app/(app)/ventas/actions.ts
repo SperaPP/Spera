@@ -35,6 +35,26 @@ export async function marcarArmadoImpreso(saleId: string): Promise<ActionState &
   return { ok: true, alreadyPrinted: already };
 }
 
+/** Marca varios pedidos como impresos (para "Imprimir todos"). Solo los no impresos. */
+export async function marcarArmadoImpresoBulk(ids: string[]): Promise<ActionState & { count?: number }> {
+  const denied = await requireCan("ventas", false);
+  if (denied) return denied;
+  if (!ids.length) return { ok: true, count: 0 };
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+  const { data: auth } = await sb.auth.getUser();
+
+  const { error, count } = await sb.from("sales")
+    .update({ armado_printed_at: new Date().toISOString(), armado_printed_by: auth?.user?.id ?? null }, { count: "exact" })
+    .in("id", ids).eq("organization_id", orgId).is("armado_printed_at", null);
+  if (error) return { error: error.message };
+
+  revalidatePath("/ventas");
+  return { ok: true, count: count ?? 0 };
+}
+
 /** Reimprime una orden ya impresa. Reservado a administración; deja registro. */
 export async function reimprimirArmado(saleId: string): Promise<ActionState> {
   const denied = await requireAdmin();

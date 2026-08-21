@@ -30,20 +30,21 @@ function locStr(it: ArmadoItem): string {
   return `${p(it.fila)} · ${p(it.estante)} · ${p(it.cubiculo)}`;
 }
 
-export function ArmadoPrint({ sale }: { sale: ArmadoSale }) {
-  const units = sale.items.reduce((a, i) => a + i.quantity, 0);
+export const armadoPrintCss = `
+  @media print {
+    .ar-toolbar { display: none !important; }
+    @page { size: A4 portrait; margin: 12mm; }
+    body { background: #fff; }
+    .ar-paper { border: none !important; box-shadow: none !important; margin: 0 !important; max-width: none !important; padding: 0 !important; }
+    .ar-row { break-inside: avoid; }
+    .ar-break { break-after: page; }
+  }
+`;
 
+export function ArmadoPrint({ sale }: { sale: ArmadoSale }) {
   return (
     <div>
-      <style>{`
-        @media print {
-          .ar-toolbar { display: none !important; }
-          @page { size: A4 portrait; margin: 12mm; }
-          body { background: #fff; }
-          .ar-paper { border: none !important; box-shadow: none !important; margin: 0 !important; max-width: none !important; padding: 0 !important; }
-          .ar-row { break-inside: avoid; }
-        }
-      `}</style>
+      <style>{armadoPrintCss}</style>
 
       <div className="ar-toolbar mb-5 flex flex-wrap items-center justify-between gap-3">
         <Link href={`/ventas/${sale.id}`} className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink">
@@ -54,7 +55,14 @@ export function ArmadoPrint({ sale }: { sale: ArmadoSale }) {
         </button>
       </div>
 
-      {/* Hoja A4 */}
+      <ArmadoSheet sale={sale} />
+    </div>
+  );
+}
+
+export function ArmadoSheet({ sale }: { sale: ArmadoSale }) {
+  const units = sale.items.reduce((a, i) => a + i.quantity, 0);
+  return (
       <div className="ar-paper mx-auto max-w-[800px] rounded-lg border border-line bg-white p-8 text-black shadow-sm">
         <div className="flex items-start justify-between border-b-2 border-black pb-3">
           <div>
@@ -104,6 +112,5 @@ export function ArmadoPrint({ sale }: { sale: ArmadoSale }) {
           <span>Armó: ____________________</span>
         </div>
       </div>
-    </div>
   );
 }

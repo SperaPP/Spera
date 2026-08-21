@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Receipt, Eye } from "lucide-react";
+import { Receipt, Eye, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
@@ -35,10 +35,11 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   };
   let req = sb.from("sales").select(sel).order("created_at", { ascending: false }).limit(100);
 
+  let custIds: string[] | null = null;
+  const isNum = /^\d+$/.test(query);
   if (query) {
-    const isNum = /^\d+$/.test(query);
     const { data: custs } = await sb.from("customers").select("id").ilike("name", `%${query}%`).limit(50);
-    const custIds = (custs ?? []).map((c) => c.id);
+    custIds = (custs ?? []).map((c) => c.id);
     if (isNum && custIds.length) req = req.or(`number.eq.${Number(query)},customer_id.in.(${custIds.join(",")})`);
     else if (isNum) req = req.eq("number", Number(query));
     else if (custIds.length) req = req.in("customer_id", custIds);
@@ -57,10 +58,42 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
 
   const { data: rows } = await req;
 
+  // Disponibles para "Imprimir todos": sin imprimir y no anuladas, según filtros (menos "impreso").
+  let availReq = sb.from("sales").select("id", { count: "exact", head: true }).is("armado_printed_at", null).neq("status", "anulada");
+  if (query) {
+    if (isNum && custIds!.length) availReq = availReq.or(`number.eq.${Number(query)},customer_id.in.(${custIds!.join(",")})`);
+    else if (isNum) availReq = availReq.eq("number", Number(query));
+    else if (custIds!.length) availReq = availReq.in("customer_id", custIds!);
+    else availReq = availReq.eq("id", "00000000-0000-0000-0000-000000000000");
+  }
+  if (store) availReq = availReq.eq("store_id", store);
+  if (desde) availReq = availReq.gte("created_at", `${desde}T00:00:00${AR_OFFSET}`);
+  if (hasta) availReq = availReq.lte("created_at", `${hasta}T23:59:59${AR_OFFSET}`);
+  if (estado === "completado") availReq = availReq.in("fulfillment_status", ["entregado", "despachado"]);
+  else if (estado === "pendiente" || estado === "controlado") availReq = availReq.eq("fulfillment_status", estado);
+  const { count: disponibles } = await availReq;
+
+  const printAllQs = new URLSearchParams();
+  if (query) printAllQs.set("q", query);
+  if (store) printAllQs.set("store", store);
+  if (desde) printAllQs.set("desde", desde);
+  if (hasta) printAllQs.set("hasta", hasta);
+  if (estado) printAllQs.set("estado", estado);
+  const printAllHref = `/ventas/armado-todos${printAllQs.toString() ? `?${printAllQs}` : ""}`;
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Ventas</h1>
-      <p className="mt-1 mb-4 text-sm text-muted">Historial de ventas del punto de venta.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Ventas</h1>
+          <p className="mt-1 mb-4 text-sm text-muted">Historial de ventas del punto de venta.</p>
+        </div>
+        {(disponibles ?? 0) > 0 && (
+          <Link href={printAllHref} target="_blank" className="flex shrink-0 items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover">
+            <Printer className="h-4 w-4" /> Imprimir todos ({disponibles})
+          </Link>
+        )}
+      </div>
 
       <div className="mb-3">
         <ProductSearch basePath="/ventas" placeholder="Buscar por N° de venta o cliente…" />
