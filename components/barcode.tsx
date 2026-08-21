@@ -11,7 +11,10 @@ export function Barcode({ value, heightMm = 10, fill = false }: { value: string;
     const svg = ref.current;
     if (!svg || !value) return;
     try {
-      JsBarcode(svg, value, { format: "CODE39", displayValue: false, margin: 0, height: 60, width: 2 });
+      // marginLeft/Right = zona de silencio (quiet zone) horizontal, obligatoria en
+      // CODE39. Va dentro del viewBox → se mantiene proporcional aunque la etiqueta
+      // sea chica (clave para que escanee en 40 mm).
+      JsBarcode(svg, value, { format: "CODE39", displayValue: false, margin: 0, marginLeft: 24, marginRight: 24, height: 60, width: 2 });
       const w = svg.getAttribute("width");
       const h = svg.getAttribute("height");
       if (w && h) svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
