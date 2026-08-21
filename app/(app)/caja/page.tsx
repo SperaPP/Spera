@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Wallet, ChevronRight, History } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getPermissions } from "@/lib/auth";
+import { getPermissions, getStoreScope } from "@/lib/auth";
 import { canEdit } from "@/lib/permissions";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { CajaAdmin } from "@/components/caja-admin";
@@ -30,13 +30,16 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
   const filter = estado && TABS.some((t) => t.key === estado) ? estado : "cerrada";
   const sb = await createClient();
   const canAdmin = canEdit(await getPermissions(), "caja_admin");
+  const { storeId: scopeStore } = await getStoreScope();
 
+  const storesReq = sb.from("stores").select("id, name").eq("has_cash_register", true).eq("active", true).order("name");
+  const delivReq = sb.from("central_deliveries").select("id, amount, notes, delivered_at, delivered_by, stores(name)").order("delivered_at", { ascending: false }).limit(15);
   const [{ data: stores }, { data: safes }, { data: petty }, { data: profiles }, { data: deliveries }] = await Promise.all([
-    sb.from("stores").select("id, name").eq("has_cash_register", true).eq("active", true).order("name"),
+    scopeStore ? storesReq.eq("id", scopeStore) : storesReq,
     sb.from("store_safe").select("store_id, balance"),
     sb.from("store_petty").select("store_id, balance"),
     sb.from("profiles").select("id, full_name, email, store_id"),
-    sb.from("central_deliveries").select("id, amount, notes, delivered_at, delivered_by, stores(name)").order("delivered_at", { ascending: false }).limit(15),
+    scopeStore ? delivReq.eq("store_id", scopeStore) : delivReq,
   ]);
 
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name || p.email || "—"]));
@@ -50,6 +53,7 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
   let req = sb.from("cash_sessions")
     .select("id, store_id, status, role, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, opened_by, stores(name)")
     .order("opened_at", { ascending: false }).limit(80);
+  if (scopeStore) req = req.eq("store_id", scopeStore);
   if (filter !== "todas") req = req.eq("status", filter);
   const { data: sessions } = await req;
   const sList = sessions ?? [];

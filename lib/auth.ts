@@ -17,6 +17,24 @@ export async function getPermissions(): Promise<Perms> {
 }
 
 /**
+ * Alcance por sucursal (gestión por mostradores). Un usuario con sucursal
+ * asignada y que NO es admin ve sólo la data de su local; admin o sin sucursal
+ * ven todo. `scoped` = true → filtrar por `storeId`.
+ */
+export async function getStoreScope(): Promise<{ storeId: string | null; scoped: boolean }> {
+  const sb = await createClient();
+  const { data: auth } = await sb.auth.getUser();
+  if (!auth?.user) return { storeId: null, scoped: false };
+  const [{ data: profile }, { data: isAdmin }] = await Promise.all([
+    sb.from("profiles").select("store_id").eq("id", auth.user.id).maybeSingle(),
+    sb.rpc("is_admin"),
+  ]);
+  const storeId = (profile?.store_id as string | null) ?? null;
+  const scoped = isAdmin !== true && storeId != null;
+  return { storeId: scoped ? storeId : null, scoped };
+}
+
+/**
  * Guard de server action (capa 2 de la seguridad en 3 capas).
  * Patrón de uso:
  *   const denied = await requireCan("productos", true);

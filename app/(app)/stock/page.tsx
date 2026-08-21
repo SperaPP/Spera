@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Boxes, ClipboardCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getPermissions } from "@/lib/auth";
+import { getPermissions, getStoreScope } from "@/lib/auth";
 import { canView, canEdit } from "@/lib/permissions";
 import { ProductSearch } from "@/components/product-search";
 import { StockTable } from "@/components/stock-table";
@@ -14,7 +14,13 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
   const sb = await createClient();
 
   const { data: warehouses } = await sb.from("warehouses").select("id, name").eq("active", true).order("name");
-  const whs = warehouses ?? [];
+  // Gestión por mostradores: mostrar sólo el depósito del local del usuario.
+  const { storeId: scopeStore } = await getStoreScope();
+  let whs = warehouses ?? [];
+  if (scopeStore) {
+    const { data: st } = await sb.from("stores").select("warehouse_id").eq("id", scopeStore).maybeSingle();
+    whs = whs.filter((w) => w.id === st?.warehouse_id);
+  }
   const perms = await getPermissions();
   const canControl = canView(perms, "control_stock");
   const canEditStock = canEdit(perms, "stock");

@@ -6,6 +6,7 @@ import { ProductSearch } from "@/components/product-search";
 import { FacturarButton } from "@/components/facturar-button";
 import { ImprimirArmadoButton } from "@/components/imprimir-armado-button";
 import { VentasFilters } from "@/components/ventas-filters";
+import { getStoreScope } from "@/lib/auth";
 
 const AR_OFFSET = "-03:00";
 
@@ -21,10 +22,13 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   const query = (q ?? "").trim();
   const sb = await createClient();
 
-  const [{ data: isAdmin }, { data: stores }] = await Promise.all([
+  const [{ data: isAdmin }, { data: storesAll }, { storeId: scopeStore }] = await Promise.all([
     sb.rpc("is_admin"),
     sb.from("stores").select("id, name").eq("active", true).order("name"),
+    getStoreScope(),
   ]);
+  // Gestión por mostradores: si está acotado, sólo su local (en query y en el filtro).
+  const stores = scopeStore ? (storesAll ?? []).filter((s) => s.id === scopeStore) : storesAll;
 
   const sel = "id, number, status, fulfillment_status, created_at, total, armado_printed_at, customers(name), stores(name), sale_items(count)";
   const FULFILL: Record<string, { label: string; cls: string }> = {
@@ -47,6 +51,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   }
 
   // Filtros
+  if (scopeStore) req = req.eq("store_id", scopeStore);
   if (store) req = req.eq("store_id", store);
   if (desde) req = req.gte("created_at", `${desde}T00:00:00${AR_OFFSET}`);
   if (hasta) req = req.lte("created_at", `${hasta}T23:59:59${AR_OFFSET}`);
@@ -60,6 +65,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
 
   // Disponibles para "Imprimir todos": sin imprimir y no anuladas, según filtros (menos "impreso").
   let availReq = sb.from("sales").select("id", { count: "exact", head: true }).is("armado_printed_at", null).neq("status", "anulada");
+  if (scopeStore) availReq = availReq.eq("store_id", scopeStore);
   if (query) {
     if (isNum && custIds!.length) availReq = availReq.or(`number.eq.${Number(query)},customer_id.in.(${custIds!.join(",")})`);
     else if (isNum) availReq = availReq.eq("number", Number(query));

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { ArmadoTodosPrint } from "@/components/armado-todos-print";
 import type { ArmadoSale, ArmadoItem } from "@/components/armado-print";
 
@@ -31,6 +32,8 @@ export default async function ArmadoTodosPage({ searchParams }: { searchParams: 
     else if (custIds.length) req = req.in("customer_id", custIds);
     else req = req.eq("id", "00000000-0000-0000-0000-000000000000");
   }
+  const { storeId: scopeStore } = await getStoreScope();
+  if (scopeStore) req = req.eq("store_id", scopeStore);
   if (store) req = req.eq("store_id", store);
   if (desde) req = req.gte("created_at", `${desde}T00:00:00${AR_OFFSET}`);
   if (hasta) req = req.lte("created_at", `${hasta}T23:59:59${AR_OFFSET}`);

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Truck, ScanLine, ChevronRight, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 
 function relName(r: unknown): string | null {
@@ -32,10 +33,13 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
   const filter = estado && TABS.some((t) => t.key === estado) ? estado : "pendiente";
   const sb = await createClient();
   const isTransfers = filter === "transferencias";
+  const { storeId: scopeStore } = await getStoreScope();
 
+  const pendReq = sb.from("sales").select("*", { count: "exact", head: true }).eq("status", "completada").eq("fulfillment_status", "pendiente");
+  const ctrlReq = sb.from("sales").select("*", { count: "exact", head: true }).eq("status", "completada").eq("fulfillment_status", "controlado");
   const [{ count: pend }, { count: ctrl }, { count: envs }] = await Promise.all([
-    sb.from("sales").select("*", { count: "exact", head: true }).eq("status", "completada").eq("fulfillment_status", "pendiente"),
-    sb.from("sales").select("*", { count: "exact", head: true }).eq("status", "completada").eq("fulfillment_status", "controlado"),
+    scopeStore ? pendReq.eq("store_id", scopeStore) : pendReq,
+    scopeStore ? ctrlReq.eq("store_id", scopeStore) : ctrlReq,
     sb.from("stock_transfers").select("*", { count: "exact", head: true }).eq("status", "enviada"),
   ]);
   const counts: Record<string, number> = { pendiente: pend ?? 0, controlado: ctrl ?? 0, transferencias: envs ?? 0 };
@@ -53,6 +57,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
       .from("sales")
       .select("id, number, created_at, total, channel, fulfillment_status, stores(name), customers(name), shipping_methods(name)")
       .eq("status", "completada").order("created_at", { ascending: false }).limit(100);
+    if (scopeStore) req = req.eq("store_id", scopeStore);
     if (filter !== "todos") req = req.eq("fulfillment_status", filter);
     const { data } = await req;
     sales = data ?? [];

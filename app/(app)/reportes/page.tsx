@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatNumber, TZ, todayLocal } from "@/lib/format";
 
 const PERIODS = [
@@ -38,11 +39,12 @@ export default async function ReportesPage({ searchParams }: { searchParams: Pro
   const { from, to } = range(periodo);
 
   const sb = await createClient();
+  const { storeId: scopeStore } = await getStoreScope();
   const [{ data: summary }, { data: byStore }, { data: byMethod }, { data: top }] = await Promise.all([
-    sb.rpc("report_summary", { p_from: from, p_to: to }),
-    sb.rpc("report_by_store", { p_from: from, p_to: to }),
-    sb.rpc("report_by_method", { p_from: from, p_to: to }),
-    sb.rpc("report_top_products", { p_from: from, p_to: to, p_limit: 10 }),
+    sb.rpc("report_summary", { p_from: from, p_to: to, p_store_id: scopeStore }),
+    sb.rpc("report_by_store", { p_from: from, p_to: to, p_store_id: scopeStore }),
+    sb.rpc("report_by_method", { p_from: from, p_to: to, p_store_id: scopeStore }),
+    sb.rpc("report_top_products", { p_from: from, p_to: to, p_limit: 10, p_store_id: scopeStore }),
   ]);
 
   const s = (summary ?? { ventas: 0, cantidad: 0, unidades: 0 }) as { ventas: number; cantidad: number; unidades: number };
