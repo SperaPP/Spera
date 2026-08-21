@@ -115,7 +115,7 @@ export function EtiquetasPrint({ productName, variants }: { productName: string;
             <div
               key={l.key}
               className="etq-label flex flex-col overflow-hidden rounded border border-neutral-300 bg-white text-neutral-900"
-              style={{ width: `${w}mm`, height: `${h}mm`, padding: "1mm" }}
+              style={{ width: `${w}mm`, height: `${h}mm`, padding: "1.5mm 1mm 2mm" }}
             >
               <div className="w-full overflow-hidden text-center font-bold leading-none" style={{ fontSize: `${nameSize}mm`, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word" }}>{productName}</div>
               {l.label && <div className="mt-[0.5mm] w-full truncate text-center font-semibold leading-none" style={{ fontSize: `${varSize}mm` }}>{l.label}</div>}
