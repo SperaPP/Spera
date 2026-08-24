@@ -4,6 +4,7 @@ import { ArrowLeft, ImageOff } from "lucide-react";
 import { getPortalCustomer } from "@/lib/portal";
 import { centralWarehouseId, portalProduct } from "@/lib/portal-catalog";
 import { formatMoney } from "@/lib/format";
+import { PortalAddToCart } from "@/components/portal-add-to-cart";
 
 export default async function PortalProductoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -48,22 +49,8 @@ export default async function PortalProductoPage({ params }: { params: Promise<{
           {p.description && <p className="mt-3 text-sm text-muted">{p.description}</p>}
 
           <div className="mt-5">
-            <h2 className="mb-2 text-sm font-medium text-ink">Disponible</h2>
-            {p.variants.length === 0 ? (
-              <p className="text-sm text-muted">Sin stock por el momento.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {p.variants.map((v) => (
-                  <span key={v.id} className="rounded-lg border border-line-strong px-3 py-1.5 text-sm text-ink">
-                    {v.label ?? "Único"} <span className="ml-1 text-xs text-muted">({v.stock})</span>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6 rounded-xl border border-dashed border-line-strong bg-canvas px-4 py-3 text-sm text-muted">
-            Muy pronto vas a poder armar tu pedido desde acá.
+            <h2 className="mb-2 text-sm font-medium text-ink">Elegí cantidades</h2>
+            <PortalAddToCart productId={p.id} name={p.name} price={p.price} image={p.images[0] ?? null} variants={p.variants} />
           </div>
         </div>
       </div>

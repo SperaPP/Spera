@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogOut, Clock, XCircle } from "lucide-react";
 import { getPortalCustomer } from "@/lib/portal";
+import { CartProvider, CartButton } from "@/components/portal-cart";
 import { logoutPortal } from "../actions";
 
 export default async function TiendaLayout({ children }: { children: React.ReactNode }) {
@@ -34,23 +35,26 @@ export default async function TiendaLayout({ children }: { children: React.React
   }
 
   return (
-    <div className="min-h-screen bg-canvas">
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-4 border-b border-line bg-card px-4 sm:px-6">
-        <Link href="/portal" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-fg">B</span>
-          <span className="font-semibold text-ink">Portal Mayorista</span>
-        </Link>
-        <Link href="/portal/catalogo" className="text-sm font-medium text-muted transition-colors hover:text-ink">Catálogo</Link>
-        <div className="ml-auto flex items-center gap-4">
-          <span className="hidden text-sm text-muted sm:inline">{customer.name}</span>
-          <form action={logoutPortal}>
-            <button className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-ink">
-              <LogOut className="h-4 w-4" /> Salir
-            </button>
-          </form>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
-    </div>
+    <CartProvider>
+      <div className="min-h-screen bg-canvas">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-4 border-b border-line bg-card px-4 sm:px-6">
+          <Link href="/portal" className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-fg">B</span>
+            <span className="font-semibold text-ink">Portal Mayorista</span>
+          </Link>
+          <Link href="/portal/catalogo" className="text-sm font-medium text-muted transition-colors hover:text-ink">Catálogo</Link>
+          <div className="ml-auto flex items-center gap-2 sm:gap-4">
+            <span className="hidden text-sm text-muted sm:inline">{customer.name}</span>
+            <CartButton />
+            <form action={logoutPortal}>
+              <button className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-ink">
+                <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Salir</span>
+              </button>
+            </form>
+          </div>
+        </header>
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
+      </div>
+    </CartProvider>
   );
 }

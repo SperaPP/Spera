@@ -137,6 +137,17 @@ export async function agregarValorCatalogo(
   return { ok: true, item: data };
 }
 
+/** Marca/desmarca un producto como destacado (portal mayorista). */
+export async function setDestacado(productId: string, value: boolean): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.from("products").update({ featured: value }).eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath(`/productos/${productId}`);
+  return { ok: true };
+}
+
 // ── Precio Mayorista (base) → deriva Publico (= Mayorista × 2) ──
 export async function setPrecioMayorista(productId: string, mayorista: number): Promise<ActionState> {
   const denied = await requireCan("productos", true);

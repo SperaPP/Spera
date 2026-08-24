@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPortalCustomer } from "@/lib/portal";
 import type { ActionState } from "@/lib/auth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -56,6 +57,27 @@ export async function loginPortal(_prev: ActionState, formData: FormData): Promi
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) return { error: "Email o contraseña incorrectos." };
   redirect("/portal");
+}
+
+/** Confirma el pedido del portal: crea la venta, descuenta stock y va a cuenta corriente. */
+export async function crearPedidoPortal(
+  items: { variantId: string; quantity: number }[]
+): Promise<ActionState & { saleId?: string; number?: number }> {
+  const { customer } = await getPortalCustomer();
+  if (!customer || customer.portalStatus !== "aprobado") return { error: "No autorizado." };
+  const clean = (items ?? []).filter((i) => i.variantId && i.quantity > 0);
+  if (!clean.length) return { error: "El pedido está vacío." };
+
+  const sb = await createClient(); // cliente con cookie → auth.uid() = cliente del portal
+  const { data: saleId, error } = await sb.rpc("portal_create_order", {
+    p_customer: customer.id,
+    p_items: clean.map((i) => ({ variant_id: i.variantId, quantity: i.quantity })),
+  });
+  if (error) return { error: error.message };
+
+  const admin = createAdminClient();
+  const { data: s } = await admin.from("sales").select("number").eq("id", saleId as string).maybeSingle();
+  return { ok: true, saleId: saleId as string, number: s?.number ?? undefined };
 }
 
 export async function logoutPortal() {

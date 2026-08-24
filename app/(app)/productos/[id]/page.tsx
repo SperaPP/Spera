@@ -7,6 +7,7 @@ import { canEdit } from "@/lib/permissions";
 import { ProductPhotos } from "@/components/product-photos";
 import { VariantesManager } from "@/components/variantes-manager";
 import { PrecioEditor } from "@/components/precio-editor";
+import { DestacadoToggle } from "@/components/destacado-toggle";
 
 const VARIATION_LABEL: Record<string, string> = {
   none: "Sin variantes",
@@ -29,7 +30,7 @@ export default async function ProductoDetallePage({
   const { data: product } = await sb
     .from("products")
     .select(
-      "id, name, description, variation_type, tax_rate, active, lifecycle, external_id, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active, loc_fila, loc_estante, loc_cubiculo)"
+      "id, name, description, variation_type, tax_rate, active, lifecycle, featured, external_id, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active, loc_fila, loc_estante, loc_cubiculo)"
     )
     .eq("id", id)
     .single();
@@ -112,6 +113,7 @@ export default async function ProductoDetallePage({
             ) : (
               <span className="rounded-full bg-canvas px-2.5 py-0.5 text-xs font-medium text-muted">Inactivo</span>
             )}
+            {editable && <DestacadoToggle productId={product.id} featured={product.featured === true} />}
             <Link href={`/productos/${product.id}/editar`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
               <Pencil className="h-3.5 w-3.5" /> Editar
             </Link>
