@@ -57,5 +57,27 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Gateo por módulo: acceso directo por URL a una pantalla requiere el permiso
+  // de ver ese módulo (el sidebar ya oculta lo que no corresponde; esto cubre
+  // el pegar la URL a mano). El orden importa: los prefijos más específicos primero.
+  const MODULES: [string, string][] = [
+    ["/stock/control", "control_stock"],
+    ["/pos", "pos"], ["/ventas", "ventas"], ["/logistica", "logistica"],
+    ["/productos", "productos"], ["/etiquetas", "productos"],
+    ["/stock", "stock"], ["/transferencias", "transferencias"],
+    ["/clientes", "clientes"], ["/precios", "precios"], ["/caja", "caja"],
+    ["/cobranzas", "cobranzas"], ["/reportes", "reportes"], ["/configuracion", "configuracion"],
+  ];
+  const gated = MODULES.find(([prefix]) => path === prefix || path.startsWith(prefix + "/"));
+  if (gated) {
+    const { data: perms } = await supabase.rpc("get_my_permissions");
+    const p = (perms ?? {}) as Record<string, { view?: boolean }>;
+    if (p[gated[1]]?.view !== true) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return response;
 }
