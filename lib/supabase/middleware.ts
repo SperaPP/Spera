@@ -38,11 +38,13 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isStaffLogin = path === "/login" || path.startsWith("/login/");
   const isPortal = path === "/portal" || path.startsWith("/portal");
-  const isPortalPublic = path.startsWith("/portal/login") || path.startsWith("/portal/registro");
+  const isPortalPublic = path.startsWith("/portal/login") || path.startsWith("/portal/registro") || path.startsWith("/portal/recuperar");
+  // Recuperación de contraseña (personal y portal) y callback del mail.
+  const isResetPublic = path.startsWith("/recuperar") || path.startsWith("/auth/") || path.startsWith("/nueva-contrasena");
 
   if (!user) {
     // Público: login de personal y registro/login del portal.
-    if (isStaffLogin || isPortalPublic) return response;
+    if (isStaffLogin || isPortalPublic || isResetPublic) return response;
     const url = request.nextUrl.clone();
     url.pathname = isPortal ? "/portal/login" : "/login";
     return NextResponse.redirect(url);

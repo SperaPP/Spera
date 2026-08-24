@@ -34,7 +34,10 @@ export default function PortalLoginPage() {
           </button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-muted">
+        <p className="mt-4 text-center text-sm">
+          <Link href="/portal/recuperar" className="text-muted hover:text-accent hover:underline">¿Olvidaste tu contraseña?</Link>
+        </p>
+        <p className="mt-2 text-center text-sm text-muted">
           ¿No tenés cuenta? <Link href="/portal/registro" className="font-medium text-accent hover:underline">Registrate</Link>
         </p>
       </div>

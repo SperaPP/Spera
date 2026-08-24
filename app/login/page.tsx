@@ -59,6 +59,10 @@ export default function LoginPage() {
             {pending ? "Ingresando…" : "Ingresar"}
           </button>
         </form>
+
+        <p className="mt-5 text-center text-sm">
+          <a href="/recuperar" className="text-muted hover:text-accent hover:underline">¿Olvidaste tu contraseña?</a>
+        </p>
       </div>
     </main>
   );
