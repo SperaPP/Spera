@@ -192,19 +192,6 @@ export async function toggleMetodoDespacho(id: string, active: boolean): Promise
   return { ok: true };
 }
 
-// ── Precios ────────────────────────────────────────────────────
-// Recalcula Publico (= Mayorista × 2) para todos los productos con Mayorista cargado.
-export async function recalcularPrecios(): Promise<ActionState & { count?: number }> {
-  const denied = await requireCan("configuracion", true);
-  if (denied) return denied;
-  const sb = await createClient();
-  const { data, error } = await sb.rpc("recalc_all_pricing");
-  if (error) return { error: error.message };
-  revalidatePath("/configuracion");
-  revalidatePath("/precios");
-  return { ok: true, count: (data as number) ?? 0 };
-}
-
 // ── Cupones (solo perfil con acceso a Configuración) ───────────
 export async function crearCupon(input: {
   code: string; discountType: "percent" | "amount"; discountValue: number;
