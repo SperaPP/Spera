@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Receipt, Gift } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AnularVentaButton } from "@/components/anular-venta-button";
 
@@ -16,11 +17,15 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, status, channel, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
+    .select("id, number, status, channel, store_id, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
     .eq("id", id)
     .single();
 
   if (!sale) notFound();
+
+  // Gestión por mostradores: un usuario acotado no ve ventas de otro local.
+  const { storeId: scopeStore } = await getStoreScope();
+  if (scopeStore && sale.store_id !== scopeStore) notFound();
 
   const items = (sale.sale_items ?? []) as { product_name: string; variant_label: string | null; quantity: number; unit_price: number; line_total: number; returned_qty: number }[];
   const payments = (sale.sale_payments ?? []) as { amount: number; surcharge: number; payment_methods: unknown }[];

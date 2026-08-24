@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 
 function rel<T>(r: unknown): T | null { return (Array.isArray(r) ? r[0] : r) as T | null; }
@@ -17,9 +18,11 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
 
   const { data: s } = await sb
     .from("cash_sessions")
-    .select("id, status, role, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, notes, opened_by, stores(name)")
+    .select("id, status, role, store_id, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, notes, opened_by, stores(name)")
     .eq("id", id).single();
   if (!s) notFound();
+  const { storeId: scopeStore } = await getStoreScope();
+  if (scopeStore && s.store_id !== scopeStore) notFound();
 
   const [{ data: sales }, { data: receipts }, { data: opener }] = await Promise.all([
     sb.from("sales").select("id, number, total, created_at, channel, customers(name), sale_payments(amount, payment_methods(name, affects_cash, kind))").eq("cash_session_id", id).eq("status", "completada").order("created_at"),

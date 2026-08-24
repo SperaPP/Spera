@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { StockMatrix } from "@/components/stock-matrix";
 
 export default async function StockDetallePage({ params }: { params: Promise<{ id: string }> }) {
@@ -13,6 +14,14 @@ export default async function StockDetallePage({ params }: { params: Promise<{ i
     sb.from("warehouses").select("id, name").eq("active", true).order("name"),
   ]);
   if (!product) notFound();
+
+  // Gestión por mostradores: mostrar sólo el depósito del local del usuario.
+  const { storeId: scopeStore } = await getStoreScope();
+  let whs = warehouses ?? [];
+  if (scopeStore) {
+    const { data: st } = await sb.from("stores").select("warehouse_id").eq("id", scopeStore).maybeSingle();
+    whs = whs.filter((w) => w.id === st?.warehouse_id);
+  }
 
   const variants = (product.product_variants ?? []) as { id: string; size: string | null; color: string | null; sku: string | null }[];
   const variantIds = variants.map((v) => v.id);
@@ -35,7 +44,7 @@ export default async function StockDetallePage({ params }: { params: Promise<{ i
       <StockMatrix
         productId={product.id}
         variants={variants.map((v) => ({ id: v.id, label: [v.size, v.color].filter(Boolean).join(" / ") || "Única", sku: v.sku }))}
-        warehouses={warehouses ?? []}
+        warehouses={whs}
         stockMap={stockMap}
       />
     </div>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { ControlPedido } from "@/components/control-pedido";
 
@@ -16,11 +17,13 @@ export default async function ControlPedidoPage({ params }: { params: Promise<{ 
 
   const [{ data: sale }, { data: methods }] = await Promise.all([
     sb.from("sales")
-      .select("id, number, channel, status, fulfillment_status, created_at, tracking, dispatch_notes, dispatched_at, stores(name), customers(name), shipping_methods(name), sale_items(id, product_name, variant_label, quantity, product_variants(sku, barcode))")
+      .select("id, number, channel, status, store_id, fulfillment_status, created_at, tracking, dispatch_notes, dispatched_at, stores(name), customers(name), shipping_methods(name), sale_items(id, product_name, variant_label, quantity, product_variants(sku, barcode))")
       .eq("id", id).single(),
     sb.from("shipping_methods").select("id, name").eq("active", true).order("position"),
   ]);
   if (!sale) notFound();
+  const { storeId: scopeStore } = await getStoreScope();
+  if (scopeStore && sale.store_id !== scopeStore) notFound();
 
   const items = ((sale.sale_items ?? []) as { id: string; product_name: string; variant_label: string | null; quantity: number; product_variants: unknown }[]).map((it) => {
     const v = (Array.isArray(it.product_variants) ? it.product_variants[0] : it.product_variants) as { sku: string | null; barcode: string | null } | null;

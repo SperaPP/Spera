@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { TicketPrint, type TicketSale } from "@/components/ticket-print";
 
 function relName(r: unknown): string | null {
@@ -20,10 +21,12 @@ export default async function TicketPage({
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, created_at, subtotal, discount, total, stores(name), organizations(name), sale_items(product_name, variant_label, quantity, unit_price, line_total), sale_payments(amount, payment_methods(name))")
+    .select("id, number, store_id, created_at, subtotal, discount, total, stores(name), organizations(name), sale_items(product_name, variant_label, quantity, unit_price, line_total), sale_payments(amount, payment_methods(name))")
     .eq("id", id)
     .single();
   if (!sale) notFound();
+  const { storeId: scopeStore } = await getStoreScope();
+  if (scopeStore && sale.store_id !== scopeStore) notFound();
 
   const shaped: TicketSale = {
     id: sale.id,
