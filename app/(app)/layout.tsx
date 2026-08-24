@@ -18,10 +18,12 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   const [{ data: profile }, perms, { data: isAdmin }] = await Promise.all([
-    sb.from("profiles").select("full_name, email").eq("id", user.id).single(),
+    sb.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
     getPermissions(),
     sb.rpc("is_admin"),
   ]);
+  // Usuario del portal mayorista (sin perfil de empleado): fuera del panel interno.
+  if (!profile) redirect("/portal");
 
   const displayName = profile?.full_name || profile?.email || user.email;
 

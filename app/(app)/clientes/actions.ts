@@ -81,6 +81,34 @@ export async function editarCliente(input: EditarClienteInput): Promise<ActionSt
   return { ok: true };
 }
 
+/** Aprueba una solicitud del portal: habilita al cliente y le asigna su lista. */
+export async function aprobarPortalCliente(customerId: string, customerTypeId: string | null): Promise<ActionState> {
+  const denied = await requireCan("clientes", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+  const { error } = await sb.from("customers")
+    .update({ portal_status: "aprobado", customer_type_id: customerTypeId, active: true })
+    .eq("id", customerId).eq("organization_id", orgId);
+  if (error) return { error: error.message };
+  revalidatePath("/clientes");
+  return { ok: true };
+}
+
+/** Rechaza una solicitud del portal. */
+export async function rechazarPortalCliente(customerId: string): Promise<ActionState> {
+  const denied = await requireCan("clientes", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { error: "Sin organización" };
+  const { error } = await sb.from("customers").update({ portal_status: "rechazado" }).eq("id", customerId).eq("organization_id", orgId);
+  if (error) return { error: error.message };
+  revalidatePath("/clientes");
+  return { ok: true };
+}
+
 /** Ajuste manual del saldo de cuenta corriente (reservado a administración). */
 export async function ajustarSaldoCliente(customerId: string, delta: number, reason: string): Promise<ActionState> {
   const denied = await requireAdmin();

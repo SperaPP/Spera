@@ -35,15 +35,21 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLoginRoute = request.nextUrl.pathname.startsWith("/login");
+  const path = request.nextUrl.pathname;
+  const isStaffLogin = path === "/login" || path.startsWith("/login/");
+  const isPortal = path === "/portal" || path.startsWith("/portal");
+  const isPortalPublic = path.startsWith("/portal/login") || path.startsWith("/portal/registro");
 
-  if (!user && !isLoginRoute) {
+  if (!user) {
+    // Público: login de personal y registro/login del portal.
+    if (isStaffLogin || isPortalPublic) return response;
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = isPortal ? "/portal/login" : "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isLoginRoute) {
+  // Logueado en el login de personal → al inicio (el layout deriva a portal si es cliente).
+  if (isStaffLogin) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
+import { SolicitudesPortal } from "@/components/solicitudes-portal";
 
 const FISCAL_LABEL: Record<string, string> = {
   consumidor_final: "Consumidor Final",
@@ -17,13 +18,17 @@ function relName(r: unknown): string | null {
 
 export default async function ClientesPage() {
   const sb = await createClient();
-  const { data: customers } = await sb
-    .from("customers")
-    .select("id, name, fiscal_condition, balance, active, customer_types(name)")
-    .order("name")
-    .limit(200);
+  const [{ data: customers }, { data: pend }, { data: tipos }] = await Promise.all([
+    sb.from("customers").select("id, name, fiscal_condition, balance, active, portal_status, customer_types(name)").order("name").limit(200),
+    sb.from("customers").select("id, name, doc_type, doc_number, email, phone").eq("portal_status", "pendiente").order("created_at", { ascending: true }),
+    sb.from("customer_types").select("id, name").order("name"),
+  ]);
 
-  const rows = customers ?? [];
+  // La lista principal no muestra las solicitudes pendientes (van en su sección).
+  const rows = (customers ?? []).filter((c) => c.portal_status !== "pendiente");
+  const pendientes = (pend ?? []).map((p) => ({
+    id: p.id, name: p.name, doc: p.doc_number ? `${p.doc_type ?? ""} ${p.doc_number}`.trim() : null, email: p.email, phone: p.phone,
+  }));
 
   return (
     <div>
@@ -40,6 +45,8 @@ export default async function ClientesPage() {
           Nuevo cliente
         </Link>
       </div>
+
+      <SolicitudesPortal pending={pendientes} tipos={tipos ?? []} />
 
       {rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line-strong bg-card py-16 text-center">
