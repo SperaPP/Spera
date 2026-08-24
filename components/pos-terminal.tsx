@@ -413,6 +413,19 @@ function Terminal({
     setPayments([...others, { methodId: m.id, amount: String(apply) }]);
   }
 
+  // Fía el saldo restante: lo carga con el medio "Cuenta corriente" (suma DEUDA
+  // al cliente en create_sale, no saldo a favor).
+  function aCuentaCorriente() {
+    const m = methods.find((x) => x.kind === "cuenta_corriente");
+    if (!m) return toast.error("No hay medio de Cuenta corriente configurado.");
+    const isCC = (methodId: string) => methods.find((x) => x.id === methodId)?.kind === "cuenta_corriente";
+    const others = payments.filter((p) => !isCC(p.methodId));
+    const paidExcl = others.reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const rest = Math.round((total - paidExcl) * 100) / 100;
+    if (rest <= 0) { toast.message("El pago ya cubre el total; no queda saldo para fiar."); return; }
+    setPayments([...others, { methodId: m.id, amount: String(rest) }]);
+  }
+
   function confirmar() {
     if (cart.length === 0) return toast.error("El carrito está vacío.");
     if (wholesale && !customer) return toast.error("Identificá al cliente (mayorista).");
@@ -619,7 +632,10 @@ function Terminal({
           <div className={`${card} p-5`}>
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-faint">Cobro</span>
-              <button onClick={() => setPayments((p) => { const n = [...p]; if (n[0]) n[0] = { ...n[0], amount: String(total) }; return n; })} className="text-xs font-medium text-accent hover:underline">Efectivo exacto</button>
+              <div className="flex items-center gap-3">
+                {wholesale && customer && <button onClick={aCuentaCorriente} className="text-xs font-medium text-accent hover:underline">A cuenta corriente</button>}
+                <button onClick={() => setPayments((p) => { const n = [...p]; if (n[0]) n[0] = { ...n[0], amount: String(total) }; return n; })} className="text-xs font-medium text-accent hover:underline">Efectivo exacto</button>
+              </div>
             </div>
             {wholesale && creditAvailable > 0 && (
               <button onClick={aplicarSaldoAFavor} className="mb-2.5 flex w-full items-center justify-between rounded-lg bg-ok-bg px-2.5 py-2 text-xs font-medium text-ok transition-opacity hover:opacity-80">
