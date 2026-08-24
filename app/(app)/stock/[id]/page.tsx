@@ -27,9 +27,13 @@ export default async function StockDetallePage({ params }: { params: Promise<{ i
   const variantIds = variants.map((v) => v.id);
 
   const stockMap: Record<string, number> = {};
+  const reservedMap: Record<string, number> = {};
   if (variantIds.length) {
-    const { data: st } = await sb.from("stock").select("variant_id, warehouse_id, quantity").in("variant_id", variantIds);
-    for (const s of st ?? []) stockMap[`${s.variant_id}|${s.warehouse_id}`] = Number(s.quantity);
+    const { data: st } = await sb.from("stock").select("variant_id, warehouse_id, quantity, reserved").in("variant_id", variantIds);
+    for (const s of st ?? []) {
+      stockMap[`${s.variant_id}|${s.warehouse_id}`] = Number(s.quantity);
+      reservedMap[`${s.variant_id}|${s.warehouse_id}`] = Number(s.reserved ?? 0);
+    }
   }
 
   return (
@@ -39,13 +43,14 @@ export default async function StockDetallePage({ params }: { params: Promise<{ i
         Volver a stock
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight text-ink">{product.name}</h1>
-      <p className="mt-1 mb-6 text-sm text-muted">Editá la existencia de cada variante por depósito. Se registra como ajuste.</p>
+      <p className="mt-1 mb-6 text-sm text-muted">Editás el stock <strong>físico</strong> de cada variante por depósito (se registra como ajuste). Si hay unidades reservadas por pedidos sin despachar, se muestran debajo.</p>
 
       <StockMatrix
         productId={product.id}
         variants={variants.map((v) => ({ id: v.id, label: [v.size, v.color].filter(Boolean).join(" / ") || "Única", sku: v.sku }))}
         warehouses={whs}
         stockMap={stockMap}
+        reservedMap={reservedMap}
       />
     </div>
   );

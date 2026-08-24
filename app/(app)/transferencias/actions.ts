@@ -19,7 +19,7 @@ export async function buscarVarianteTransferencia(code: string, fromWarehouseId:
 
   const { data: st } = await sb
     .from("stock")
-    .select("quantity")
+    .select("quantity, reserved")
     .eq("warehouse_id", fromWarehouseId)
     .eq("variant_id", v.id)
     .maybeSingle();
@@ -28,7 +28,9 @@ export async function buscarVarianteTransferencia(code: string, fromWarehouseId:
   const name = (Array.isArray(prod) ? prod[0]?.name : (prod as { name: string } | null)?.name) ?? "";
   const label = [v.size, v.color].filter(Boolean).join(" / ") || null;
 
-  return { ok: true as const, variantId: v.id, name, label, available: Number(st?.quantity ?? 0) };
+  // Disponible = físico − reservado: no se transfiere mercadería comprometida por un pedido.
+  const available = Number(st?.quantity ?? 0) - Number(st?.reserved ?? 0);
+  return { ok: true as const, variantId: v.id, name, label, available: Math.max(0, available) };
 }
 
 const schema = z.object({

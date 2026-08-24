@@ -72,8 +72,9 @@ export async function portalProduct(productId: string, org: string, list: string
   const variantIds = vars.map((v) => v.id);
   const stockByVariant = new Map<string, number>();
   if (variantIds.length) {
-    const { data: st } = await admin.from("stock").select("variant_id, quantity").eq("warehouse_id", warehouse).in("variant_id", variantIds);
-    for (const s of st ?? []) stockByVariant.set(s.variant_id, Number(s.quantity));
+    const { data: st } = await admin.from("stock").select("variant_id, quantity, reserved").eq("warehouse_id", warehouse).in("variant_id", variantIds);
+    // Disponible = físico − reservado (no se ofrece lo comprometido por otros pedidos).
+    for (const s of st ?? []) stockByVariant.set(s.variant_id, Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0)));
   }
 
   const { data: imgs } = await admin.from("product_images").select("path, is_primary").eq("product_id", productId).order("is_primary", { ascending: false });

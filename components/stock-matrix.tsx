@@ -14,12 +14,14 @@ export function StockMatrix({
   variants,
   warehouses,
   stockMap,
+  reservedMap = {},
   readOnly = false,
 }: {
   productId: string;
   variants: Variant[];
   warehouses: Warehouse[];
   stockMap: Record<string, number>;
+  reservedMap?: Record<string, number>;
   readOnly?: boolean;
 }) {
   const init: Record<string, number> = {};
@@ -78,6 +80,7 @@ export function StockMatrix({
               </td>
               {warehouses.map((w) => {
                 const k = key(v.id, w.id);
+                const res = reservedMap[k] ?? 0;
                 return (
                   <td key={w.id} className="px-3 py-2.5 text-center">
                     <input
@@ -90,6 +93,11 @@ export function StockMatrix({
                       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                       className="w-20 rounded-lg border border-line-strong bg-card px-2 py-1.5 text-center text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-60"
                     />
+                    {res > 0 && (
+                      <div className="mt-1 text-[11px] text-warn" title="Reservado por pedidos sin despachar">
+                        {res} reserv. · {(parseInt(draft[k], 10) || 0) - res} disp.
+                      </div>
+                    )}
                   </td>
                 );
               })}

@@ -25,19 +25,13 @@ export async function despacharPedido(saleId: string, shippingMethodId: string, 
   if (denied) return denied;
   if (!shippingMethodId) return { error: "Elegí el método de despacho" };
   const sb = await createClient();
-  const { data: auth } = await sb.auth.getUser();
-  const { error } = await sb
-    .from("sales")
-    .update({
-      fulfillment_status: "despachado",
-      shipping_method_id: shippingMethodId,
-      tracking: tracking.trim() || null,
-      dispatch_notes: notes.trim() || null,
-      dispatched_at: new Date().toISOString(),
-      dispatched_by: auth?.user?.id ?? null,
-    })
-    .eq("id", saleId)
-    .eq("fulfillment_status", "controlado");
+  // El despacho descuenta el físico y libera la reserva (RPC atómica).
+  const { error } = await sb.rpc("dispatch_sale", {
+    p_sale_id: saleId,
+    p_shipping_method_id: shippingMethodId,
+    p_tracking: tracking.trim() || null,
+    p_notes: notes.trim() || null,
+  });
   if (error) return { error: error.message };
   revalidatePath("/logistica");
   revalidatePath(`/logistica/${saleId}`);
