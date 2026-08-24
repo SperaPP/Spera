@@ -40,6 +40,7 @@ export default async function TiendaLayout({ children }: { children: React.React
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-fg">B</span>
           <span className="font-semibold text-ink">Portal Mayorista</span>
         </Link>
+        <Link href="/portal/catalogo" className="text-sm font-medium text-muted transition-colors hover:text-ink">Catálogo</Link>
         <div className="ml-auto flex items-center gap-4">
           <span className="hidden text-sm text-muted sm:inline">{customer.name}</span>
           <form action={logoutPortal}>
