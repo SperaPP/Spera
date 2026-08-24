@@ -42,7 +42,11 @@ export default async function TiendaLayout({ children }: { children: React.React
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-fg">B</span>
             <span className="font-semibold text-ink">Portal Mayorista</span>
           </Link>
-          <Link href="/portal/catalogo" className="text-sm font-medium text-muted transition-colors hover:text-ink">Catálogo</Link>
+          <nav className="flex items-center gap-4">
+            <Link href="/portal/catalogo" className="text-sm font-medium text-muted transition-colors hover:text-ink">Catálogo</Link>
+            <Link href="/portal/pedidos" className="hidden text-sm font-medium text-muted transition-colors hover:text-ink sm:inline">Mis pedidos</Link>
+            <Link href="/portal/cuenta" className="hidden text-sm font-medium text-muted transition-colors hover:text-ink sm:inline">Mi cuenta</Link>
+          </nav>
           <div className="ml-auto flex items-center gap-2 sm:gap-4">
             <span className="hidden text-sm text-muted sm:inline">{customer.name}</span>
             <CartButton />
