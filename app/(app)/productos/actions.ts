@@ -94,7 +94,7 @@ export async function editarProducto(input: EditarProductoInput): Promise<Action
   const d = parsed.data;
 
   const sb = await createClient();
-  const { error } = await sb.from("products").update({
+  const update: Record<string, unknown> = {
     name: d.name,
     description: d.description || null,
     category_id: d.categoryId,
@@ -102,7 +102,10 @@ export async function editarProducto(input: EditarProductoInput): Promise<Action
     tax_rate: d.taxRate,
     active: d.active,
     lifecycle: d.lifecycle,
-  }).eq("id", d.id);
+  };
+  // Si se discontinúa, se apaga la sincronización con Tiendanube automáticamente.
+  if (d.lifecycle === "discontinuo") update.tn_sync = false;
+  const { error } = await sb.from("products").update(update).eq("id", d.id);
   if (error) return { error: error.message };
 
   revalidatePath("/productos");
@@ -153,6 +156,11 @@ export async function setTnSync(productId: string, value: boolean): Promise<Acti
   const denied = await requireCan("productos", true);
   if (denied) return denied;
   const sb = await createClient();
+  // Un producto discontinuo no se manda a Tiendanube (la web es la vidriera vigente).
+  if (value) {
+    const { data: p } = await sb.from("products").select("lifecycle").eq("id", productId).maybeSingle();
+    if (p?.lifecycle === "discontinuo") return { error: "Un producto discontinuo no se puede sincronizar con Tiendanube." };
+  }
   const { error } = await sb.from("products").update({ tn_sync: value }).eq("id", productId);
   if (error) return { error: error.message };
   revalidatePath(`/productos/${productId}`);

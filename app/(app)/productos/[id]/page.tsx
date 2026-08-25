@@ -115,7 +115,7 @@ export default async function ProductoDetallePage({
               <span className="rounded-full bg-canvas px-2.5 py-0.5 text-xs font-medium text-muted">Inactivo</span>
             )}
             {editable && <DestacadoToggle productId={product.id} featured={product.featured === true} />}
-            {editable && <TnSyncToggle productId={product.id} synced={product.tn_sync === true} />}
+            {editable && <TnSyncToggle productId={product.id} synced={product.tn_sync === true} discontinued={product.lifecycle === "discontinuo"} />}
             <Link href={`/productos/${product.id}/editar`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
               <Pencil className="h-3.5 w-3.5" /> Editar
             </Link>
