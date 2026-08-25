@@ -17,7 +17,7 @@ export default async function ControlPedidoPage({ params }: { params: Promise<{ 
 
   const [{ data: sale }, { data: methods }] = await Promise.all([
     sb.from("sales")
-      .select("id, number, channel, status, store_id, fulfillment_status, created_at, tracking, dispatch_notes, dispatched_at, stores(name), customers(name), shipping_methods(name), sale_items(id, product_name, variant_label, quantity, product_variants(sku, barcode))")
+      .select("id, number, channel, status, store_id, customer_id, total, paid_amount, fulfillment_status, created_at, tracking, dispatch_notes, dispatched_at, stores(name), customers(name), shipping_methods(name), sale_items(id, product_name, variant_label, quantity, product_variants(sku, barcode))")
       .eq("id", id).single(),
     sb.from("shipping_methods").select("id, name").eq("active", true).order("position"),
   ]);
@@ -50,6 +50,9 @@ export default async function ControlPedidoPage({ params }: { params: Promise<{ 
         status={sale.fulfillment_status}
         items={items}
         shippingMethods={methods ?? []}
+        total={Number(sale.total)}
+        paid={Number(sale.paid_amount)}
+        customerId={sale.customer_id}
         dispatch={{ method: relName(sale.shipping_methods), tracking: sale.tracking, notes: sale.dispatch_notes, at: sale.dispatched_at }}
       />
     </div>

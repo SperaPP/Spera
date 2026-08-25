@@ -55,7 +55,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
   } else {
     let req = sb
       .from("sales")
-      .select("id, number, created_at, total, channel, fulfillment_status, stores(name), customers(name), shipping_methods(name)")
+      .select("id, number, created_at, total, paid_amount, channel, fulfillment_status, stores(name), customers(name), shipping_methods(name)")
       .eq("status", "completada").order("created_at", { ascending: false }).limit(100);
     if (scopeStore) req = req.eq("store_id", scopeStore);
     if (filter !== "todos") req = req.eq("fulfillment_status", filter);
@@ -141,6 +141,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
               {sales.map((s) => {
                 const st = STATUS[s.fulfillment_status as string] ?? { label: s.fulfillment_status as string, cls: "bg-canvas text-muted" };
                 const actionable = s.fulfillment_status === "pendiente" || s.fulfillment_status === "controlado";
+                const sinPagar = actionable && Number(s.paid_amount) < Number(s.total) - 0.01;
                 return (
                   <tr key={s.id as string} className="border-b border-line last:border-0 hover:bg-canvas">
                     <td className="px-4 py-3 font-medium text-ink">#{s.number as number}{s.channel === "cambio" && <span className="ml-1.5 text-xs text-muted">(cambio)</span>}</td>
@@ -150,6 +151,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(Number(s.total))}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
+                      {sinPagar && <span className="ml-2 rounded-full bg-danger-bg px-2 py-0.5 text-[11px] font-medium text-danger">Sin pagar</span>}
                       {s.fulfillment_status === "despachado" && relName(s.shipping_methods) && <span className="ml-2 text-xs text-muted">{relName(s.shipping_methods)}</span>}
                     </td>
                     <td className="px-4 py-3 text-right">

@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ScanLine, CheckCircle2, Circle, Truck, PackageCheck } from "lucide-react";
-import { formatDateTime } from "@/lib/format";
+import { ScanLine, CheckCircle2, Circle, Truck, PackageCheck, AlertTriangle } from "lucide-react";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import { marcarControlado, despacharPedido } from "@/app/(app)/logistica/actions";
 
 type Item = { id: string; name: string; label: string | null; qty: number; sku: string | null; barcode: string | null };
@@ -15,12 +16,15 @@ const input =
 const card = "rounded-2xl border border-line bg-card p-5 shadow-sm";
 
 export function ControlPedido({
-  saleId, status, items, shippingMethods, dispatch,
+  saleId, status, items, shippingMethods, total, paid, customerId, dispatch,
 }: {
   saleId: string;
   status: string;
   items: Item[];
   shippingMethods: Method[];
+  total: number;
+  paid: number;
+  customerId: string | null;
   dispatch: { method: string | null; tracking: string | null; notes: string | null; at: string | null };
 }) {
   const router = useRouter();
@@ -79,6 +83,8 @@ export function ControlPedido({
   }
 
   const controlado = status === "controlado";
+  const unpaid = Math.round((total - paid) * 100) / 100;
+  const pago = unpaid <= 0.01;
 
   return (
     <div className="space-y-5">
@@ -125,31 +131,41 @@ export function ControlPedido({
         )}
       </div>
 
-      {/* Despacho (habilitado tras controlar) */}
+      {/* Despacho (habilitado tras controlar y con el pedido pago) */}
       <div className={`${card} ${!controlado ? "opacity-60" : ""}`}>
         <div className="mb-3 flex items-center gap-2">
           <Truck className="h-4 w-4 text-muted" />
           <h2 className="text-sm font-medium text-ink">Despacho</h2>
           {!controlado && <span className="text-xs text-muted">— controlá el pedido primero</span>}
         </div>
+
+        {!pago && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-danger/30 bg-danger-bg px-4 py-3">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-danger" />
+            <span className="text-sm text-ink">Pedido sin pagar — falta <strong>{formatMoney(unpaid)}</strong>. No se puede despachar hasta cobrarlo.</span>
+            {customerId && (
+              <Link href="/cobranzas/nueva" className="ml-auto rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:bg-accent-hover">Ir a cobrar</Link>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-medium text-muted">Método</label>
-            <select disabled={!controlado} value={methodId} onChange={(e) => setMethodId(e.target.value)} className={input}>
+            <select disabled={!controlado || !pago} value={methodId} onChange={(e) => setMethodId(e.target.value)} className={input}>
               {shippingMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted">N° de seguimiento (opcional)</label>
-            <input disabled={!controlado} value={tracking} onChange={(e) => setTracking(e.target.value)} className={input} placeholder="—" />
+            <input disabled={!controlado || !pago} value={tracking} onChange={(e) => setTracking(e.target.value)} className={input} placeholder="—" />
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-medium text-muted">Notas (opcional)</label>
-            <input disabled={!controlado} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} placeholder="Referencia del despacho" />
+            <input disabled={!controlado || !pago} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} placeholder="Referencia del despacho" />
           </div>
         </div>
         <div className="mt-4 flex justify-end">
-          <button onClick={despachar} disabled={pending || !controlado} className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50">
+          <button onClick={despachar} disabled={pending || !controlado || !pago} className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50">
             <Truck className="h-4 w-4" /> {pending ? "Despachando…" : "Despachar"}
           </button>
         </div>
