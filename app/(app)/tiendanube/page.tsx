@@ -13,6 +13,8 @@ export default async function TiendanubePage({ searchParams }: { searchParams: P
   const { data: org } = await sb.rpc("current_org_id");
   const creds = org ? await getTNCreds(org as string) : null;
   const configured = tnConfigured();
+  const appIdSet = !!process.env.TIENDANUBE_APP_ID;
+  const secretSet = !!process.env.TIENDANUBE_CLIENT_SECRET;
   const storeName = creds ? await fetchStoreName(creds).catch(() => null) : null;
 
   return (
@@ -34,7 +36,11 @@ export default async function TiendanubePage({ searchParams }: { searchParams: P
       {!configured ? (
         <div className="rounded-xl border border-warn/30 bg-warn-bg p-5 text-sm text-ink">
           <p className="font-medium">Faltan las credenciales en el servidor.</p>
-          <p className="mt-1 text-muted">Cargá en Vercel las variables <code>TIENDANUBE_APP_ID</code> y <code>TIENDANUBE_CLIENT_SECRET</code> y volvé a deployar.</p>
+          <ul className="mt-2 space-y-0.5">
+            <li><code>TIENDANUBE_APP_ID</code>: {appIdSet ? <span className="text-ok">✓ cargada</span> : <span className="text-danger">✗ no llega</span>}</li>
+            <li><code>TIENDANUBE_CLIENT_SECRET</code>: {secretSet ? <span className="text-ok">✓ cargada</span> : <span className="text-danger">✗ no llega</span>}</li>
+          </ul>
+          <p className="mt-2 text-muted">Si alguna dice &quot;no llega&quot;: revisá que en Vercel esté escrita igual (sin espacios) y marcada para el entorno <strong>Production</strong>, y volvé a deployar.</p>
         </div>
       ) : creds ? (
         <div className="space-y-5">
