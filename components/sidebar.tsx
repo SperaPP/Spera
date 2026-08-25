@@ -17,6 +17,7 @@ import {
   BarChart3,
   Settings,
   ShieldCheck,
+  Store,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ const NAV: NavItem[] = [
   { href: "/cobranzas", label: "Cobranzas", icon: HandCoins, module: "cobranzas" },
   { href: "/reportes", label: "Reportes", icon: BarChart3, module: "reportes" },
   { href: "/configuracion", label: "Configuración", icon: Settings, module: "configuracion" },
+  { href: "/tiendanube", label: "Tiendanube", icon: Store, adminOnly: true },
   { href: "/usuarios", label: "Usuarios y roles", icon: ShieldCheck, adminOnly: true },
 ];
 
