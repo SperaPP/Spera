@@ -10,9 +10,10 @@
 --         tipos de tela, y los archivos del bucket de fotos.
 --  CONSERVA: usuarios/roles/permisos, locales, depósitos, medios de pago, las
 --            2 listas de precios, tipos de cliente, métodos de despacho,
---            definiciones de cupones (se resetea su uso) y demás config.
+--            definiciones de cupones (se resetea su uso), **la conexión con
+--            Tiendanube (tiendanube_credentials)** y demás config.
 --
---  Antes de correr: tené aplicadas las migraciones hasta la 0035.
+--  Antes de correr: tené aplicadas las migraciones hasta la 0048.
 -- ============================================================================
 
 begin;
@@ -22,17 +23,19 @@ do $$
 declare
   v_list text;
   v_tables text[] := array[
-    'sale_payments', 'sale_items', 'sales',
+    'sale_payments', 'sale_items', 'receipt_allocations', 'sales',
     'receipt_payments', 'receipts',
     'return_items', 'returns', 'exchanges',
     'customer_movements',
-    'cash_adjustments', 'central_deliveries', 'store_petty', 'store_safe', 'cash_sessions',
+    'cash_adjustments', 'central_deliveries', 'store_petty', 'petty_cash', 'store_safe', 'cash_sessions',
     'stock_movements', 'stock', 'stock_transfer_items', 'stock_transfers',
     'price_list_items',
+    'tiendanube_links',
     'product_images', 'product_variants', 'products',
     'customers',
     'categories', 'fabric_types', 'sizes', 'colors'
   ];
+  -- NO tocar: tiendanube_credentials (la conexión con la tienda se conserva).
 begin
   select string_agg(format('public.%I', t), ', ')
     into v_list
