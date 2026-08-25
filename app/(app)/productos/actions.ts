@@ -148,6 +148,17 @@ export async function setDestacado(productId: string, value: boolean): Promise<A
   return { ok: true };
 }
 
+// ── Sincronizar con Tiendanube (flag por producto; el push real es posterior) ──
+export async function setTnSync(productId: string, value: boolean): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.from("products").update({ tn_sync: value }).eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath(`/productos/${productId}`);
+  return { ok: true };
+}
+
 // ── Precio Mayorista (base) → deriva Publico (= Mayorista × 2) ──
 export async function setPrecioMayorista(productId: string, mayorista: number): Promise<ActionState> {
   const denied = await requireCan("productos", true);
