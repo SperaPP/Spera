@@ -4,7 +4,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const API = "https://api.tiendanube.com/2025-03";
+const API = "https://api.tiendanube.com/v1";
 const APP_ID = process.env.TIENDANUBE_APP_ID ?? "";
 const CLIENT_SECRET = process.env.TIENDANUBE_CLIENT_SECRET ?? "";
 const USER_AGENT = process.env.TIENDANUBE_USER_AGENT || "Spera (sistemabody@gmail.com)";
@@ -45,7 +45,7 @@ async function tnFetch(creds: TNCreds, path: string, init?: RequestInit) {
   return fetch(`${API}/${creds.storeId}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${creds.token}`,
+      Authentication: `bearer ${creds.token}`,
       "User-Agent": USER_AGENT,
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
@@ -62,7 +62,7 @@ async function tnGetAll(creds: TNCreds, resourcePath: string): Promise<unknown[]
   while (url && guard < 200) {
     guard++;
     const res: Response = await fetch(url, {
-      headers: { Authorization: `Bearer ${creds.token}`, "User-Agent": USER_AGENT, "Content-Type": "application/json" },
+      headers: { Authentication: `bearer ${creds.token}`, "User-Agent": USER_AGENT, "Content-Type": "application/json" },
     });
     if (res.status === 404) break; // sin resultados
     if (!res.ok) throw new Error(`TN ${res.status}: ${await res.text()}`);
