@@ -4,16 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireCan, type ActionState } from "@/lib/auth";
 
-export async function marcarControlado(saleId: string): Promise<ActionState> {
+export async function marcarControlado(saleId: string, scanned: Record<string, number>): Promise<ActionState> {
   const denied = await requireCan("logistica", true);
   if (denied) return denied;
   const sb = await createClient();
-  const { data: auth } = await sb.auth.getUser();
-  const { error } = await sb
-    .from("sales")
-    .update({ fulfillment_status: "controlado", controlled_at: new Date().toISOString(), controlled_by: auth?.user?.id ?? null })
-    .eq("id", saleId)
-    .eq("fulfillment_status", "pendiente");
+  // El servidor valida que lo escaneado coincida con el pedido antes de pasar a controlado.
+  const { error } = await sb.rpc("control_sale", { p_sale_id: saleId, p_scanned: scanned });
   if (error) return { error: error.message };
   revalidatePath("/logistica");
   revalidatePath(`/logistica/${saleId}`);

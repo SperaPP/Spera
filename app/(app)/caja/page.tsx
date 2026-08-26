@@ -148,6 +148,7 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
                 const own = Number(s.opening_amount) + (cashBySession.get(s.id) ?? 0);
                 const expected = s.role === "apoyo" ? own : own + (apoyoCashByTitular.get(s.id) ?? 0);
                 const declared = s.declared_amount == null ? null : Number(s.declared_amount);
+                const diff = declared == null ? null : Math.round((declared - expected) * 100) / 100;
                 const st = STATUS[s.status] ?? STATUS.abierta;
                 return (
                   <tr key={s.id} className="border-b border-line last:border-0 hover:bg-canvas">
@@ -160,7 +161,14 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
                     </td>
                     <td className="px-4 py-3 text-muted">{formatDateTime(s.opened_at)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(expected)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink">{declared == null ? "—" : formatMoney(declared)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-ink">
+                      {declared == null ? "—" : formatMoney(declared)}
+                      {diff != null && Math.abs(diff) > 0.01 && (
+                        <div className={`text-[11px] font-medium ${diff < 0 ? "text-danger" : "text-warn"}`}>
+                          {diff > 0 ? "sobra " : "falta "}{formatMoney(Math.abs(diff))}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted">{s.to_safe_amount == null ? "—" : formatMoney(Number(s.to_safe_amount))}</td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span></td>
                     <td className="px-4 py-3 text-right">

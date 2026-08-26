@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getStoreScope } from "@/lib/auth";
+import { getStoreScope, getPermissions } from "@/lib/auth";
+import { canEdit } from "@/lib/permissions";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { CerrarCajaAdmin } from "@/components/cerrar-caja-admin";
 
 function rel<T>(r: unknown): T | null { return (Array.isArray(r) ? r[0] : r) as T | null; }
 
@@ -24,6 +26,7 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
   if (!s) notFound();
   const { storeId: scopeStore } = await getStoreScope();
   if (scopeStore && s.store_id !== scopeStore) notFound();
+  const canAdmin = canEdit(await getPermissions(), "caja_admin");
 
   const [{ data: sales }, { data: receipts }, { data: opener }] = await Promise.all([
     sb.from("sales").select("id, number, total, created_at, channel, customers(name), sale_payments(amount, payment_methods(name, affects_cash, kind))").eq("cash_session_id", id).eq("status", "completada").order("created_at"),
@@ -100,6 +103,8 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
         </div>
         {s.notes && <p className="mt-3 border-t border-line pt-3 text-sm text-muted">Notas: {s.notes}</p>}
       </div>
+
+      {s.status === "abierta" && canAdmin && <CerrarCajaAdmin sessionId={s.id} isTitular={s.role !== "apoyo"} />}
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Tile label="Fondo" value={formatMoney(opening)} />

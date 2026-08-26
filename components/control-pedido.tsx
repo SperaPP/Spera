@@ -51,7 +51,7 @@ export function ControlPedido({
   function confirmarControl() {
     if (!complete) return toast.error("Faltan escanear prendas.");
     start(async () => {
-      const r = await marcarControlado(saleId);
+      const r = await marcarControlado(saleId, scanned);
       if (r.error) { toast.error(r.error); return; }
       toast.success("Pedido controlado.");
       router.refresh();

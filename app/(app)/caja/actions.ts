@@ -38,6 +38,31 @@ export async function cerrarCaja(
   return { ok: true };
 }
 
+// Cierre administrativo: cuando el cajero titular no está (faltó, se fue), un
+// administrador cierra su caja para poder reemplazarlo. Requiere permiso caja_admin.
+export async function cerrarCajaAdmin(
+  sessionId: string,
+  declaredAmount: number,
+  keptAmount: number,
+  notes: string
+): Promise<ActionState> {
+  const denied = await requireCan("caja_admin", true);
+  if (denied) return denied;
+
+  const sb = await createClient();
+  const { error } = await sb.rpc("close_cash_session", {
+    p_session_id: sessionId,
+    p_declared_amount: declaredAmount,
+    p_kept_amount: keptAmount,
+    p_notes: notes ? `[Cierre administrativo] ${notes}` : "[Cierre administrativo]",
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/caja");
+  revalidatePath(`/caja/${sessionId}`);
+  return { ok: true };
+}
+
 // ── Administración de caja ─────────────────────────────────────
 export async function ajustarCaja(input: { storeId: string; target: "chica" | "fuerte"; delta: number; reason: string }): Promise<ActionState> {
   const denied = await requireCan("caja_admin", true);
