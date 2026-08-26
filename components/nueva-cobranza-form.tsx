@@ -179,7 +179,10 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
             <span className="text-muted">Imputado a pedidos</span>
             <span className={`font-medium tabular-nums ${allocTotal > collected + 0.01 ? "text-danger" : "text-ink"}`}>{formatMoney(allocTotal)}</span>
           </div>
-          {unallocated > 0.01 && (
+          {allocTotal < 0.01 && collected > 0 && (
+            <p className="mt-1 text-xs text-warn">⚠ No estás imputando a ningún pedido: el saldo baja pero <strong>ningún pedido se destraba para despacho</strong>. Usá &quot;Sugerir&quot; o tildá los que estás cobrando.</p>
+          )}
+          {unallocated > 0.01 && allocTotal >= 0.01 && (
             <p className="mt-1 text-xs text-muted">Sin imputar: {formatMoney(unallocated)} → queda como saldo a favor del cliente.</p>
           )}
           {allocTotal > collected + 0.01 && (

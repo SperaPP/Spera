@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { AnularCobranzaButton } from "@/components/anular-cobranza-button";
 
 function rel<T>(r: unknown): T | null {
   return (Array.isArray(r) ? r[0] : r) as T | null;
@@ -12,15 +13,17 @@ export default async function CobranzaDetallePage({ params }: { params: Promise<
   const { id } = await params;
   const sb = await createClient();
 
-  const { data: receipt } = await sb
-    .from("receipts")
-    .select("id, number, total, notes, created_at, customers(id, name), stores(name), receipt_payments(amount, payment_methods(name))")
-    .eq("id", id)
-    .single();
+  const [{ data: receipt }, { data: isAdmin }] = await Promise.all([
+    sb.from("receipts")
+      .select("id, number, total, notes, status, created_at, customers(id, name), stores(name), receipt_payments(amount, payment_methods(name))")
+      .eq("id", id).single(),
+    sb.rpc("is_admin"),
+  ]);
   if (!receipt) notFound();
 
   const customer = rel<{ id: string; name: string }>(receipt.customers);
   const payments = (receipt.receipt_payments ?? []) as { amount: number; payment_methods: unknown }[];
+  const anulada = receipt.status === "anulada";
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -29,7 +32,13 @@ export default async function CobranzaDetallePage({ params }: { params: Promise<
       </Link>
 
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Cobranza #{receipt.number}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+            Cobranza #{receipt.number}
+            {anulada && <span className="ml-3 rounded-full bg-danger-bg px-2.5 py-0.5 align-middle text-xs font-medium text-danger">Anulada</span>}
+          </h1>
+          {isAdmin && !anulada && <AnularCobranzaButton receiptId={receipt.id} />}
+        </div>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
           <span><span className="text-muted">Fecha: </span><span className="text-ink">{formatDateTime(receipt.created_at)}</span></span>
           {customer && <span><span className="text-muted">Cliente: </span><Link href={`/clientes/${customer.id}`} className="font-medium text-accent hover:underline">{customer.name}</Link></span>}

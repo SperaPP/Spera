@@ -62,7 +62,7 @@ async function computeSummary(
   const sold = grossSold - cambio;
 
   // Cobranzas en efectivo de estos turnos entran al arqueo.
-  const { data: receipts } = await sb.from("receipts").select("id").in("cash_session_id", sessionIds);
+  const { data: receipts } = await sb.from("receipts").select("id").in("cash_session_id", sessionIds).neq("status", "anulada");
   const rids = (receipts ?? []).map((r) => r.id);
   if (rids.length) {
     const { data: rpays } = await sb.from("receipt_payments").select("amount, payment_methods(name, affects_cash)").in("receipt_id", rids);

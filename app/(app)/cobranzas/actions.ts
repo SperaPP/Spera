@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireCan, type ActionState } from "@/lib/auth";
+import { requireCan, requireAdmin, type ActionState } from "@/lib/auth";
 
 const schema = z.object({
   customerId: z.string().uuid(),
@@ -64,4 +64,16 @@ export async function crearCobranza(input: CrearCobranzaInput): Promise<ActionSt
   const { data: rec } = await sb.from("receipts").select("number").eq("id", id as string).single();
   revalidatePath("/cobranzas");
   return { ok: true, number: rec?.number };
+}
+
+// Revertir una cobranza (solo admin): repone el saldo y deshace la imputación.
+export async function anularCobranza(receiptId: string): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.rpc("cancel_receipt", { p_receipt_id: receiptId });
+  if (error) return { error: error.message };
+  revalidatePath("/cobranzas");
+  revalidatePath(`/cobranzas/${receiptId}`);
+  return { ok: true };
 }

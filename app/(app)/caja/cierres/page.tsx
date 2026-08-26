@@ -47,7 +47,7 @@ export default async function CierresPage() {
       }
     }
 
-    const { data: receipts } = await sb.from("receipts").select("id, cash_session_id").in("cash_session_id", ids);
+    const { data: receipts } = await sb.from("receipts").select("id, cash_session_id").in("cash_session_id", ids).neq("status", "anulada");
     const recSession = new Map<string, string>();
     for (const r of receipts ?? []) recSession.set(r.id, r.cash_session_id);
     const recIds = (receipts ?? []).map((r) => r.id);

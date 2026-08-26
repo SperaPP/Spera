@@ -12,7 +12,7 @@ export default async function CobranzasPage() {
   const sb = await createClient();
   const { data } = await sb
     .from("receipts")
-    .select("id, number, total, created_at, customers(name)")
+    .select("id, number, total, created_at, status, customers(name)")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -60,8 +60,11 @@ export default async function CobranzasPage() {
                     <Link href={`/cobranzas/${r.id}`} className="text-accent transition-colors hover:underline">{r.number}</Link>
                   </td>
                   <td className="px-4 py-3 text-muted">{formatDateTime(r.created_at)}</td>
-                  <td className="px-4 py-3 font-medium text-ink">{relName(r.customers) ?? "—"}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(Number(r.total))}</td>
+                  <td className="px-4 py-3 font-medium text-ink">
+                    {relName(r.customers) ?? "—"}
+                    {r.status === "anulada" && <span className="ml-2 rounded-full bg-danger-bg px-2 py-0.5 text-[11px] font-medium text-danger">Anulada</span>}
+                  </td>
+                  <td className={`px-4 py-3 text-right tabular-nums ${r.status === "anulada" ? "text-faint line-through" : "text-ink"}`}>{formatMoney(Number(r.total))}</td>
                 </tr>
               ))}
             </tbody>

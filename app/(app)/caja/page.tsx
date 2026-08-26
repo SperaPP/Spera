@@ -18,6 +18,7 @@ function affectsCash(r: unknown): boolean {
 const STATUS: Record<string, { label: string; cls: string }> = {
   abierta: { label: "Abierta", cls: "bg-warn-bg text-warn" },
   cerrada: { label: "Cerrada", cls: "bg-ok-bg text-ok" },
+  entregada: { label: "Entregada", cls: "bg-canvas text-muted" },
 };
 const TABS = [
   { key: "cerrada", label: "Cerradas" },
@@ -69,7 +70,7 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
       const { data: sp } = await sb.from("sale_payments").select("sale_id, amount, payment_methods(affects_cash)").in("sale_id", saleIds);
       for (const p of sp ?? []) { if (!affectsCash(p.payment_methods)) continue; const ss = saleSession.get(p.sale_id); if (ss) cashBySession.set(ss, (cashBySession.get(ss) ?? 0) + Number(p.amount)); }
     }
-    const { data: recs } = await sb.from("receipts").select("id, cash_session_id").in("cash_session_id", ids);
+    const { data: recs } = await sb.from("receipts").select("id, cash_session_id").in("cash_session_id", ids).neq("status", "anulada");
     const recSession = new Map<string, string>();
     for (const r of recs ?? []) recSession.set(r.id, r.cash_session_id);
     const recIds = (recs ?? []).map((r) => r.id);
@@ -77,6 +78,20 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
       const { data: rp } = await sb.from("receipt_payments").select("receipt_id, amount, payment_methods(affects_cash)").in("receipt_id", recIds);
       for (const p of rp ?? []) { if (!affectsCash(p.payment_methods)) continue; const ss = recSession.get(p.receipt_id); if (ss) cashBySession.set(ss, (cashBySession.get(ss) ?? 0) + Number(p.amount)); }
     }
+  }
+
+  // El efectivo de las cajas de apoyo se rinde a la titular: se consolida en su arqueo.
+  const titularsByStore = new Map<string, { id: string; opened_at: string }[]>();
+  for (const s of sList) if (s.role !== "apoyo") {
+    const arr = titularsByStore.get(s.store_id) ?? [];
+    arr.push({ id: s.id, opened_at: s.opened_at });
+    titularsByStore.set(s.store_id, arr);
+  }
+  for (const arr of titularsByStore.values()) arr.sort((a, b) => (a.opened_at < b.opened_at ? 1 : -1)); // más nueva primero
+  const apoyoCashByTitular = new Map<string, number>();
+  for (const s of sList) if (s.role === "apoyo") {
+    const owner = (titularsByStore.get(s.store_id) ?? []).find((t) => t.opened_at <= s.opened_at);
+    if (owner) apoyoCashByTitular.set(owner.id, (apoyoCashByTitular.get(owner.id) ?? 0) + (cashBySession.get(s.id) ?? 0));
   }
 
   return (
@@ -130,7 +145,8 @@ export default async function CajaPage({ searchParams }: { searchParams: Promise
             </thead>
             <tbody>
               {sList.map((s) => {
-                const expected = Number(s.opening_amount) + (cashBySession.get(s.id) ?? 0);
+                const own = Number(s.opening_amount) + (cashBySession.get(s.id) ?? 0);
+                const expected = s.role === "apoyo" ? own : own + (apoyoCashByTitular.get(s.id) ?? 0);
                 const declared = s.declared_amount == null ? null : Number(s.declared_amount);
                 const st = STATUS[s.status] ?? STATUS.abierta;
                 return (

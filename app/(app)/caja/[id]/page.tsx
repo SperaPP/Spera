@@ -10,6 +10,7 @@ function rel<T>(r: unknown): T | null { return (Array.isArray(r) ? r[0] : r) as 
 const STATUS: Record<string, { label: string; cls: string }> = {
   abierta: { label: "Abierta", cls: "bg-warn-bg text-warn" },
   cerrada: { label: "Cerrada", cls: "bg-ok-bg text-ok" },
+  entregada: { label: "Entregada", cls: "bg-canvas text-muted" },
 };
 
 export default async function PeriodoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
 
   const [{ data: sales }, { data: receipts }, { data: opener }] = await Promise.all([
     sb.from("sales").select("id, number, total, created_at, channel, customers(name), sale_payments(amount, payment_methods(name, affects_cash, kind))").eq("cash_session_id", id).eq("status", "completada").order("created_at"),
-    sb.from("receipts").select("id, number, total, created_at, customers(name), receipt_payments(amount, payment_methods(name, affects_cash))").eq("cash_session_id", id).order("created_at"),
+    sb.from("receipts").select("id, number, total, created_at, customers(name), receipt_payments(amount, payment_methods(name, affects_cash))").eq("cash_session_id", id).neq("status", "anulada").order("created_at"),
     s.opened_by ? sb.from("profiles").select("full_name, email").eq("id", s.opened_by).maybeSingle() : Promise.resolve({ data: null }),
   ]);
 
@@ -46,9 +47,32 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
     const m = rel<{ name: string; affects_cash: boolean }>(p.payment_methods);
     if (m) addPay(m.name, Number(p.amount), m.affects_cash);
   }
+  // La titular recibe el efectivo de sus cajas de apoyo: se consolida en su arqueo.
+  let apoyoCash = 0;
+  if (s.role !== "apoyo") {
+    let aq = sb.from("cash_sessions").select("id").eq("store_id", s.store_id).eq("role", "apoyo").gte("opened_at", s.opened_at);
+    if (s.closed_at) aq = aq.lte("opened_at", s.closed_at);
+    const { data: apoyos } = await aq;
+    const aids = (apoyos ?? []).map((a) => a.id);
+    if (aids.length) {
+      const { data: asales } = await sb.from("sales").select("id").in("cash_session_id", aids).eq("status", "completada");
+      const asaleIds = (asales ?? []).map((x) => x.id);
+      if (asaleIds.length) {
+        const { data: asp } = await sb.from("sale_payments").select("amount, payment_methods(affects_cash)").in("sale_id", asaleIds);
+        for (const p of asp ?? []) if (rel<{ affects_cash: boolean }>(p.payment_methods)?.affects_cash) apoyoCash += Number(p.amount);
+      }
+      const { data: arecs } = await sb.from("receipts").select("id").in("cash_session_id", aids).neq("status", "anulada");
+      const arecIds = (arecs ?? []).map((r) => r.id);
+      if (arecIds.length) {
+        const { data: arp } = await sb.from("receipt_payments").select("amount, payment_methods(affects_cash)").in("receipt_id", arecIds);
+        for (const p of arp ?? []) if (rel<{ affects_cash: boolean }>(p.payment_methods)?.affects_cash) apoyoCash += Number(p.amount);
+      }
+    }
+  }
+
   const opening = Number(s.opening_amount);
   const sold = (sales ?? []).reduce((a, x) => a + Number(x.total), 0) - cambio;
-  const expectedCash = opening + cash;
+  const expectedCash = opening + cash + apoyoCash;
   const declared = s.declared_amount == null ? null : Number(s.declared_amount);
   const diff = declared == null ? null : declared - expectedCash;
   const openerName = (opener as { full_name: string | null; email: string | null } | null);
@@ -84,6 +108,9 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
         <Tile label="Declarado" value={declared == null ? "—" : formatMoney(declared)} />
         <Tile label="Diferencia" value={diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatMoney(diff)}`} tone={diff == null ? undefined : diff === 0 ? "ok" : "danger"} />
       </div>
+      {apoyoCash > 0 && (
+        <p className="mb-5 -mt-2 text-xs text-muted">El efectivo esperado incluye {formatMoney(apoyoCash)} rendido por las cajas de apoyo de este turno.</p>
+      )}
 
       {s.kept_amount != null && (
         <div className="mb-5 flex flex-wrap gap-x-6 gap-y-1 rounded-xl bg-canvas px-4 py-3 text-sm">
