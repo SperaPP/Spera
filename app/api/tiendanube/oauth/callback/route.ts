@@ -16,6 +16,11 @@ export async function GET(request: Request) {
   if (!code) return back("Tiendanube no devolvió el código de autorización");
 
   try {
+    // Se lee y limpia el state SIEMPRE (aunque después algún chequeo corte).
+    const jar = await cookies();
+    const savedState = jar.get("tn_oauth_state")?.value;
+    jar.delete("tn_oauth_state");
+
     const sb = await createClient();
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return back("Iniciá sesión en Spera antes de conectar Tiendanube");
@@ -23,9 +28,6 @@ export async function GET(request: Request) {
     if (!isAdmin) return back("Solo un administrador puede conectar Tiendanube");
 
     // Validación CSRF: el state debe coincidir con el guardado al iniciar.
-    const jar = await cookies();
-    const savedState = jar.get("tn_oauth_state")?.value;
-    jar.delete("tn_oauth_state");
     if (!savedState || !state || savedState !== state) {
       return back("Falló la validación de seguridad. Volvé a intentar desde el botón Conectar.");
     }

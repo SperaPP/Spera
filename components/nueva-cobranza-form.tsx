@@ -26,6 +26,7 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
   const [payments, setPayments] = useState<Payment[]>([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
   const [pedidos, setPedidos] = useState<PedidoPendiente[]>([]);
   const [alloc, setAlloc] = useState<Record<string, string>>({});
+  const [allocTouched, setAllocTouched] = useState(false);
 
   const customer = customers.find((c) => c.id === customerId) ?? null;
   const debt = customer?.balance ?? 0;
@@ -33,26 +34,35 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
   const caja = openCajas.find((c) => c.sessionId === cajaId) ?? null;
   const allocTotal = round2(Object.values(alloc).reduce((a, v) => a + (Number(v) || 0), 0));
 
-  // Cargar pedidos pendientes del cliente elegido.
-  useEffect(() => {
-    let alive = true;
-    if (!customerId) { setPedidos([]); setAlloc({}); return; }
-    pedidosPendientes(customerId).then((ps) => { if (alive) { setPedidos(ps); setAlloc({}); } });
-    return () => { alive = false; };
-  }, [customerId]);
-
-  // Sugerencia FIFO: imputa a los pedidos más viejos hasta agotar lo cobrado.
-  function sugerirFifo() {
-    let left = collected;
+  // Reparto FIFO puro (más viejos primero) de un monto entre los pedidos.
+  function fifoAlloc(amount: number, list: PedidoPendiente[]): Record<string, string> {
+    let left = amount;
     const next: Record<string, string> = {};
-    for (const p of pedidos) {
+    for (const p of list) {
       if (left <= 0.01) { next[p.id] = ""; continue; }
       const take = round2(Math.min(left, p.remaining));
       next[p.id] = take > 0 ? String(take) : "";
       left = round2(left - take);
     }
-    setAlloc(next);
+    return next;
   }
+
+  // Cargar pedidos pendientes del cliente elegido.
+  useEffect(() => {
+    let alive = true;
+    if (!customerId) { setPedidos([]); setAlloc({}); setAllocTouched(false); return; }
+    pedidosPendientes(customerId).then((ps) => { if (alive) { setPedidos(ps); setAlloc({}); setAllocTouched(false); } });
+    return () => { alive = false; };
+  }, [customerId]);
+
+  // Auto-imputar FIFO por defecto (hasta que el usuario edite la imputación a mano).
+  // Evita la trampa de cobrar y dejar el pedido trabado por no imputar.
+  useEffect(() => {
+    if (!allocTouched && pedidos.length) setAlloc(fifoAlloc(collected, pedidos));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collected, pedidos, allocTouched]);
+
+  function sugerirFifo() { setAllocTouched(false); setAlloc(fifoAlloc(collected, pedidos)); }
 
   function submit() {
     if (!customerId) return toast.error("Elegí un cliente.");
@@ -168,7 +178,7 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
                   <input
                     type="number" min={0} max={p.remaining}
                     value={alloc[p.id] ?? ""}
-                    onChange={(e) => setAlloc((a) => ({ ...a, [p.id]: e.target.value }))}
+                    onChange={(e) => { setAllocTouched(true); setAlloc((a) => ({ ...a, [p.id]: e.target.value })); }}
                     className={`${input} w-32`} placeholder="0"
                   />
                 </div>

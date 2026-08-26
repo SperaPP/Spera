@@ -72,7 +72,7 @@ export async function analizarTiendanube(): Promise<Resp> {
 
   const speraVars: { id: string; sku: string | null; productId: string }[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data } = await admin.from("product_variants").select("id, sku, product_id").range(from, from + 999);
+    const { data } = await admin.from("product_variants").select("id, sku, product_id").eq("organization_id", org).range(from, from + 999);
     if (!data || !data.length) break;
     for (const r of data) {
       if (!prodInfo.has(r.product_id as string)) continue; // otra org

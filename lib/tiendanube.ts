@@ -41,8 +41,30 @@ export async function getTNCreds(org: string): Promise<TNCreds | null> {
   return { storeId: data.store_id, token: data.access_token };
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** fetch con timeout (20s) y reintento con espera ante 429/5xx o error de red. */
+async function tnRequest(url: string, init: RequestInit, tries = 4): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(20000) });
+    } catch (e) {
+      if (attempt >= tries) throw e;
+      await sleep(500 * attempt);
+      continue;
+    }
+    if ((res.status === 429 || res.status >= 500) && attempt < tries) {
+      const ra = Number(res.headers.get("retry-after"));
+      await sleep(ra > 0 ? ra * 1000 : 500 * attempt);
+      continue;
+    }
+    return res;
+  }
+}
+
 async function tnFetch(creds: TNCreds, path: string, init?: RequestInit) {
-  return fetch(`${API}/${creds.storeId}${path}`, {
+  return tnRequest(`${API}/${creds.storeId}${path}`, {
     ...init,
     headers: {
       Authentication: `bearer ${creds.token}`,
@@ -61,7 +83,7 @@ async function tnGetAll(creds: TNCreds, resourcePath: string): Promise<unknown[]
   let guard = 0;
   while (url && guard < 200) {
     guard++;
-    const res: Response = await fetch(url, {
+    const res: Response = await tnRequest(url, {
       headers: { Authentication: `bearer ${creds.token}`, "User-Agent": USER_AGENT, "Content-Type": "application/json" },
     });
     if (res.status === 404) break; // sin resultados
