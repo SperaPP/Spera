@@ -41,10 +41,13 @@ export async function updateSession(request: NextRequest) {
   const isPortalPublic = path.startsWith("/portal/login") || path.startsWith("/portal/registro") || path.startsWith("/portal/recuperar");
   // Recuperación de contraseña (personal y portal) y callback del mail.
   const isResetPublic = path.startsWith("/recuperar") || path.startsWith("/auth/") || path.startsWith("/nueva-contrasena");
+  // Webhooks de Tiendanube: llegan sin sesión (POST de TN), verifican HMAC por su
+  // cuenta. No deben redirigir al login.
+  const isTnWebhook = path.startsWith("/api/tiendanube/webhooks");
 
   if (!user) {
-    // Público: login de personal y registro/login del portal.
-    if (isStaffLogin || isPortalPublic || isResetPublic) return response;
+    // Público: login de personal, registro/login del portal, webhooks de TN.
+    if (isStaffLogin || isPortalPublic || isResetPublic || isTnWebhook) return response;
     const url = request.nextUrl.clone();
     url.pathname = isPortal ? "/portal/login" : "/login";
     return NextResponse.redirect(url);

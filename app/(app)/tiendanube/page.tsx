@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getTNCreds, fetchStoreName, tnConfigured, authorizeUrl } from "@/lib/tiendanube";
+import { getTNCreds, fetchStoreName, tnConfigured } from "@/lib/tiendanube";
 import { TiendanubeAnalisis } from "@/components/tiendanube-analisis";
 
 export default async function TiendanubePage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
@@ -50,7 +50,7 @@ export default async function TiendanubePage({ searchParams }: { searchParams: P
               <span className="font-medium text-ink">Conectado{storeName ? ` a "${storeName}"` : ""}</span>
             </div>
             <p className="mt-1 text-sm text-muted">Store ID {creds.storeId}. El token quedó guardado; no vence.</p>
-            <a href={authorizeUrl("spera")} className="mt-3 inline-flex items-center gap-1.5 text-xs text-accent hover:underline">
+            <a href="/api/tiendanube/oauth/start" className="mt-3 inline-flex items-center gap-1.5 text-xs text-accent hover:underline">
               Reconectar / renovar permisos <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -65,7 +65,7 @@ export default async function TiendanubePage({ searchParams }: { searchParams: P
             <br />
             <code className="text-xs">{`${process.env.NEXT_PUBLIC_SITE_URL ?? "https://spera-umber.vercel.app"}/api/tiendanube/oauth/callback`}</code>
           </p>
-          <a href={authorizeUrl("spera")} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover">
+          <a href="/api/tiendanube/oauth/start" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover">
             Conectar Tiendanube <ExternalLink className="h-4 w-4" />
           </a>
         </div>

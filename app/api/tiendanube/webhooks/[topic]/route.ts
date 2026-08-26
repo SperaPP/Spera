@@ -13,6 +13,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ topic: str
   const { topic } = await ctx.params;
   const raw = await request.text();
 
+  // Sin secreto configurado no se puede verificar la firma → rechazar (un HMAC con
+  // clave vacía sería forjable).
+  if (!SECRET) return new NextResponse("no configurado", { status: 503 });
+
   // Verificación HMAC.
   const sig = request.headers.get("x-linkedstore-hmac-sha256") ?? "";
   const expected = crypto.createHmac("sha256", SECRET).update(raw, "utf8").digest("base64");
