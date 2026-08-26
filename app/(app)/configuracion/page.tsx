@@ -15,6 +15,7 @@ export default async function ConfiguracionPage() {
   const sb = await createClient();
   const [
     { data: categorias }, { data: colores }, { data: telas }, { data: talles },
+    { data: principales }, { data: temporadas },
     { data: methods }, { data: types }, { data: priceLists },
     { data: warehouses }, { data: stores },
   ] = await Promise.all([
@@ -22,6 +23,8 @@ export default async function ConfiguracionPage() {
     sb.from("colors").select("id, name, active").order("name"),
     sb.from("fabric_types").select("id, name, active").order("name"),
     sb.from("sizes").select("id, name, active").order("position").order("name"),
+    sb.from("main_categories").select("id, name, active").order("position").order("name"),
+    sb.from("seasons").select("id, name, active").order("position").order("name"),
     sb.from("payment_methods").select("id, name, kind, surcharge_pct, active").order("position"),
     sb.from("customer_types").select("id, name, price_list_id, default_fiscal_condition").order("name"),
     sb.from("price_lists").select("id, name").eq("active", true).order("name"),
@@ -43,7 +46,9 @@ export default async function ConfiguracionPage() {
 
       <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-faint">Catálogos del producto</h2>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <CatalogManager kind="categorias" title="Categorías" items={categorias ?? []} />
+        <CatalogManager kind="principales" title="Categorías principales" items={principales ?? []} />
+        <CatalogManager kind="categorias" title="Categorías secundarias" items={categorias ?? []} />
+        <CatalogManager kind="temporadas" title="Temporadas" items={temporadas ?? []} />
         <CatalogManager kind="talles" title="Talles" items={talles ?? []} />
         <CatalogManager kind="colores" title="Colores" items={colores ?? []} />
         <CatalogManager kind="telas" title="Tipos de tela" items={telas ?? []} />

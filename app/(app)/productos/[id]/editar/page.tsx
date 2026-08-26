@@ -8,9 +8,11 @@ export default async function EditarProductoPage({ params }: { params: Promise<{
   const { id } = await params;
   const sb = await createClient();
 
-  const [{ data: product }, { data: categories }, { data: fabricTypes }] = await Promise.all([
-    sb.from("products").select("id, name, description, category_id, fabric_type_id, tax_rate, active, lifecycle").eq("id", id).single(),
+  const [{ data: product }, { data: categories }, { data: mainCategories }, { data: seasons }, { data: fabricTypes }] = await Promise.all([
+    sb.from("products").select("id, name, description, category_id, main_category_id, season_id, fabric_type_id, tax_rate, active, lifecycle").eq("id", id).single(),
     sb.from("categories").select("id, name").eq("active", true).order("name"),
+    sb.from("main_categories").select("id, name").eq("active", true).order("position").order("name"),
+    sb.from("seasons").select("id, name").eq("active", true).order("position").order("name"),
     sb.from("fabric_types").select("id, name").eq("active", true).order("name"),
   ]);
   if (!product) notFound();
@@ -30,12 +32,16 @@ export default async function EditarProductoPage({ params }: { params: Promise<{
           name: product.name,
           description: product.description ?? "",
           categoryId: product.category_id ?? "",
+          mainCategoryId: product.main_category_id ?? "",
+          seasonId: product.season_id ?? "",
           fabricTypeId: product.fabric_type_id ?? "",
           taxRate: Number(product.tax_rate),
           active: product.active,
           lifecycle: (product.lifecycle ?? "actual") as "actual" | "discontinuo",
         }}
         categories={categories ?? []}
+        mainCategories={mainCategories ?? []}
+        seasons={seasons ?? []}
         fabricTypes={fabricTypes ?? []}
       />
     </div>

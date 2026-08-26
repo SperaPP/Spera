@@ -7,18 +7,20 @@ import { editarProducto } from "@/app/(app)/productos/actions";
 
 type Ref = { id: string; name: string };
 type Lifecycle = "actual" | "discontinuo";
-type Product = { id: string; name: string; description: string; categoryId: string; fabricTypeId: string; taxRate: number; active: boolean; lifecycle: Lifecycle };
+type Product = { id: string; name: string; description: string; categoryId: string; mainCategoryId: string; seasonId: string; fabricTypeId: string; taxRate: number; active: boolean; lifecycle: Lifecycle };
 
 const input =
   "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
 const label = "mb-1.5 block text-sm font-medium text-ink";
 
-export function EditarProductoForm({ product, categories, fabricTypes }: { product: Product; categories: Ref[]; fabricTypes: Ref[] }) {
+export function EditarProductoForm({ product, categories, mainCategories, seasons, fabricTypes }: { product: Product; categories: Ref[]; mainCategories: Ref[]; seasons: Ref[]; fabricTypes: Ref[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [name, setName] = useState(product.name);
   const [description, setDescription] = useState(product.description);
   const [categoryId, setCategoryId] = useState(product.categoryId);
+  const [mainCategoryId, setMainCategoryId] = useState(product.mainCategoryId);
+  const [seasonId, setSeasonId] = useState(product.seasonId);
   const [fabricTypeId, setFabricTypeId] = useState(product.fabricTypeId);
   const [taxRate, setTaxRate] = useState(String(product.taxRate));
   const [active, setActive] = useState(product.active);
@@ -29,7 +31,8 @@ export function EditarProductoForm({ product, categories, fabricTypes }: { produ
     start(async () => {
       const r = await editarProducto({
         id: product.id, name: name.trim(), description: description.trim() || undefined,
-        categoryId: categoryId || null, fabricTypeId: fabricTypeId || null,
+        categoryId: categoryId || null, mainCategoryId: mainCategoryId || null, seasonId: seasonId || null,
+        fabricTypeId: fabricTypeId || null,
         taxRate: Number(taxRate) || 21, active, lifecycle,
       });
       if (r.error) { toast.error(r.error); return; }
@@ -51,10 +54,24 @@ export function EditarProductoForm({ product, categories, fabricTypes }: { produ
             <textarea id="desc" rows={3} className={input} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
           <div>
-            <label className={label} htmlFor="cat">Categoría</label>
+            <label className={label} htmlFor="maincat">Categoría principal</label>
+            <select id="maincat" className={input} value={mainCategoryId} onChange={(e) => setMainCategoryId(e.target.value)}>
+              <option value="">Sin categoría principal</option>
+              {mainCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label} htmlFor="cat">Categoría secundaria</label>
             <select id="cat" className={input} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">Sin categoría</option>
               {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label} htmlFor="season">Temporada</label>
+            <select id="season" className={input} value={seasonId} onChange={(e) => setSeasonId(e.target.value)}>
+              <option value="">Sin temporada</option>
+              {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
           <div>

@@ -7,6 +7,8 @@ export default async function NuevoProductoPage() {
   const sb = await createClient();
   const [
     { data: categories },
+    { data: mainCategories },
+    { data: seasons },
     { data: sizes },
     { data: colors },
     { data: fabricTypes },
@@ -14,6 +16,8 @@ export default async function NuevoProductoPage() {
     { data: warehouses },
   ] = await Promise.all([
     sb.from("categories").select("id, name").eq("active", true).order("name"),
+    sb.from("main_categories").select("id, name").eq("active", true).order("position").order("name"),
+    sb.from("seasons").select("id, name").eq("active", true).order("position").order("name"),
     sb.from("sizes").select("id, name").eq("active", true).order("position"),
     sb.from("colors").select("id, name").eq("active", true).order("name"),
     sb.from("fabric_types").select("id, name").eq("active", true).order("name"),
@@ -41,6 +45,8 @@ export default async function NuevoProductoPage() {
 
       <NuevoProductoForm
         categories={categories ?? []}
+        mainCategories={mainCategories ?? []}
+        seasons={seasons ?? []}
         sizes={sizes ?? []}
         colors={colors ?? []}
         fabricTypes={fabricTypes ?? []}

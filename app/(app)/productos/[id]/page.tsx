@@ -31,7 +31,7 @@ export default async function ProductoDetallePage({
   const { data: product } = await sb
     .from("products")
     .select(
-      "id, name, description, variation_type, tax_rate, active, lifecycle, featured, tn_sync, external_id, categories(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active, loc_fila, loc_estante, loc_cubiculo)"
+      "id, name, description, variation_type, tax_rate, active, lifecycle, featured, tn_sync, external_id, categories(name), main_categories(name), seasons(name), fabric_types(name), product_variants(id, size, color, sku, barcode, active, loc_fila, loc_estante, loc_cubiculo)"
     )
     .eq("id", id)
     .single();
@@ -92,9 +92,21 @@ export default async function ProductoDetallePage({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-ink">{product.name}</h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+              {relName(product.main_categories) && (
+                <>
+                  <span className="font-medium text-ink">{relName(product.main_categories)}</span>
+                  <span>·</span>
+                </>
+              )}
               <span>{relName(product.categories) ?? "Sin categoría"}</span>
               <span>·</span>
               <span>{VARIATION_LABEL[product.variation_type] ?? product.variation_type}</span>
+              {relName(product.seasons) && (
+                <>
+                  <span>·</span>
+                  <span>{relName(product.seasons)}</span>
+                </>
+              )}
               {relName(product.fabric_types) && (
                 <>
                   <span>·</span>

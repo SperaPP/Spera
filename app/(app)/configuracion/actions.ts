@@ -10,6 +10,8 @@ const TABLES = {
   colores: "colors",
   telas: "fabric_types",
   talles: "sizes",
+  principales: "main_categories",
+  temporadas: "seasons",
 } as const;
 export type CatalogKind = keyof typeof TABLES;
 

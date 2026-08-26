@@ -152,6 +152,8 @@ function Chips({
 
 export function NuevoProductoForm({
   categories,
+  mainCategories,
+  seasons,
   sizes,
   colors,
   fabricTypes,
@@ -160,6 +162,8 @@ export function NuevoProductoForm({
   warehouseName,
 }: {
   categories: Ref[];
+  mainCategories: Ref[];
+  seasons: Ref[];
   sizes: Ref[];
   colors: Ref[];
   fabricTypes: Ref[];
@@ -179,6 +183,8 @@ export function NuevoProductoForm({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [mainCategoryId, setMainCategoryId] = useState("");
+  const [seasonId, setSeasonId] = useState("");
   const [fabricTypeId, setFabricTypeId] = useState("");
   const [variation, setVariation] = useState<Variation>("size_color");
   const [taxRate, setTaxRate] = useState("21");
@@ -227,6 +233,8 @@ export function NuevoProductoForm({
         name: name.trim(),
         description: description.trim() || undefined,
         categoryId: categoryId || null,
+        mainCategoryId: mainCategoryId || null,
+        seasonId: seasonId || null,
         fabricTypeId: fabricTypeId || null,
         variationType: variation,
         taxRate: Number(taxRate) || 21,
@@ -260,7 +268,14 @@ export function NuevoProductoForm({
             <textarea id="desc" rows={3} className={input} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Se usa en la venta y en Tiendanube." />
           </div>
           <div>
-            <label className={label} htmlFor="cat">Categoría</label>
+            <label className={label} htmlFor="maincat">Categoría principal</label>
+            <select id="maincat" className={input} value={mainCategoryId} onChange={(e) => setMainCategoryId(e.target.value)}>
+              <option value="">Sin categoría principal</option>
+              {mainCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label} htmlFor="cat">Categoría secundaria</label>
             <select id="cat" className={input} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">Sin categoría</option>
               {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -270,6 +285,13 @@ export function NuevoProductoForm({
               labelText="Categoría"
               onAdded={(item) => { setCats((p) => [...p, item].sort((a, b) => a.name.localeCompare(b.name))); setCategoryId(item.id); }}
             />
+          </div>
+          <div>
+            <label className={label} htmlFor="season">Temporada</label>
+            <select id="season" className={input} value={seasonId} onChange={(e) => setSeasonId(e.target.value)}>
+              <option value="">Sin temporada</option>
+              {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           </div>
           <div>
             <label className={label} htmlFor="fabric">Tipo de tela</label>

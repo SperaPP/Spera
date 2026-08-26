@@ -16,6 +16,8 @@ const schema = z.object({
   name: z.string().trim().min(1, "Ingresá un nombre"),
   description: z.string().trim().optional(),
   categoryId: z.string().uuid().nullable(),
+  mainCategoryId: z.string().uuid().nullable(),
+  seasonId: z.string().uuid().nullable(),
   fabricTypeId: z.string().uuid().nullable(),
   variationType: z.enum(["none", "size", "color", "size_color"]),
   taxRate: z.number().min(0).max(100).default(21),
@@ -62,8 +64,14 @@ export async function crearProducto(
 
   if (error) return { error: error.message };
 
-  // El precio cargado es Mayorista (base): derivar Publico (= Mayorista × 2).
   const newId = data as string;
+
+  // Categoría principal + temporada (no van en la RPC; se setean acá).
+  if (d.mainCategoryId || d.seasonId) {
+    await sb.from("products").update({ main_category_id: d.mainCategoryId, season_id: d.seasonId }).eq("id", newId);
+  }
+
+  // El precio cargado es Mayorista (base): derivar Publico (= Mayorista × 2).
   if (d.prices.some((p) => p.price != null)) {
     await sb.rpc("apply_product_pricing", { p_product_id: newId });
   }
@@ -77,6 +85,8 @@ const editSchema = z.object({
   name: z.string().trim().min(1, "Ingresá un nombre"),
   description: z.string().trim().optional(),
   categoryId: z.string().uuid().nullable(),
+  mainCategoryId: z.string().uuid().nullable(),
+  seasonId: z.string().uuid().nullable(),
   fabricTypeId: z.string().uuid().nullable(),
   taxRate: z.number().min(0).max(100),
   active: z.boolean(),
@@ -98,6 +108,8 @@ export async function editarProducto(input: EditarProductoInput): Promise<Action
     name: d.name,
     description: d.description || null,
     category_id: d.categoryId,
+    main_category_id: d.mainCategoryId,
+    season_id: d.seasonId,
     fabric_type_id: d.fabricTypeId,
     tax_rate: d.taxRate,
     active: d.active,
