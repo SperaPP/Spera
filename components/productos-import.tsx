@@ -13,6 +13,8 @@ type Warehouse = { id: string; name: string };
 
 const COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "talle", "color", "sku", "precio_mayorista", "stock", "fila", "estante", "cubiculo", "destacado"] as const;
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/\s+/g, "_");
+// Tolera encabezados con typos frecuentes (ej: "ubiulo" por "cubiculo").
+const ALIAS: Record<string, string> = { ubiulo: "cubiculo", ubiculo: "cubiculo", cubicu: "cubiculo", cubiculos: "cubiculo", precio_mayorista_: "precio_mayorista" };
 
 export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
   const [whId, setWhId] = useState(warehouses[0]?.id ?? "");
@@ -23,6 +25,7 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
 
   const [prodRows, setProdRows] = useState<ImportRow[] | null>(null);
   const [prodPrev, setProdPrev] = useState<ImportPreview | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const whName = warehouses.find((w) => w.id === whId)?.name ?? "deposito";
 
@@ -47,7 +50,7 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
         const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]]);
         rows = json.map((raw) => {
           const m: Record<string, unknown> = {};
-          for (const k of Object.keys(raw)) m[norm(k)] = raw[k];
+          for (const k of Object.keys(raw)) { const nk = norm(k); m[ALIAS[nk] ?? nk] = raw[k]; }
           const g = (c: string) => { const v = m[c]; return v == null ? "" : String(v).trim(); };
           return {
             producto: g("producto"), descripcion: g("descripcion"),
@@ -67,9 +70,28 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
   function confirmarProductos() {
     if (!prodRows || !whId) return;
     start(async () => {
-      const r = await importarProductos(whId, prodRows);
-      if (r.error) { toast.error(r.error); return; }
-      toast.success(`Listo: ${r.productos} productos y ${r.variantes} variantes creadas.`);
+      // Agrupar por producto (nombre) — las filas de un producto NO se pueden separar
+      // entre lotes — y procesar de a tandas para no cortar por tiempo.
+      const byProd = new Map<string, ImportRow[]>();
+      for (const r of prodRows) {
+        const k = r.producto?.trim().toLowerCase();
+        if (!k) continue;
+        let arr = byProd.get(k); if (!arr) { arr = []; byProd.set(k, arr); }
+        arr.push(r);
+      }
+      const groups = [...byProd.values()];
+      const BATCH = 200; // productos por lote (evita cortes por tiempo)
+      const lotes = Math.ceil(groups.length / BATCH) || 1;
+      let totP = 0, totV = 0;
+      for (let i = 0; i < groups.length; i += BATCH) {
+        setProgress(`Importando lote ${Math.floor(i / BATCH) + 1} de ${lotes}…`);
+        const rows = groups.slice(i, i + BATCH).flat();
+        const r = await importarProductos(whId, rows);
+        if (r.error) { setProgress(null); toast.error(`Se cortó en el lote ${Math.floor(i / BATCH) + 1}: ${r.error}`); return; }
+        totP += r.productos ?? 0; totV += r.variantes ?? 0;
+      }
+      setProgress(null);
+      toast.success(`Listo: ${totP} productos y ${totV} variantes creadas.`);
       setProdRows(null); setProdPrev(null);
     });
   }
@@ -163,7 +185,9 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
                 <CheckCircle2 className="h-4 w-4" /> {pending ? "Creando…" : "Confirmar importación"}
               </button>
               <button onClick={() => { setProdRows(null); setProdPrev(null); }} disabled={pending} className={btn}>Cancelar</button>
-              {bloqueado && prodPrev.variantes > 0 && <span className="text-xs text-danger">Resolvé los SKU repetidos antes de importar.</span>}
+              {progress && <span className="text-xs font-medium text-accent">{progress}</span>}
+              {!progress && bloqueado && prodPrev.variantes > 0 && <span className="text-xs text-danger">Resolvé los SKU repetidos antes de importar.</span>}
+              {!progress && prodPrev.variantes > 500 && !bloqueado && <span className="text-xs text-muted">Se importa por lotes; puede tardar un rato.</span>}
             </div>
           </div>
         )}
