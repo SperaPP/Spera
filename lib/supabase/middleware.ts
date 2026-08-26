@@ -65,7 +65,7 @@ export async function updateSession(request: NextRequest) {
   // el pegar la URL a mano). El orden importa: los prefijos más específicos primero.
   const MODULES: [string, string][] = [
     ["/stock/control", "control_stock"],
-    ["/pos", "pos"], ["/ventas", "ventas"], ["/logistica", "logistica"],
+    ["/pos", "pos"], ["/ventas", "ventas"], ["/logistica", "logistica"], ["/reposiciones", "reposiciones"],
     ["/productos", "productos"], ["/etiquetas", "productos"],
     ["/stock", "stock"], ["/transferencias", "transferencias"],
     ["/clientes", "clientes"], ["/precios", "precios"], ["/caja", "caja"],

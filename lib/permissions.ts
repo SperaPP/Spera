@@ -9,6 +9,7 @@ export const MODULES: { key: string; label: string }[] = [
   { key: "pos", label: "Punto de venta" },
   { key: "ventas", label: "Ventas" },
   { key: "logistica", label: "Logística" },
+  { key: "reposiciones", label: "Reposiciones" },
   { key: "productos", label: "Productos" },
   { key: "stock", label: "Stock" },
   { key: "control_stock", label: "Control de stock" },

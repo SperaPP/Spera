@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/format";
 import { ControlTransferencia } from "@/components/control-transferencia";
@@ -40,9 +40,14 @@ export default async function TransferenciaDetallePage({ params }: { params: Pro
       </Link>
 
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
-        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-ink">
-          {relName(t.from_warehouse) ?? "—"} <ArrowRight className="h-5 w-5 text-faint" /> {relName(t.to_warehouse) ?? "—"}
-        </h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-ink">
+            {relName(t.from_warehouse) ?? "—"} <ArrowRight className="h-5 w-5 text-faint" /> {relName(t.to_warehouse) ?? "—"}
+          </h1>
+          <Link href={`/transferencias/${t.id}/imprimir`} className="flex shrink-0 items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+            <Printer className="h-4 w-4" /> Imprimir pedido
+          </Link>
+        </div>
         <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
           <span>Enviada {formatDateTime(t.created_at)}</span>
           {t.received_at && <span>Recibida {formatDateTime(t.received_at)}</span>}
