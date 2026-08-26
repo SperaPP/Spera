@@ -9,6 +9,7 @@ function relName(r: unknown): string | null {
 }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
+  creada: { label: "Creada", cls: "bg-accent-soft text-accent" },
   enviada: { label: "Enviada", cls: "bg-warn-bg text-warn" },
   recibida: { label: "Recibida", cls: "bg-ok-bg text-ok" },
   cancelada: { label: "Cancelada", cls: "bg-danger-bg text-danger" },
@@ -81,7 +82,7 @@ export default async function TransferenciasPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link href={`/transferencias/${t.id}`} className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
-                        {t.status === "enviada" ? "Recibir" : "Ver"} <ChevronRight className="h-3.5 w-3.5" />
+                        {t.status === "creada" ? "Enviar" : t.status === "enviada" ? "Recibir" : "Ver"} <ChevronRight className="h-3.5 w-3.5" />
                       </Link>
                     </td>
                   </tr>

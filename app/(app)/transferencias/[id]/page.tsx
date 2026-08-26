@@ -16,7 +16,7 @@ export default async function TransferenciaDetallePage({ params }: { params: Pro
 
   const { data: t } = await sb
     .from("stock_transfers")
-    .select("id, status, notes, created_at, received_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
+    .select("id, status, notes, created_at, sent_at, received_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
     .eq("id", id)
     .single();
   if (!t) notFound();
@@ -49,7 +49,8 @@ export default async function TransferenciaDetallePage({ params }: { params: Pro
           </Link>
         </div>
         <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
-          <span>Enviada {formatDateTime(t.created_at)}</span>
+          <span>Creada {formatDateTime(t.created_at)}</span>
+          {t.sent_at && <span>Enviada {formatDateTime(t.sent_at)}</span>}
           {t.received_at && <span>Recibida {formatDateTime(t.received_at)}</span>}
           {t.notes && <span>{t.notes}</span>}
         </div>

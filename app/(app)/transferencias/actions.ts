@@ -68,6 +68,18 @@ export async function crearTransferencia(input: CrearTransferenciaInput): Promis
   return { ok: true, id: data as string };
 }
 
+export async function enviarTransferencia(id: string): Promise<ActionState> {
+  const denied = await requireCan("transferencias", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.rpc("send_transfer", { p_transfer_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/transferencias");
+  revalidatePath(`/transferencias/${id}`);
+  revalidatePath("/logistica");
+  return { ok: true };
+}
+
 export async function recibirTransferencia(id: string): Promise<ActionState> {
   const denied = await requireCan("transferencias", true);
   if (denied) return denied;

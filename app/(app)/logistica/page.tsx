@@ -14,6 +14,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   controlado: { label: "Controlado", cls: "bg-accent-soft text-accent" },
   despachado: { label: "Despachado", cls: "bg-ok-bg text-ok" },
   entregado: { label: "Entregado", cls: "bg-canvas text-muted" },
+  creada: { label: "Creada", cls: "bg-accent-soft text-accent" },
   enviada: { label: "Enviada", cls: "bg-warn-bg text-warn" },
   recibida: { label: "Recibida", cls: "bg-ok-bg text-ok" },
   cancelada: { label: "Cancelada", cls: "bg-danger-bg text-danger" },
@@ -40,7 +41,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
   const [{ count: pend }, { count: ctrl }, { count: envs }] = await Promise.all([
     scopeStore ? pendReq.eq("store_id", scopeStore) : pendReq,
     scopeStore ? ctrlReq.eq("store_id", scopeStore) : ctrlReq,
-    sb.from("stock_transfers").select("*", { count: "exact", head: true }).eq("status", "enviada"),
+    sb.from("stock_transfers").select("*", { count: "exact", head: true }).in("status", ["creada", "enviada"]),
   ]);
   const counts: Record<string, number> = { pendiente: pend ?? 0, controlado: ctrl ?? 0, transferencias: envs ?? 0 };
 
@@ -111,7 +112,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
                       <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span></td>
                       <td className="px-4 py-3 text-right">
                         <Link href={`/transferencias/${t.id}`} className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
-                          {t.status === "enviada" ? "Recibir" : "Ver"} <ChevronRight className="h-3.5 w-3.5" />
+                          {t.status === "creada" ? "Enviar" : t.status === "enviada" ? "Recibir" : "Ver"} <ChevronRight className="h-3.5 w-3.5" />
                         </Link>
                       </td>
                     </tr>
