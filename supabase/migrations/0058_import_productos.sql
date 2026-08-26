@@ -12,7 +12,7 @@ declare
   v_org uuid := public.current_org_id();
   v_pname text; v_first jsonb; v_el jsonb; v_name text;
   v_maincat uuid; v_cat uuid; v_season uuid; v_fabric uuid;
-  v_has_size boolean; v_has_color boolean; v_vartype text;
+  v_has_size boolean; v_has_color boolean; v_vartype text; v_dest boolean;
   v_desc text; v_price numeric; v_product uuid; v_variant uuid;
   v_talle text; v_color text; v_sku text; v_stock integer;
   v_fila int; v_est int; v_cub int;
@@ -58,9 +58,10 @@ begin
                       when v_has_size then 'size' when v_has_color then 'color' else 'none' end;
 
     v_desc := nullif(trim(v_first->>'descripcion'), '');
+    v_dest := lower(coalesce(trim(v_first->>'destacado'), '')) in ('1', 'si', 'sí', 's', 'x', 'true', 'verdadero', 'y', 'yes', 'sim');
 
-    insert into public.products (organization_id, name, description, category_id, main_category_id, season_id, fabric_type_id, brand, variation_type, tax_rate, lifecycle, active)
-    values (v_org, v_pname, v_desc, v_cat, v_maincat, v_season, v_fabric, 'Bodysculpt', v_vartype, 21, 'actual', true)
+    insert into public.products (organization_id, name, description, category_id, main_category_id, season_id, fabric_type_id, brand, variation_type, tax_rate, lifecycle, active, featured)
+    values (v_org, v_pname, v_desc, v_cat, v_maincat, v_season, v_fabric, 'Bodysculpt', v_vartype, 21, 'actual', true, v_dest)
     returning id into v_product;
     v_prods := v_prods + 1;
 

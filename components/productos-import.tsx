@@ -11,7 +11,7 @@ import {
 
 type Warehouse = { id: string; name: string };
 
-const COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "talle", "color", "sku", "precio_mayorista", "stock", "fila", "estante", "cubiculo"] as const;
+const COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "talle", "color", "sku", "precio_mayorista", "stock", "fila", "estante", "cubiculo", "destacado"] as const;
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/\s+/g, "_");
 
 export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
@@ -29,9 +29,9 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
   // ── Alta de productos ────────────────────────────────────────
   function plantillaProductos() {
     const ejemplo = [
-      { producto: "Calza Push Up", descripcion: "", categoria_principal: "Mujer", categoria: "Calzas", temporada: "Primavera-Verano", tela: "Algodón", talle: "M", color: "Negro", sku: "1001", precio_mayorista: 5000, stock: 10, fila: 3, estante: 2, cubiculo: 1 },
-      { producto: "Calza Push Up", descripcion: "", categoria_principal: "Mujer", categoria: "Calzas", temporada: "Primavera-Verano", tela: "Algodón", talle: "L", color: "Negro", sku: "1002", precio_mayorista: 5000, stock: 8, fila: 3, estante: 2, cubiculo: 1 },
-      { producto: "Gorra Logo", descripcion: "", categoria_principal: "Hombre", categoria: "Gorras", temporada: "Atemporal", tela: "", talle: "", color: "Negro", sku: "2001", precio_mayorista: 3200, stock: 15, fila: "", estante: "", cubiculo: "" },
+      { producto: "Calza Push Up", descripcion: "", categoria_principal: "Mujer", categoria: "Calzas", temporada: "Primavera-Verano", tela: "Algodón", talle: "M", color: "Negro", sku: "1001", precio_mayorista: 5000, stock: 10, fila: 3, estante: 2, cubiculo: 1, destacado: "si" },
+      { producto: "Calza Push Up", descripcion: "", categoria_principal: "Mujer", categoria: "Calzas", temporada: "Primavera-Verano", tela: "Algodón", talle: "L", color: "Negro", sku: "1002", precio_mayorista: 5000, stock: 8, fila: 3, estante: 2, cubiculo: 1, destacado: "si" },
+      { producto: "Gorra Logo", descripcion: "", categoria_principal: "Hombre", categoria: "Gorras", temporada: "Atemporal", tela: "", talle: "", color: "Negro", sku: "2001", precio_mayorista: 3200, stock: 15, fila: "", estante: "", cubiculo: "", destacado: "" },
     ];
     const ws = XLSX.utils.json_to_sheet(ejemplo, { header: [...COLS] });
     const wb = XLSX.utils.book_new();
@@ -54,7 +54,7 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
             categoria_principal: g("categoria_principal"), categoria: g("categoria"),
             temporada: g("temporada"), tela: g("tela"), talle: g("talle"), color: g("color"),
             sku: g("sku"), precio_mayorista: g("precio_mayorista"), stock: g("stock"),
-            fila: g("fila"), estante: g("estante"), cubiculo: g("cubiculo"),
+            fila: g("fila"), estante: g("estante"), cubiculo: g("cubiculo"), destacado: g("destacado"),
           };
         });
       } catch { toast.error("No se pudo leer el archivo."); return; }

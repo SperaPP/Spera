@@ -116,6 +116,7 @@ export type ImportRow = {
   categoria_principal: string; categoria: string; temporada: string; tela: string;
   talle: string; color: string; sku: string;
   precio_mayorista: string; stock: string; fila: string; estante: string; cubiculo: string;
+  destacado: string;
 };
 export type ImportPreview = {
   productos: number; variantes: number; sinProducto: number; sinSku: number;
