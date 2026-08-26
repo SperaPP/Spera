@@ -312,6 +312,7 @@ function Terminal({
   wholesaleProfiles: Profile[];
   paymentMethods: Method[];
 }) {
+  const router = useRouter();
   const wholesale = store.isWholesale;
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [query, setQuery] = useState("");
@@ -456,6 +457,7 @@ function Terminal({
       setCart([]); setPayments([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
       setCoupon(null); setCouponCode(""); setRetailData(null); setCheckout(false); setQuery(""); setResults([]);
       if (wholesale) setCustomer(null);
+      router.refresh(); // actualiza el arqueo de caja del POS con la venta recién hecha
     });
   }
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionState } from "@/lib/auth";
@@ -29,6 +30,7 @@ export async function setNewPassword(_prev: ActionState, formData: FormData): Pr
   if (!auth?.user) return { error: "El enlace expiró. Pedí uno nuevo." };
   const { error } = await sb.auth.updateUser({ password });
   if (error) return { error: error.message };
+  revalidatePath("/", "layout");
   redirect("/");
 }
 
@@ -50,5 +52,7 @@ export async function login(
     return { error: "Email o contraseña incorrectos." };
   }
 
+  // Invalida el cache (si no, "/" sirve la versión cacheada sin sesión y rebota al login).
+  revalidatePath("/", "layout");
   redirect("/");
 }
