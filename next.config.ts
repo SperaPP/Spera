@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    // El import de productos manda muchas filas por server action (default: 1MB).
+    serverActions: { bodySizeLimit: "12mb" },
+  },
 };
 
 export default nextConfig;
