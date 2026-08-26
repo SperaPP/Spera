@@ -13,7 +13,7 @@ export default async function ImportarDatosPage() {
         <ArrowLeft className="h-4 w-4" /> Volver a productos
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Importar datos por Excel</h1>
-      <p className="mt-1 mb-6 text-sm text-muted">Carga masiva de stock por depósito y de ubicaciones en el depósito. Matchea por SKU.</p>
+      <p className="mt-1 mb-6 text-sm text-muted">Alta masiva de productos, y actualización de stock y ubicaciones por Excel.</p>
       <ProductosImport warehouses={warehouses ?? []} />
     </div>
   );

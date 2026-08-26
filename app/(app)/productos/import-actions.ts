@@ -109,3 +109,52 @@ export async function importarUbicaciones(raw: unknown): Promise<ActionState & {
   }
   return { ok: true, count };
 }
+
+// ── ALTA DE PRODUCTOS ──────────────────────────────────────────
+export type ImportRow = {
+  producto: string; descripcion: string;
+  categoria_principal: string; categoria: string; temporada: string; tela: string;
+  talle: string; color: string; sku: string;
+  precio_mayorista: string; stock: string; fila: string; estante: string; cubiculo: string;
+};
+export type ImportPreview = {
+  productos: number; variantes: number; sinProducto: number; sinSku: number;
+  dupEnArchivo: string[]; dupEnBase: string[];
+};
+
+/** Vista previa (no escribe): cuenta productos/variantes y detecta SKUs repetidos. */
+export async function previewProductos(rows: ImportRow[]): Promise<{ error?: string; preview?: ImportPreview }> {
+  const denied = await requireCan("productos", true);
+  if (denied) return { error: denied.error };
+  const sb = await createClient();
+
+  const withProd = rows.filter((r) => r.producto?.trim());
+  const sinProducto = rows.length - withProd.length;
+  const productos = new Set(withProd.map((r) => r.producto.trim().toLowerCase())).size;
+  const variantRows = withProd.filter((r) => r.sku?.trim());
+  const sinSku = withProd.length - variantRows.length;
+
+  const seen = new Set<string>(); const dupFile = new Set<string>();
+  for (const r of variantRows) { const k = r.sku.trim().toLowerCase(); if (seen.has(k)) dupFile.add(r.sku.trim()); seen.add(k); }
+
+  const skus = [...new Set(variantRows.map((r) => r.sku.trim()))];
+  const dupBase: string[] = [];
+  for (let i = 0; i < skus.length; i += 500) {
+    const { data } = await sb.from("product_variants").select("sku").in("sku", skus.slice(i, i + 500));
+    for (const v of data ?? []) if (v.sku) dupBase.push(v.sku);
+  }
+
+  return { preview: { productos, variantes: variantRows.length, sinProducto, sinSku, dupEnArchivo: [...dupFile].slice(0, 20), dupEnBase: dupBase.slice(0, 20) } };
+}
+
+/** Crea los productos/variantes del Excel (atómico). El stock va a p_warehouse. */
+export async function importarProductos(warehouseId: string, rows: ImportRow[]): Promise<ActionState & { productos?: number; variantes?: number }> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  if (!warehouseId) return { error: "Elegí el depósito para el stock inicial." };
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("import_products", { p_rows: rows, p_warehouse: warehouseId });
+  if (error) return { error: error.message };
+  const res = (data ?? {}) as { productos?: number; variantes?: number };
+  return { ok: true, productos: res.productos, variantes: res.variantes };
+}
