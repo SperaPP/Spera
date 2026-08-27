@@ -95,7 +95,7 @@ begin
   end if;
 
   if v_credit > 0 then
-    select balance into v_balance from public.customers where id = p_customer_id and organization_id = v_org;
+    select balance into v_balance from public.customers where id = p_customer_id and organization_id = v_org for update;
     if v_credit > greatest(0, -coalesce(v_balance,0)) then
       raise exception 'El saldo a favor disponible no alcanza';
     end if;
