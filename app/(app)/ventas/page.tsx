@@ -30,7 +30,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   // Gestión por mostradores: si está acotado, sólo su local (en query y en el filtro).
   const stores = scopeStore ? (storesAll ?? []).filter((s) => s.id === scopeStore) : storesAll;
 
-  const sel = "id, number, status, fulfillment_status, created_at, total, armado_printed_at, customers(name), stores(name), sale_items(count)";
+  const sel = "id, number, status, fulfillment_status, created_at, total, paid_amount, armado_printed_at, customers(name), stores(name), sale_items(count)";
   const FULFILL: Record<string, { label: string; cls: string }> = {
     entregado: { label: "Completado", cls: "bg-ok-bg text-ok" },
     despachado: { label: "Completado", cls: "bg-ok-bg text-ok" },
@@ -148,7 +148,15 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                       <span className="text-xs text-muted">—</span>
                     ) : (() => {
                       const f = FULFILL[s.fulfillment_status] ?? { label: s.fulfillment_status, cls: "bg-canvas text-muted" };
-                      return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${f.cls}`}>{f.label}</span>;
+                      const pagado = Number(s.paid_amount) >= Number(s.total) - 0.01;
+                      return (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${f.cls}`}>{f.label}</span>
+                          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${pagado ? "bg-ok-bg text-ok" : "bg-danger-bg text-danger"}`}>
+                            {pagado ? "Pagado" : "Sin pagar"}
+                          </span>
+                        </div>
+                      );
                     })()}
                   </td>
                   <td className="px-4 py-3">

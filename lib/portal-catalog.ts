@@ -15,7 +15,27 @@ export async function categoriasActivas(): Promise<{ id: string; name: string }[
   return data ?? [];
 }
 
-export type CatalogItem = { id: string; name: string; price: number; stock: number; featured: boolean; image: string | null };
+export type CatalogItem = { id: string; name: string; price: number; publicPrice: number | null; stock: number; featured: boolean; image: string | null };
+
+/** Id de la lista "Publico" (precio de referencia minorista) de la organización. */
+export async function publicListId(org: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("price_lists").select("id").eq("organization_id", org).eq("name", "Publico").maybeSingle();
+  return data?.id ?? null;
+}
+
+/** Precio público por producto (variant_id null) para un set de productos. */
+async function publicPriceByProduct(org: string, productIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!productIds.length) return out;
+  const admin = createAdminClient();
+  const pubId = await publicListId(org);
+  if (!pubId) return out;
+  const { data } = await admin.from("price_list_items")
+    .select("product_id, price").eq("price_list_id", pubId).is("variant_id", null).in("product_id", productIds);
+  for (const p of data ?? []) out.set(p.product_id, Number(p.price));
+  return out;
+}
 
 /** Catálogo paginado (precio de la lista del cliente + stock de Central). */
 export async function catalog(opts: {
@@ -41,17 +61,21 @@ export async function catalog(opts: {
     for (const im of imgs ?? []) if (!imgByProduct.has(im.product_id)) imgByProduct.set(im.product_id, im.path);
   }
 
+  // Precio público (referencia) para comparar contra el de la lista del cliente.
+  const pubByProduct = await publicPriceByProduct(opts.org, rows.map((r) => r.id));
+
   return {
     total,
     items: rows.map((r) => ({
-      id: r.id, name: r.name, price: Number(r.price), stock: Number(r.stock), featured: r.featured,
+      id: r.id, name: r.name, price: Number(r.price), publicPrice: pubByProduct.get(r.id) ?? null,
+      stock: Number(r.stock), featured: r.featured,
       image: imgByProduct.has(r.id) ? `${BUCKET_URL}/${imgByProduct.get(r.id)}` : null,
     })),
   };
 }
 
 export type PortalProduct = {
-  id: string; name: string; description: string | null; price: number;
+  id: string; name: string; description: string | null; price: number; publicPrice: number | null;
   images: string[];
   variants: { id: string; label: string | null; stock: number }[];
 };
@@ -68,6 +92,8 @@ export async function portalProduct(productId: string, org: string, list: string
     .select("price").eq("product_id", productId).is("variant_id", null).eq("price_list_id", list).maybeSingle();
   if (!pl) return null; // sin precio en la lista del cliente → no visible
 
+  const pubById = await publicPriceByProduct(org, [productId]);
+
   const vars = (p.product_variants ?? []) as { id: string; size: string | null; color: string | null }[];
   const variantIds = vars.map((v) => v.id);
   const stockByVariant = new Map<string, number>();
@@ -81,7 +107,7 @@ export async function portalProduct(productId: string, org: string, list: string
 
   const lbl = (s: string | null, c: string | null) => [s, c].filter(Boolean).join(" / ") || null;
   return {
-    id: p.id, name: p.name, description: p.description, price: Number(pl.price),
+    id: p.id, name: p.name, description: p.description, price: Number(pl.price), publicPrice: pubById.get(productId) ?? null,
     images: (imgs ?? []).map((im) => `${BUCKET_URL}/${im.path}`),
     variants: vars.map((v) => ({ id: v.id, label: lbl(v.size, v.color), stock: stockByVariant.get(v.id) ?? 0 }))
       .filter((v) => v.stock > 0),

@@ -45,7 +45,12 @@ export default async function PortalProductoPage({ params }: { params: Promise<{
 
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">{p.name}</h1>
-          <div className="mt-2 text-2xl font-bold tabular-nums text-accent">{formatMoney(p.price)}</div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-3">
+            <span className="text-2xl font-bold tabular-nums text-accent">{formatMoney(p.price)}</span>
+            {p.publicPrice != null && p.publicPrice > p.price && (
+              <span className="text-sm tabular-nums text-faint" title="Precio público de referencia">Público {formatMoney(p.publicPrice)}</span>
+            )}
+          </div>
           {p.description && <p className="mt-3 text-sm text-muted">{p.description}</p>}
 
           <div className="mt-5">

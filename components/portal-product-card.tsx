@@ -17,7 +17,12 @@ export function PortalProductCard({ p }: { p: CatalogItem }) {
       </div>
       <div className="flex flex-1 flex-col p-3">
         <div className="line-clamp-2 text-sm font-medium text-ink">{p.name}</div>
-        <div className="mt-auto pt-2 text-base font-semibold tabular-nums text-accent">{formatMoney(p.price)}</div>
+        <div className="mt-auto flex flex-wrap items-baseline gap-x-2 pt-2">
+          <span className="text-base font-semibold tabular-nums text-accent">{formatMoney(p.price)}</span>
+          {p.publicPrice != null && p.publicPrice > p.price && (
+            <span className="text-xs tabular-nums text-faint" title="Precio público de referencia">Público {formatMoney(p.publicPrice)}</span>
+          )}
+        </div>
       </div>
     </Link>
   );
