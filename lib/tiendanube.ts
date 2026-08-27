@@ -211,6 +211,75 @@ export async function syncTNStockAll(limit = 100): Promise<Array<{ org: string; 
   return out;
 }
 
+const IMG_BUCKET = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
+
+/** Publica un producto NUEVO en Tiendanube (lo crea con variantes, precio Público,
+ *  stock disponible e imágenes) y guarda los tiendanube_links. Idempotente: si ya
+ *  tiene vínculos, no hace nada. Match de variante por SKU. */
+export async function publishTNProduct(orgId: string, productId: string): Promise<{ ok: boolean; tnProductId?: string; linked?: number; error?: string }> {
+  const admin = createAdminClient();
+  const creds = await getTNCreds(orgId);
+  if (!creds) return { ok: false, error: "Tiendanube no está conectado" };
+
+  const { data: store } = await admin.from("stores").select("warehouse_id").eq("organization_id", orgId).eq("name", "Tiendanube").maybeSingle();
+  const wh = store?.warehouse_id as string | undefined;
+  if (!wh) return { ok: false, error: "No existe el local Tiendanube" };
+
+  const { data: prod } = await admin.from("products").select("id, name, variation_type, lifecycle").eq("id", productId).eq("organization_id", orgId).maybeSingle();
+  if (!prod) return { ok: false, error: "Producto inexistente" };
+  if (prod.lifecycle === "discontinuo") return { ok: false, error: "Un producto discontinuo no se publica" };
+
+  const { data: vars } = await admin.from("product_variants").select("id, sku, size, color").eq("product_id", productId).eq("active", true).not("sku", "is", null);
+  const active = vars ?? [];
+  if (!active.length) return { ok: false, error: "El producto no tiene variantes activas con SKU" };
+
+  const { count: yaLinks } = await admin.from("tiendanube_links").select("*", { count: "exact", head: true }).eq("organization_id", orgId).in("variant_id", active.map((v) => v.id));
+  if (yaLinks && yaLinks > 0) return { ok: true, linked: 0 }; // ya publicado/adoptado
+
+  const { data: pubList } = await admin.from("price_lists").select("id").eq("organization_id", orgId).eq("name", "Publico").maybeSingle();
+  if (!pubList) return { ok: false, error: "No existe la lista Publico" };
+  const { data: pl } = await admin.from("price_list_items").select("price").eq("price_list_id", pubList.id).eq("product_id", productId).is("variant_id", null).maybeSingle();
+  if (!pl) return { ok: false, error: "El producto no tiene precio Público cargado" };
+  const precio = Number(pl.price).toFixed(2);
+
+  const { data: st } = await admin.from("stock").select("variant_id, quantity, reserved").eq("warehouse_id", wh).in("variant_id", active.map((v) => v.id));
+  const disp = new Map((st ?? []).map((s) => [s.variant_id as string, Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0))]));
+
+  const { data: imgs } = await admin.from("product_images").select("path, is_primary").eq("product_id", productId).order("is_primary", { ascending: false }).limit(9);
+
+  const vt = prod.variation_type as string;
+  const hasSize = vt === "size" || vt === "size_color";
+  const hasColor = vt === "color" || vt === "size_color";
+  const attributes: { es: string }[] = [];
+  if (hasSize) attributes.push({ es: "Talle" });
+  if (hasColor) attributes.push({ es: "Color" });
+
+  const variants = active.map((v) => {
+    const values: { es: string }[] = [];
+    if (hasSize) values.push({ es: v.size || "Único" });
+    if (hasColor) values.push({ es: v.color || "Único" });
+    const out: Record<string, unknown> = { price: precio, stock: disp.get(v.id) ?? 0, stock_management: true, sku: String(v.sku) };
+    if (values.length) out.values = values;
+    return out;
+  });
+
+  const payload: Record<string, unknown> = { name: { es: prod.name }, published: true, variants };
+  if (attributes.length) payload.attributes = attributes;
+  if (imgs && imgs.length) payload.images = imgs.map((im) => ({ src: `${IMG_BUCKET}/${im.path}` }));
+
+  const res = await tnFetch(creds, "/products", { method: "POST", body: JSON.stringify(payload) });
+  if (!res.ok) return { ok: false, error: `Tiendanube ${res.status}: ${(await res.text()).slice(0, 180)}` };
+  const body = (await res.json()) as { id: number | string; variants?: { id: number | string; sku?: string }[] };
+
+  const tnBySku = new Map((body.variants ?? []).map((v) => [String(v.sku ?? "").trim().toLowerCase(), v.id]));
+  const links = active
+    .map((v) => ({ organization_id: orgId, variant_id: v.id, tn_product_id: String(body.id), tn_variant_id: tnBySku.has(String(v.sku).trim().toLowerCase()) ? String(tnBySku.get(String(v.sku).trim().toLowerCase())) : null, last_synced_at: new Date().toISOString() }))
+    .filter((l) => l.tn_variant_id) as { organization_id: string; variant_id: string; tn_product_id: string; tn_variant_id: string; last_synced_at: string }[];
+  if (links.length) await admin.from("tiendanube_links").upsert(links, { onConflict: "organization_id,variant_id" });
+
+  return { ok: true, tnProductId: String(body.id), linked: links.length };
+}
+
 /** Respaldo por polling: trae los pedidos de TN modificados en los últimos `windowMin`
  *  minutos y los ingesta (idempotente). Cubre entregas de webhook perdidas: ningún
  *  pedido se pierde aunque TN no dispare el webhook. */

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireCan, type ActionState } from "@/lib/auth";
+import { publishTNProduct } from "@/lib/tiendanube";
 
 const variantSchema = z.object({
   size: z.string().trim().optional(),
@@ -175,6 +176,19 @@ export async function setTnSync(productId: string, value: boolean): Promise<Acti
   }
   const { error } = await sb.from("products").update({ tn_sync: value }).eq("id", productId);
   if (error) return { error: error.message };
+
+  // Al prender el flag, publicar el producto en la web (crearlo en TN si es nuevo).
+  // Si ya está adoptado/publicado, publishTNProduct es un no-op.
+  if (value) {
+    const { data: org } = await sb.rpc("current_org_id");
+    if (org) {
+      const pub = await publishTNProduct(org as string, productId);
+      if (!pub.ok) {
+        revalidatePath(`/productos/${productId}`);
+        return { error: `Se marcó como sincronizado, pero no se pudo publicar en la web: ${pub.error}` };
+      }
+    }
+  }
   revalidatePath(`/productos/${productId}`);
   return { ok: true };
 }
