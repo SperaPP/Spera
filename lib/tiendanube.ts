@@ -125,3 +125,54 @@ export async function fetchStoreName(creds: TNCreds): Promise<string | null> {
   const s = (await res.json()) as { name?: Record<string, string> | string };
   return typeof s.name === "object" ? Object.values(s.name)[0] ?? null : (s.name ?? null);
 }
+
+/** Trae un pedido completo por id (para la ingesta por webhook). null si no existe. */
+export async function fetchTNOrder(creds: TNCreds, orderId: string | number): Promise<Record<string, unknown> | null> {
+  const res = await tnFetch(creds, `/orders/${orderId}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`TN order ${res.status}: ${await res.text()}`);
+  return (await res.json()) as Record<string, unknown>;
+}
+
+/** Normaliza un pedido de TN al payload que consume ingest_tn_order(). */
+export function normalizeTNOrder(o: Record<string, unknown>): {
+  tn_order_id: string; tn_number: string; status: string; paid: boolean;
+  total: number; subtotal: number; discount: number;
+  buyer: { name: string; doc: string; phone: string; email: string; address: string };
+  items: Array<{ tn_variant_id: string; sku: string; product_name: string; variant_label: string; quantity: number; unit_price: number }>;
+} {
+  const g = (k: string) => o[k];
+  const ship = (g("shipping_address") ?? {}) as Record<string, unknown>;
+  const cust = (g("customer") ?? {}) as Record<string, unknown>;
+  const addressParts = [ship.address, ship.number, ship.floor, ship.locality, ship.city, ship.province, ship.zipcode]
+    .map((x) => (x == null ? "" : String(x).trim())).filter(Boolean);
+  const products = (Array.isArray(g("products")) ? (g("products") as Record<string, unknown>[]) : []).map((p) => {
+    const vv = Array.isArray(p.variant_values) ? (p.variant_values as unknown[]).map(String).join(" / ") : "";
+    const name = typeof p.name === "object" ? Object.values(p.name as Record<string, string>)[0] ?? "" : String(p.name ?? "");
+    return {
+      tn_variant_id: p.variant_id != null ? String(p.variant_id) : "",
+      sku: p.sku != null ? String(p.sku).trim() : "",
+      product_name: name,
+      variant_label: vv,
+      quantity: Number(p.quantity ?? 0),
+      unit_price: p.price != null ? Number(p.price) : 0,
+    };
+  });
+  return {
+    tn_order_id: String(g("id")),
+    tn_number: g("number") != null ? String(g("number")) : "",
+    status: String(g("status") ?? "open") === "cancelled" ? "cancelled" : "open",
+    paid: String(g("payment_status") ?? "") === "paid",
+    total: Number(g("total") ?? 0),
+    subtotal: Number(g("subtotal") ?? g("total") ?? 0),
+    discount: Number(g("discount") ?? 0),
+    buyer: {
+      name: String((g("contact_name") as string) || (cust.name as string) || "").trim(),
+      doc: String((g("contact_identification") as string) || "").trim(),
+      phone: String((g("contact_phone") as string) || (ship.phone as string) || "").trim(),
+      email: String((g("contact_email") as string) || (cust.email as string) || "").trim(),
+      address: addressParts.join(", "),
+    },
+    items: products,
+  };
+}
