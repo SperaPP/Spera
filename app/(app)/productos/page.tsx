@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Package, ImageOff, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProductosFilters } from "@/components/productos-filters";
+import { UbicarProducto } from "@/components/ubicar-producto";
 
 const VARIATION_LABEL: Record<string, string> = {
   none: "Sin variantes",
@@ -108,6 +109,7 @@ export default async function ProductosPage({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <UbicarProducto />
           <Link href="/productos/importar" className="flex items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
             <Upload className="h-4 w-4" /> Importar datos
           </Link>

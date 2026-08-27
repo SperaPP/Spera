@@ -262,3 +262,43 @@ export async function borrarVariante(variantId: string, productId: string): Prom
   revalidatePath(`/productos/${productId}`);
   return { ok: true };
 }
+
+export type UbicResult = {
+  variantId: string; sku: string | null; productName: string; variantLabel: string | null;
+  fila: number | null; estante: number | null; cubiculo: number | null; active: boolean;
+};
+
+/** Busca variantes por SKU, código de barras o nombre de producto y devuelve su
+ *  ubicación en depósito (fila / estante / cubículo). Solo lectura. */
+export async function ubicarProducto(query: string): Promise<UbicResult[]> {
+  const q = (query ?? "").trim();
+  if (q.length < 2) return [];
+  const sb = await createClient();
+  const SEL = "id, sku, size, color, active, loc_fila, loc_estante, loc_cubiculo, products(name)";
+
+  const byId = new Map<string, UbicResult>();
+  const add = (v: Record<string, unknown>) => {
+    if (byId.has(v.id as string)) return;
+    const p = (Array.isArray(v.products) ? v.products[0] : v.products) as { name?: string } | null;
+    const label = [v.size, v.color].filter(Boolean).join(" / ") || null;
+    byId.set(v.id as string, {
+      variantId: v.id as string, sku: (v.sku as string) ?? null, productName: p?.name ?? "—",
+      variantLabel: label, fila: (v.loc_fila as number) ?? null, estante: (v.loc_estante as number) ?? null,
+      cubiculo: (v.loc_cubiculo as number) ?? null, active: Boolean(v.active),
+    });
+  };
+
+  // Por SKU / código de barras.
+  if (/^[A-Za-z0-9._-]+$/.test(q)) {
+    const { data } = await sb.from("product_variants").select(SEL).or(`sku.ilike.%${q}%,barcode.ilike.%${q}%`).limit(50);
+    (data ?? []).forEach(add);
+  }
+  // Por nombre de producto.
+  const { data: prods } = await sb.from("products").select("id").ilike("name", `%${q}%`).limit(30);
+  const ids = (prods ?? []).map((p) => p.id);
+  if (ids.length) {
+    const { data } = await sb.from("product_variants").select(SEL).in("product_id", ids).limit(80);
+    (data ?? []).forEach(add);
+  }
+  return [...byId.values()].slice(0, 100);
+}
