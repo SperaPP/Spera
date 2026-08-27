@@ -46,7 +46,30 @@ export async function portalFacets(opts: {
   return { mains, cats, seasons };
 }
 
-export type CatalogItem = { id: string; name: string; price: number; publicPrice: number | null; stock: number; featured: boolean; image: string | null };
+export type CatalogItem = { id: string; name: string; price: number; publicPrice: number | null; stock: number; featured: boolean; image: string | null; sizes: string[] };
+
+/** Talles disponibles (variante activa con stock) por producto, para mostrar en la card. */
+async function availableSizesByProduct(productIds: string[], warehouse: string): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (!productIds.length) return out;
+  const admin = createAdminClient();
+  const { data: vs } = await admin.from("product_variants")
+    .select("id, product_id, size").in("product_id", productIds).eq("active", true).not("size", "is", null);
+  const rows = vs ?? [];
+  const avail = new Set<string>();
+  const ids = rows.map((v) => v.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: st } = await admin.from("stock").select("variant_id, quantity, reserved").eq("warehouse_id", warehouse).in("variant_id", ids.slice(i, i + 200));
+    for (const s of st ?? []) if (Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0)) > 0) avail.add(s.variant_id);
+  }
+  for (const v of rows) {
+    if (!avail.has(v.id) || !v.size) continue;
+    const set = out.get(v.product_id) ?? [];
+    if (!set.includes(v.size)) set.push(v.size);
+    out.set(v.product_id, set);
+  }
+  return out;
+}
 
 /** Id de la lista "Publico" (precio de referencia minorista) de la organización. */
 export async function publicListId(org: string): Promise<string | null> {
@@ -94,8 +117,12 @@ export async function catalog(opts: {
     for (const im of imgs ?? []) if (!imgByProduct.has(im.product_id)) imgByProduct.set(im.product_id, im.path);
   }
 
-  // Precio público (referencia) para comparar contra el de la lista del cliente.
-  const pubByProduct = await publicPriceByProduct(opts.org, rows.map((r) => r.id));
+  // Precio público (referencia) + talles disponibles para la card.
+  const ids = rows.map((r) => r.id);
+  const [pubByProduct, sizesByProduct] = await Promise.all([
+    publicPriceByProduct(opts.org, ids),
+    availableSizesByProduct(ids, opts.warehouse),
+  ]);
 
   return {
     total,
@@ -103,6 +130,7 @@ export async function catalog(opts: {
       id: r.id, name: r.name, price: Number(r.price), publicPrice: pubByProduct.get(r.id) ?? null,
       stock: Number(r.stock), featured: r.featured,
       image: imgByProduct.has(r.id) ? `${BUCKET_URL}/${imgByProduct.get(r.id)}` : null,
+      sizes: sizesByProduct.get(r.id) ?? [],
     })),
   };
 }

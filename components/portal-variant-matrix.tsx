@@ -5,23 +5,13 @@ import { toast } from "sonner";
 import { ShoppingCart } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import { useCart } from "@/components/portal-cart";
+import { sizeCmp } from "@/lib/sizes";
 
 type Variant = { id: string; label: string | null; size: string | null; color: string | null; stock: number };
 
-const SIZE_RANK: Record<string, number> = { U: 0, "ÚNICO": 0, UNICO: 0, UNICA: 0, XS: 1, S: 2, M: 3, L: 4, XL: 5, XXL: 6, XXXL: 7, XXXXL: 8 };
-function sizeCmp(a: string, b: string) {
-  const na = Number(a), nb = Number(b);
-  if (!isNaN(na) && !isNaN(nb)) return na - nb;
-  const ra = SIZE_RANK[a.toUpperCase()], rb = SIZE_RANK[b.toUpperCase()];
-  if (ra != null && rb != null) return ra - rb;
-  if (ra != null) return -1;
-  if (rb != null) return 1;
-  return a.localeCompare(b, "es");
-}
-
 export function PortalVariantMatrix({
-  productId, name, price, image, variants,
-}: { productId: string; name: string; price: number; image: string | null; variants: Variant[] }) {
+  productId, name, price, image, variants, onAdded,
+}: { productId: string; name: string; price: number; image: string | null; variants: Variant[]; onAdded?: () => void }) {
   const { add } = useCart();
   const [qty, setQty] = useState<Record<string, number>>({});
 
@@ -53,6 +43,7 @@ export function PortalVariantMatrix({
     if (added === 0) return toast.error("Cargá alguna cantidad.");
     setQty({});
     toast.success(`${added} unidad(es) agregada(s) al pedido.`);
+    onAdded?.();
   }
 
   const soloUnaCelda = rows.length === 1 && cols.length === 1;

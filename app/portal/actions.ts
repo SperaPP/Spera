@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPortalCustomer } from "@/lib/portal";
-import { centralWarehouseId } from "@/lib/portal-catalog";
+import { centralWarehouseId, portalProduct, type PortalProduct } from "@/lib/portal-catalog";
 import type { ActionState } from "@/lib/auth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -101,4 +101,13 @@ export async function stockDisponiblePortal(variantIds: string[]): Promise<Recor
     .eq("warehouse_id", wh).in("variant_id", variantIds.slice(0, 300));
   for (const s of data ?? []) out[s.variant_id] = Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0));
   return out;
+}
+
+/** Trae un producto (con variantes + stock) para el quick-add del catálogo. */
+export async function productoPortal(id: string): Promise<PortalProduct | null> {
+  const { customer } = await getPortalCustomer();
+  if (!customer?.priceListId || !customer.organizationId) return null;
+  const wh = await centralWarehouseId();
+  if (!wh) return null;
+  return portalProduct(id, customer.organizationId, customer.priceListId, wh);
 }
