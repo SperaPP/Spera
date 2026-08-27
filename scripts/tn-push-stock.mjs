@@ -34,8 +34,8 @@ console.log("Variantes adoptadas (links):", links.length);
 // 2) Disponible en Mayorista-Central por variante (físico − reservado; nunca < 0).
 const dispByVar = new Map();
 const varIds = links.map((l) => l.variant_id);
-for (let i = 0; i < varIds.length; i += 500) {
-  const chunk = varIds.slice(i, i + 500);
+for (let i = 0; i < varIds.length; i += 200) {
+  const chunk = varIds.slice(i, i + 200);
   const { data, error } = await sb.from("stock").select("variant_id, quantity, reserved").eq("warehouse_id", WH_CENTRAL).in("variant_id", chunk);
   if (error) { console.error("stock:", error.message); process.exit(1); }
   for (const s of data) dispByVar.set(s.variant_id, Math.max(0, (s.quantity ?? 0) - (s.reserved ?? 0)));

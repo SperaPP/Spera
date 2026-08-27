@@ -211,6 +211,48 @@ export async function syncTNStockAll(limit = 100): Promise<Array<{ org: string; 
   return out;
 }
 
+/** Respaldo por polling: trae los pedidos de TN modificados en los últimos `windowMin`
+ *  minutos y los ingesta (idempotente). Cubre entregas de webhook perdidas: ningún
+ *  pedido se pierde aunque TN no dispare el webhook. */
+export async function syncTNOrdersRecent(orgId: string, windowMin = 45): Promise<{ seen: number; created: number; errors: number }> {
+  const admin = createAdminClient();
+  const creds = await getTNCreds(orgId);
+  if (!creds) return { seen: 0, created: 0, errors: 0 };
+  const since = new Date(Date.now() - windowMin * 60_000).toISOString();
+  let seen = 0, created = 0, errors = 0;
+  let url: string | null = `${API}/${creds.storeId}/orders?updated_at_min=${encodeURIComponent(since)}&per_page=50&page=1`;
+  let guard = 0;
+  while (url && guard++ < 3) {
+    const res: Response = await tnRequest(url, { headers: { Authentication: `bearer ${creds.token}`, "User-Agent": USER_AGENT, "Content-Type": "application/json" } });
+    if (res.status === 404) break;
+    if (!res.ok) break;
+    const page = (await res.json()) as Record<string, unknown>[];
+    if (!Array.isArray(page) || page.length === 0) break;
+    for (const o of page) {
+      seen++;
+      try {
+        const { data, error } = await admin.rpc("ingest_tn_order", { p_org: orgId, p_payload: normalizeTNOrder(o) });
+        if (error) errors++;
+        else if ((data as { action?: string } | null)?.action === "created") created++;
+      } catch { errors++; }
+    }
+    const link = res.headers.get("link") || res.headers.get("Link");
+    const next = link?.split(",").find((p) => /rel="next"/.test(p));
+    const m = next?.match(/<([^>]+)>/);
+    url = m ? m[1] : null;
+  }
+  return { seen, created, errors };
+}
+
+/** Reconcilia pedidos recientes de todas las organizaciones conectadas. */
+export async function syncTNOrdersAll(windowMin = 45): Promise<Array<{ org: string; seen: number; created: number; errors: number }>> {
+  const admin = createAdminClient();
+  const { data: creds } = await admin.from("tiendanube_credentials").select("organization_id");
+  const out: Array<{ org: string; seen: number; created: number; errors: number }> = [];
+  for (const c of creds ?? []) out.push({ org: c.organization_id as string, ...(await syncTNOrdersRecent(c.organization_id as string, windowMin)) });
+  return out;
+}
+
 /** Trae un pedido completo por id (para la ingesta por webhook). null si no existe. */
 export async function fetchTNOrder(creds: TNCreds, orderId: string | number): Promise<Record<string, unknown> | null> {
   const res = await tnFetch(creds, `/orders/${orderId}`);
