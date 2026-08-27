@@ -117,7 +117,7 @@ export type PortalProduct = {
 export async function portalProduct(productId: string, org: string, list: string, warehouse: string): Promise<PortalProduct | null> {
   const admin = createAdminClient();
   const { data: p } = await admin.from("products")
-    .select("id, name, description, organization_id, active, product_variants(id, size, color)")
+    .select("id, name, description, organization_id, active, product_variants(id, size, color, active)")
     .eq("id", productId).maybeSingle();
   if (!p || p.organization_id !== org || !p.active) return null;
 
@@ -125,9 +125,8 @@ export async function portalProduct(productId: string, org: string, list: string
     .select("price").eq("product_id", productId).is("variant_id", null).eq("price_list_id", list).maybeSingle();
   if (!pl) return null; // sin precio en la lista del cliente → no visible
 
-  const pubById = await publicPriceByProduct(org, [productId]);
-
-  const vars = (p.product_variants ?? []) as { id: string; size: string | null; color: string | null }[];
+  // Solo variantes activas.
+  const vars = ((p.product_variants ?? []) as { id: string; size: string | null; color: string | null; active: boolean }[]).filter((v) => v.active);
   const variantIds = vars.map((v) => v.id);
   const stockByVariant = new Map<string, number>();
   if (variantIds.length) {
@@ -136,13 +135,16 @@ export async function portalProduct(productId: string, org: string, list: string
     for (const s of st ?? []) stockByVariant.set(s.variant_id, Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0)));
   }
 
+  const lbl = (s: string | null, c: string | null) => [s, c].filter(Boolean).join(" / ") || null;
+  const variants = vars.map((v) => ({ id: v.id, label: lbl(v.size, v.color), stock: stockByVariant.get(v.id) ?? 0 })).filter((v) => v.stock > 0);
+  if (variants.length === 0) return null; // sin stock en ninguna variante activa → no disponible
+
+  const pubById = await publicPriceByProduct(org, [productId]);
   const { data: imgs } = await admin.from("product_images").select("path, is_primary").eq("product_id", productId).order("is_primary", { ascending: false });
 
-  const lbl = (s: string | null, c: string | null) => [s, c].filter(Boolean).join(" / ") || null;
   return {
     id: p.id, name: p.name, description: p.description, price: Number(pl.price), publicPrice: pubById.get(productId) ?? null,
     images: (imgs ?? []).map((im) => `${BUCKET_URL}/${im.path}`),
-    variants: vars.map((v) => ({ id: v.id, label: lbl(v.size, v.color), stock: stockByVariant.get(v.id) ?? 0 }))
-      .filter((v) => v.stock > 0),
+    variants,
   };
 }
