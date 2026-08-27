@@ -27,21 +27,20 @@ export async function temporadasActivas(org: string): Promise<{ id: string; name
   return data ?? [];
 }
 
-/** Opciones con productos disponibles para el contexto actual (navegación por facetas). */
+/** Opciones con productos disponibles + su conteo, para el contexto actual. */
 export async function portalFacets(opts: {
   org: string; list: string; warehouse: string;
   main?: string | null; season?: string | null; search?: string | null;
-}): Promise<{ mains: Set<string>; cats: Set<string>; seasons: Set<string> }> {
+}): Promise<{ mains: Map<string, number>; cats: Map<string, number>; seasons: Map<string, number> }> {
   const admin = createAdminClient();
   const { data } = await admin.rpc("portal_facets", {
     p_org: opts.org, p_list: opts.list, p_warehouse: opts.warehouse,
     p_main: opts.main ?? null, p_season: opts.season ?? null, p_search: opts.search ?? null,
   });
-  const mains = new Set<string>(), cats = new Set<string>(), seasons = new Set<string>();
-  for (const r of (data ?? []) as { dim: string; id: string }[]) {
-    if (r.dim === "main") mains.add(r.id);
-    else if (r.dim === "cat") cats.add(r.id);
-    else if (r.dim === "season") seasons.add(r.id);
+  const mains = new Map<string, number>(), cats = new Map<string, number>(), seasons = new Map<string, number>();
+  for (const r of (data ?? []) as { dim: string; id: string; cnt: number }[]) {
+    const m = r.dim === "main" ? mains : r.dim === "cat" ? cats : r.dim === "season" ? seasons : null;
+    if (m) m.set(r.id, Number(r.cnt));
   }
   return { mains, cats, seasons };
 }
@@ -95,7 +94,7 @@ async function publicPriceByProduct(org: string, productIds: string[]): Promise<
 export async function catalog(opts: {
   org: string; list: string; warehouse: string;
   category?: string | null; mainCategory?: string | null; season?: string | null;
-  search?: string | null; featured?: boolean;
+  search?: string | null; featured?: boolean; sort?: string | null;
   limit: number; offset: number;
 }): Promise<{ items: CatalogItem[]; total: number }> {
   const admin = createAdminClient();
@@ -104,6 +103,7 @@ export async function catalog(opts: {
     p_category: opts.category ?? null, p_search: opts.search ?? null,
     p_featured: opts.featured ?? false, p_limit: opts.limit, p_offset: opts.offset,
     p_main_category: opts.mainCategory ?? null, p_season: opts.season ?? null,
+    p_sort: opts.sort ?? "name",
   });
   const rows = (data ?? []) as { id: string; name: string; has_image: boolean; price: number; stock: number; featured: boolean; total: number }[];
   const total = rows[0]?.total != null ? Number(rows[0].total) : 0;

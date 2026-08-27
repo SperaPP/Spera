@@ -8,11 +8,13 @@ import { PortalCatalogSidebar, catalogHref, type CatalogFilters } from "@/compon
 
 const PAGE_SIZE = 24;
 
-type Params = { cat?: string; main?: string; season?: string; q?: string; all?: string; page?: string };
+type Params = { cat?: string; main?: string; season?: string; q?: string; all?: string; page?: string; sort?: string };
+const SORTS: Record<string, string> = { name: "Nombre", price_asc: "Precio ↑", price_desc: "Precio ↓" };
 
 export default async function PortalCatalogo({ searchParams }: { searchParams: Promise<Params> }) {
-  const { cat, main, season, q, all, page: pageParam } = await searchParams;
+  const { cat, main, season, q, all, page: pageParam, sort: sortParam } = await searchParams;
   const query = (q ?? "").trim();
+  const sort = sortParam && SORTS[sortParam] ? sortParam : "name";
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
 
   const { customer } = await getPortalCustomer();
@@ -37,13 +39,13 @@ export default async function PortalCatalogo({ searchParams }: { searchParams: P
 
   const [facets, res] = await Promise.all([
     portalFacets({ org, list, warehouse: wh, main: effMain, season: season ?? null, search: query || null }),
-    catalog({ org, list, warehouse: wh, category: cat ?? null, mainCategory: effMain, season: season ?? null, search: query || null, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
+    catalog({ org, list, warehouse: wh, category: cat ?? null, mainCategory: effMain, season: season ?? null, search: query || null, sort, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
   ]);
 
-  // Sidebar: solo opciones con productos (más la seleccionada, para poder quitarla).
-  const mains = mainsAll.filter((m) => facets.mains.has(m.id) || m.id === effMain);
-  const cats = catsAll.filter((c) => facets.cats.has(c.id) || c.id === cat);
-  const seasons = seasonsAll.filter((s) => facets.seasons.has(s.id) || s.id === season);
+  // Sidebar: solo opciones con productos (más la seleccionada, para poder quitarla), con conteo.
+  const mains = mainsAll.filter((m) => facets.mains.has(m.id) || m.id === effMain).map((m) => ({ ...m, count: facets.mains.get(m.id) }));
+  const cats = catsAll.filter((c) => facets.cats.has(c.id) || c.id === cat).map((c) => ({ ...c, count: facets.cats.get(c.id) }));
+  const seasons = seasonsAll.filter((s) => facets.seasons.has(s.id) || s.id === season).map((s) => ({ ...s, count: facets.seasons.get(s.id) }));
 
   const base: CatalogFilters = { main: effMain ?? undefined, cat, season, q: query || undefined, all: all === "1" };
   const pageCount = Math.max(1, Math.ceil(res.total / PAGE_SIZE));
@@ -57,14 +59,20 @@ export default async function PortalCatalogo({ searchParams }: { searchParams: P
   if (cat && catName) chips.push({ label: catName, href: catalogHref({ main: effMain ?? undefined, season, q: query || undefined }) });
   if (season && seasonName) chips.push({ label: seasonName, href: catalogHref({ main: effMain ?? undefined, cat, q: query || undefined }) });
 
-  const href = (p: number) => {
+  const params = (extra: Record<string, string>) => {
     const sp = new URLSearchParams();
     if (effMain) sp.set("main", effMain);
     if (cat) sp.set("cat", cat);
     if (season) sp.set("season", season);
     if (query) sp.set("q", query);
     if (all === "1") sp.set("all", "1");
-    if (p > 1) sp.set("page", String(p));
+    if (sort !== "name") sp.set("sort", sort);
+    for (const [k, v] of Object.entries(extra)) { if (v) sp.set(k, v); else sp.delete(k); }
+    return sp;
+  };
+  const sortHref = (s: string) => { const sp = params({ sort: s === "name" ? "" : s }); const q2 = sp.toString(); return q2 ? `/portal/catalogo?${q2}` : "/portal/catalogo"; };
+  const href = (p: number) => {
+    const sp = params({ page: p > 1 ? String(p) : "" });
     const s = sp.toString();
     return s ? `/portal/catalogo?${s}` : "/portal/catalogo";
   };
@@ -99,7 +107,14 @@ export default async function PortalCatalogo({ searchParams }: { searchParams: P
             </div>
           )}
 
-          <p className="text-sm text-muted">{res.total.toLocaleString("es-AR")} producto(s){query && <> para &quot;<span className="font-medium text-ink">{query}</span>&quot;</>}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted">{res.total.toLocaleString("es-AR")} producto(s){query && <> para &quot;<span className="font-medium text-ink">{query}</span>&quot;</>}</p>
+            <div className="flex items-center gap-1 rounded-lg border border-line-strong p-0.5 text-xs">
+              {Object.entries(SORTS).map(([k, label]) => (
+                <Link key={k} href={sortHref(k)} className={`rounded-md px-2.5 py-1 font-medium transition-colors ${sort === k ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>{label}</Link>
+              ))}
+            </div>
+          </div>
 
           {res.items.length === 0 ? (
             <div className="flex flex-col items-center rounded-2xl border border-dashed border-line-strong bg-card py-16 text-center">

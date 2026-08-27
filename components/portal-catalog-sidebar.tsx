@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-type Opt = { id: string; name: string };
+type Opt = { id: string; name: string; count?: number };
 export type CatalogFilters = { main?: string; cat?: string; season?: string; q?: string; all?: boolean };
 
 /** Construye la URL del catálogo. `all` (ver todo) solo se emite si no hay ninguna
@@ -32,9 +32,10 @@ function Section({ title, options, param, current, base }: {
             <li key={o.id}>
               <Link
                 href={href}
-                className={`block rounded-lg px-2.5 py-1.5 text-sm transition-colors ${active ? "bg-accent-soft font-medium text-accent" : "text-ink hover:bg-canvas"}`}
+                className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors ${active ? "bg-accent-soft font-medium text-accent" : "text-ink hover:bg-canvas"}`}
               >
-                {o.name}
+                <span className="truncate">{o.name}</span>
+                {o.count != null && <span className="shrink-0 text-xs tabular-nums text-faint">{o.count}</span>}
               </Link>
             </li>
           );
