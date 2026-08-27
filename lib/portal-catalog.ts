@@ -109,15 +109,16 @@ export async function catalog(opts: {
 
 export type PortalProduct = {
   id: string; name: string; description: string | null; price: number; publicPrice: number | null;
+  variationType: string;
   images: string[];
-  variants: { id: string; label: string | null; stock: number }[];
+  variants: { id: string; label: string | null; size: string | null; color: string | null; stock: number }[];
 };
 
 /** Detalle de un producto para el portal (precio + variantes con stock de Central). */
 export async function portalProduct(productId: string, org: string, list: string, warehouse: string): Promise<PortalProduct | null> {
   const admin = createAdminClient();
   const { data: p } = await admin.from("products")
-    .select("id, name, description, organization_id, active, product_variants(id, size, color, active)")
+    .select("id, name, description, organization_id, active, variation_type, product_variants(id, size, color, active)")
     .eq("id", productId).maybeSingle();
   if (!p || p.organization_id !== org || !p.active) return null;
 
@@ -136,7 +137,9 @@ export async function portalProduct(productId: string, org: string, list: string
   }
 
   const lbl = (s: string | null, c: string | null) => [s, c].filter(Boolean).join(" / ") || null;
-  const variants = vars.map((v) => ({ id: v.id, label: lbl(v.size, v.color), stock: stockByVariant.get(v.id) ?? 0 })).filter((v) => v.stock > 0);
+  const variants = vars
+    .map((v) => ({ id: v.id, label: lbl(v.size, v.color), size: v.size, color: v.color, stock: stockByVariant.get(v.id) ?? 0 }))
+    .filter((v) => v.stock > 0);
   if (variants.length === 0) return null; // sin stock en ninguna variante activa → no disponible
 
   const pubById = await publicPriceByProduct(org, [productId]);
@@ -144,6 +147,7 @@ export async function portalProduct(productId: string, org: string, list: string
 
   return {
     id: p.id, name: p.name, description: p.description, price: Number(pl.price), publicPrice: pubById.get(productId) ?? null,
+    variationType: (p.variation_type as string) ?? "none",
     images: (imgs ?? []).map((im) => `${BUCKET_URL}/${im.path}`),
     variants,
   };
