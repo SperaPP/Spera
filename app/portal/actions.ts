@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPortalCustomer } from "@/lib/portal";
+import { centralWarehouseId } from "@/lib/portal-catalog";
 import type { ActionState } from "@/lib/auth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -84,4 +85,20 @@ export async function logoutPortal() {
   const sb = await createClient();
   await sb.auth.signOut();
   redirect("/portal/login");
+}
+
+/** Stock DISPONIBLE actual (Central) para las variantes del carrito. Solo lectura;
+ *  el portal-cart lo usa para re-validar contra el stock vivo. */
+export async function stockDisponiblePortal(variantIds: string[]): Promise<Record<string, number>> {
+  const { customer } = await getPortalCustomer();
+  if (!customer || !variantIds.length) return {};
+  const wh = await centralWarehouseId();
+  if (!wh) return {};
+  const admin = createAdminClient();
+  const out: Record<string, number> = {};
+  for (const v of variantIds) out[v] = 0;
+  const { data } = await admin.from("stock").select("variant_id, quantity, reserved")
+    .eq("warehouse_id", wh).in("variant_id", variantIds.slice(0, 300));
+  for (const s of data ?? []) out[s.variant_id] = Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0));
+  return out;
 }
