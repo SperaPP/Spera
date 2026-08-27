@@ -18,6 +18,7 @@ import {
   BarChart3,
   Settings,
   ShieldCheck,
+  ScrollText,
   Store,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +44,7 @@ const NAV: NavItem[] = [
   { href: "/configuracion", label: "Configuración", icon: Settings, module: "configuracion" },
   { href: "/tiendanube", label: "Tiendanube", icon: Store, adminOnly: true },
   { href: "/usuarios", label: "Usuarios y roles", icon: ShieldCheck, adminOnly: true },
+  { href: "/auditoria", label: "Auditoría", icon: ScrollText, adminOnly: true },
 ];
 
 export function Sidebar({ perms, isAdmin }: { perms: Perms; isAdmin: boolean }) {
