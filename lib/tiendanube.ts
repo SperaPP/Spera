@@ -222,7 +222,7 @@ export async function fetchTNOrder(creds: TNCreds, orderId: string | number): Pr
 /** Normaliza un pedido de TN al payload que consume ingest_tn_order(). */
 export function normalizeTNOrder(o: Record<string, unknown>): {
   tn_order_id: string; tn_number: string; status: string; paid: boolean;
-  total: number; subtotal: number; discount: number;
+  total: number; subtotal: number; discount: number; shipping: number;
   buyer: { name: string; doc: string; phone: string; email: string; address: string };
   items: Array<{ tn_variant_id: string; sku: string; product_name: string; variant_label: string; quantity: number; unit_price: number }>;
 } {
@@ -251,6 +251,7 @@ export function normalizeTNOrder(o: Record<string, unknown>): {
     total: Number(g("total") ?? 0),
     subtotal: Number(g("subtotal") ?? g("total") ?? 0),
     discount: Number(g("discount") ?? 0),
+    shipping: Number(g("shipping_cost_customer") ?? g("shipping_cost_owner") ?? 0),
     buyer: {
       name: String((g("contact_name") as string) || (cust.name as string) || "").trim(),
       doc: String((g("contact_identification") as string) || "").trim(),
