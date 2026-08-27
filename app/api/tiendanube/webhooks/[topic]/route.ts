@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import crypto from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchTNOrder, normalizeTNOrder } from "@/lib/tiendanube";
+import { fetchTNOrder, normalizeTNOrder, syncTNStockOnce } from "@/lib/tiendanube";
 
 // Webhooks de Tiendanube. TN firma el body con HMAC-SHA256 usando el Client Secret
 // de la app (header x-linkedstore-hmac-sha256, base64). Verificamos SIEMPRE la firma.
@@ -63,6 +63,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ topic: str
         console.error("ingest_tn_order:", error.message);
         return new NextResponse("error de ingesta", { status: 500 });
       }
+      // La reserva cambió el disponible → empujar a la web enseguida (post-respuesta).
+      after(() => syncTNStockOnce(cred.organization_id).catch(() => {}));
       return NextResponse.json({ ok: true });
     } catch (e) {
       console.error("webhook order:", e);

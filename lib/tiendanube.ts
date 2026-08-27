@@ -126,6 +126,61 @@ export async function fetchStoreName(creds: TNCreds): Promise<string | null> {
   return typeof s.name === "object" ? Object.values(s.name)[0] ?? null : (s.name ?? null);
 }
 
+/** Drena la cola de sync de stock de una organización: empuja el disponible de cada
+ *  variante encolada a TN y la saca de la cola. Deja en la cola las que fallan (reintento). */
+export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ processed: number; failed: number; remaining: number }> {
+  const admin = createAdminClient();
+  const creds = await getTNCreds(orgId);
+  if (!creds) return { processed: 0, failed: 0, remaining: 0 };
+
+  const { data: store } = await admin.from("stores")
+    .select("warehouse_id").eq("organization_id", orgId).eq("name", "Tiendanube").maybeSingle();
+  if (!store?.warehouse_id) return { processed: 0, failed: 0, remaining: 0 };
+  const wh = store.warehouse_id as string;
+
+  const { data: queue } = await admin.from("tn_stock_sync_queue")
+    .select("variant_id").eq("organization_id", orgId).order("enqueued_at", { ascending: true }).limit(limit);
+  if (!queue || queue.length === 0) return { processed: 0, failed: 0, remaining: 0 };
+  const varIds = queue.map((q) => q.variant_id as string);
+
+  const { data: links } = await admin.from("tiendanube_links")
+    .select("variant_id, tn_product_id, tn_variant_id").eq("organization_id", orgId).in("variant_id", varIds);
+  const linkByVar = new Map((links ?? []).map((l) => [l.variant_id as string, l]));
+  const { data: stocks } = await admin.from("stock")
+    .select("variant_id, quantity, reserved").eq("warehouse_id", wh).in("variant_id", varIds);
+  const dispByVar = new Map((stocks ?? []).map((s) => [s.variant_id as string, Math.max(0, (s.quantity ?? 0) - (s.reserved ?? 0))]));
+
+  let processed = 0, failed = 0;
+  for (const vId of varIds) {
+    const link = linkByVar.get(vId);
+    if (!link) { // variante sin link: no se sincroniza, sacar de la cola
+      await admin.from("tn_stock_sync_queue").delete().eq("organization_id", orgId).eq("variant_id", vId);
+      continue;
+    }
+    const disp = dispByVar.get(vId) ?? 0;
+    const res = await tnFetch(creds, `/products/${link.tn_product_id}/variants/${link.tn_variant_id}`,
+      { method: "PUT", body: JSON.stringify({ stock: disp }) });
+    if (res.ok) {
+      await admin.from("tn_stock_sync_queue").delete().eq("organization_id", orgId).eq("variant_id", vId);
+      processed++;
+    } else {
+      failed++; // queda en la cola para el próximo drenado
+    }
+  }
+  const { count } = await admin.from("tn_stock_sync_queue")
+    .select("*", { count: "exact", head: true }).eq("organization_id", orgId);
+  return { processed, failed, remaining: count ?? 0 };
+}
+
+/** Drena la cola de todas las organizaciones conectadas a TN. */
+export async function syncTNStockAll(limit = 100): Promise<Array<{ org: string; processed: number; failed: number; remaining: number }>> {
+  const admin = createAdminClient();
+  const { data: creds } = await admin.from("tiendanube_credentials").select("organization_id");
+  const out: Array<{ org: string; processed: number; failed: number; remaining: number }> = [];
+  for (const c of creds ?? []) out.push({ org: c.organization_id as string, ...(await syncTNStockOnce(c.organization_id as string, limit)) });
+  return out;
+}
+
 /** Trae un pedido completo por id (para la ingesta por webhook). null si no existe. */
 export async function fetchTNOrder(creds: TNCreds, orderId: string | number): Promise<Record<string, unknown> | null> {
   const res = await tnFetch(creds, `/orders/${orderId}`);
