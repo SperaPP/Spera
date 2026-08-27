@@ -21,6 +21,23 @@ export async function categoriasPrincipales(org: string): Promise<{ id: string; 
   return data ?? [];
 }
 
+/** Categorías madre con una imagen representativa (primer producto con foto), para el home. */
+export async function mainCategoryTiles(org: string): Promise<{ id: string; name: string; image: string | null }[]> {
+  const admin = createAdminClient();
+  const { data: mains } = await admin.from("main_categories").select("id, name").eq("organization_id", org).order("position").order("name");
+  const out: { id: string; name: string; image: string | null }[] = [];
+  for (const m of mains ?? []) {
+    const { data: p } = await admin.from("products").select("id").eq("organization_id", org).eq("main_category_id", m.id).eq("active", true).eq("has_image", true).limit(1).maybeSingle();
+    let image: string | null = null;
+    if (p) {
+      const { data: im } = await admin.from("product_images").select("path").eq("product_id", p.id).order("is_primary", { ascending: false }).limit(1).maybeSingle();
+      if (im) image = `${BUCKET_URL}/${im.path}`;
+    }
+    out.push({ id: m.id, name: m.name, image });
+  }
+  return out;
+}
+
 export async function temporadasActivas(org: string): Promise<{ id: string; name: string }[]> {
   const admin = createAdminClient();
   const { data } = await admin.from("seasons").select("id, name").eq("organization_id", org).order("name");
