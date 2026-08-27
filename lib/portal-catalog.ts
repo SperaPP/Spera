@@ -27,6 +27,25 @@ export async function temporadasActivas(org: string): Promise<{ id: string; name
   return data ?? [];
 }
 
+/** Opciones con productos disponibles para el contexto actual (navegación por facetas). */
+export async function portalFacets(opts: {
+  org: string; list: string; warehouse: string;
+  main?: string | null; season?: string | null; search?: string | null;
+}): Promise<{ mains: Set<string>; cats: Set<string>; seasons: Set<string> }> {
+  const admin = createAdminClient();
+  const { data } = await admin.rpc("portal_facets", {
+    p_org: opts.org, p_list: opts.list, p_warehouse: opts.warehouse,
+    p_main: opts.main ?? null, p_season: opts.season ?? null, p_search: opts.search ?? null,
+  });
+  const mains = new Set<string>(), cats = new Set<string>(), seasons = new Set<string>();
+  for (const r of (data ?? []) as { dim: string; id: string }[]) {
+    if (r.dim === "main") mains.add(r.id);
+    else if (r.dim === "cat") cats.add(r.id);
+    else if (r.dim === "season") seasons.add(r.id);
+  }
+  return { mains, cats, seasons };
+}
+
 export type CatalogItem = { id: string; name: string; price: number; publicPrice: number | null; stock: number; featured: boolean; image: string | null };
 
 /** Id de la lista "Publico" (precio de referencia minorista) de la organización. */

@@ -1,17 +1,17 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, PackageOpen, SlidersHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, PackageOpen, SlidersHorizontal, X } from "lucide-react";
 import { getPortalCustomer } from "@/lib/portal";
-import { centralWarehouseId, categoriasActivas, categoriasPrincipales, temporadasActivas, catalog } from "@/lib/portal-catalog";
+import { centralWarehouseId, categoriasActivas, categoriasPrincipales, temporadasActivas, portalFacets, catalog } from "@/lib/portal-catalog";
 import { PortalSearch } from "@/components/portal-search";
 import { PortalProductCard } from "@/components/portal-product-card";
-import { PortalCatalogSidebar, type CatalogFilters } from "@/components/portal-catalog-sidebar";
+import { PortalCatalogSidebar, catalogHref, type CatalogFilters } from "@/components/portal-catalog-sidebar";
 
 const PAGE_SIZE = 24;
 
-type Params = { cat?: string; main?: string; season?: string; q?: string; page?: string };
+type Params = { cat?: string; main?: string; season?: string; q?: string; all?: string; page?: string };
 
 export default async function PortalCatalogo({ searchParams }: { searchParams: Promise<Params> }) {
-  const { cat, main, season, q, page: pageParam } = await searchParams;
+  const { cat, main, season, q, all, page: pageParam } = await searchParams;
   const query = (q ?? "").trim();
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
 
@@ -24,22 +24,46 @@ export default async function PortalCatalogo({ searchParams }: { searchParams: P
     return <p className="rounded-xl border border-warn/40 bg-warn-bg/30 px-4 py-6 text-sm text-ink">No podemos mostrar el catálogo en este momento.</p>;
   }
 
-  const [mains, cats, seasons, res] = await Promise.all([
+  const [mainsAll, catsAll, seasonsAll] = await Promise.all([
     categoriasPrincipales(org),
     categoriasActivas(),
     temporadasActivas(org),
-    catalog({ org, list, warehouse: wh, category: cat ?? null, mainCategory: main ?? null, season: season ?? null, search: query || null, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
   ]);
 
-  const base: CatalogFilters = { main, cat, season, q: query || undefined };
+  // Arranca en "Mujer" salvo que haya otro filtro/búsqueda o el cliente pidió ver todo.
+  const mujerId = mainsAll.find((m) => m.name.toLowerCase() === "mujer")?.id ?? null;
+  const noExplicit = !main && !cat && !season && !query && all !== "1";
+  const effMain = main ?? (noExplicit ? mujerId : null);
+
+  const [facets, res] = await Promise.all([
+    portalFacets({ org, list, warehouse: wh, main: effMain, season: season ?? null, search: query || null }),
+    catalog({ org, list, warehouse: wh, category: cat ?? null, mainCategory: effMain, season: season ?? null, search: query || null, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
+  ]);
+
+  // Sidebar: solo opciones con productos (más la seleccionada, para poder quitarla).
+  const mains = mainsAll.filter((m) => facets.mains.has(m.id) || m.id === effMain);
+  const cats = catsAll.filter((c) => facets.cats.has(c.id) || c.id === cat);
+  const seasons = seasonsAll.filter((s) => facets.seasons.has(s.id) || s.id === season);
+
+  const base: CatalogFilters = { main: effMain ?? undefined, cat, season, q: query || undefined, all: all === "1" };
   const pageCount = Math.max(1, Math.ceil(res.total / PAGE_SIZE));
+
+  // Chips de filtros activos (con link para quitarlos).
+  const chips: { label: string; href: string }[] = [];
+  const mainName = mainsAll.find((m) => m.id === effMain)?.name;
+  const catName = catsAll.find((c) => c.id === cat)?.name;
+  const seasonName = seasonsAll.find((s) => s.id === season)?.name;
+  if (effMain && mainName) chips.push({ label: mainName, href: catalogHref({ q: query || undefined, all: true }) });
+  if (cat && catName) chips.push({ label: catName, href: catalogHref({ main: effMain ?? undefined, season, q: query || undefined }) });
+  if (season && seasonName) chips.push({ label: seasonName, href: catalogHref({ main: effMain ?? undefined, cat, q: query || undefined }) });
 
   const href = (p: number) => {
     const sp = new URLSearchParams();
-    if (main) sp.set("main", main);
+    if (effMain) sp.set("main", effMain);
     if (cat) sp.set("cat", cat);
     if (season) sp.set("season", season);
     if (query) sp.set("q", query);
+    if (all === "1") sp.set("all", "1");
     if (p > 1) sp.set("page", String(p));
     const s = sp.toString();
     return s ? `/portal/catalogo?${s}` : "/portal/catalogo";
@@ -65,6 +89,16 @@ export default async function PortalCatalogo({ searchParams }: { searchParams: P
 
         {/* Contenido */}
         <div className="space-y-4">
+          {chips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {chips.map((c) => (
+                <Link key={c.label} href={c.href} className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/15">
+                  {c.label} <X className="h-3 w-3" />
+                </Link>
+              ))}
+            </div>
+          )}
+
           <p className="text-sm text-muted">{res.total.toLocaleString("es-AR")} producto(s){query && <> para &quot;<span className="font-medium text-ink">{query}</span>&quot;</>}</p>
 
           {res.items.length === 0 ? (

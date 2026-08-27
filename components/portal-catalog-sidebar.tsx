@@ -1,15 +1,17 @@
 import Link from "next/link";
 
 type Opt = { id: string; name: string };
-export type CatalogFilters = { main?: string; cat?: string; season?: string; q?: string };
+export type CatalogFilters = { main?: string; cat?: string; season?: string; q?: string; all?: boolean };
 
-function hrefWith(base: CatalogFilters, patch: Partial<CatalogFilters>): string {
-  const merged = { ...base, ...patch };
+/** Construye la URL del catálogo. `all` (ver todo) solo se emite si no hay ninguna
+ *  dimensión seleccionada; elegir cualquier filtro lo descarta. */
+export function catalogHref(f: CatalogFilters): string {
   const sp = new URLSearchParams();
-  if (merged.main) sp.set("main", merged.main);
-  if (merged.cat) sp.set("cat", merged.cat);
-  if (merged.season) sp.set("season", merged.season);
-  if (merged.q) sp.set("q", merged.q);
+  if (f.main) sp.set("main", f.main);
+  if (f.cat) sp.set("cat", f.cat);
+  if (f.season) sp.set("season", f.season);
+  if (f.q) sp.set("q", f.q);
+  if (f.all && !f.main && !f.cat && !f.season) sp.set("all", "1");
   const s = sp.toString();
   return s ? `/portal/catalogo?${s}` : "/portal/catalogo";
 }
@@ -24,10 +26,12 @@ function Section({ title, options, param, current, base }: {
       <ul className="space-y-0.5">
         {options.map((o) => {
           const active = current === o.id;
+          // Elegir un filtro descarta "all". Toggle: si ya está activo, se saca.
+          const href = catalogHref({ ...base, all: false, [param]: active ? undefined : o.id });
           return (
             <li key={o.id}>
               <Link
-                href={hrefWith(base, { [param]: active ? undefined : o.id })}
+                href={href}
                 className={`block rounded-lg px-2.5 py-1.5 text-sm transition-colors ${active ? "bg-accent-soft font-medium text-accent" : "text-ink hover:bg-canvas"}`}
               >
                 {o.name}
@@ -40,16 +44,16 @@ function Section({ title, options, param, current, base }: {
   );
 }
 
-/** Contenido del sidebar de navegación del catálogo (principales, tipos, temporadas). */
+/** Sidebar de navegación del catálogo (principales, tipos, temporadas disponibles). */
 export function PortalCatalogSidebar({ mains, cats, seasons, base }: {
   mains: Opt[]; cats: Opt[]; seasons: Opt[]; base: CatalogFilters;
 }) {
-  const hasFilter = Boolean(base.main || base.cat || base.season);
+  const todoActive = Boolean(base.all) && !base.main && !base.cat && !base.season;
   return (
     <nav className="space-y-4">
       <Link
-        href={hrefWith({ q: base.q }, {})}
-        className={`block rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${!hasFilter ? "bg-accent-soft text-accent" : "text-ink hover:bg-canvas"}`}
+        href={catalogHref({ q: base.q, all: true })}
+        className={`block rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${todoActive ? "bg-accent-soft text-accent" : "text-ink hover:bg-canvas"}`}
       >
         Todo el catálogo
       </Link>
