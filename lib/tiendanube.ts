@@ -280,6 +280,22 @@ export async function publishTNProduct(orgId: string, productId: string): Promis
   return { ok: true, tnProductId: String(body.id), linked: links.length };
 }
 
+/** Muestra u oculta un producto en la tienda (published true/false). No lo borra:
+ *  mantiene el producto y los links, así re-activarlo es instantáneo. */
+export async function setTNProductPublished(orgId: string, productId: string, published: boolean): Promise<{ ok: boolean; changed?: boolean; error?: string }> {
+  const admin = createAdminClient();
+  const creds = await getTNCreds(orgId);
+  if (!creds) return { ok: false, error: "Tiendanube no está conectado" };
+  const { data: vs } = await admin.from("product_variants").select("id").eq("product_id", productId);
+  const vids = (vs ?? []).map((v) => v.id);
+  if (!vids.length) return { ok: true, changed: false };
+  const { data: link } = await admin.from("tiendanube_links").select("tn_product_id").eq("organization_id", orgId).in("variant_id", vids).limit(1).maybeSingle();
+  if (!link) return { ok: true, changed: false }; // no está en TN → nada que mostrar/ocultar
+  const res = await tnFetch(creds, `/products/${link.tn_product_id}`, { method: "PUT", body: JSON.stringify({ published }) });
+  if (!res.ok) return { ok: false, error: `Tiendanube ${res.status}: ${(await res.text()).slice(0, 150)}` };
+  return { ok: true, changed: true };
+}
+
 /** Respaldo por polling: trae los pedidos de TN modificados en los últimos `windowMin`
  *  minutos y los ingesta (idempotente). Cubre entregas de webhook perdidas: ningún
  *  pedido se pierde aunque TN no dispare el webhook. */

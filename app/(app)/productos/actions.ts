@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireCan, type ActionState } from "@/lib/auth";
-import { publishTNProduct } from "@/lib/tiendanube";
+import { publishTNProduct, setTNProductPublished } from "@/lib/tiendanube";
 
 const variantSchema = z.object({
   size: z.string().trim().optional(),
@@ -177,15 +177,26 @@ export async function setTnSync(productId: string, value: boolean): Promise<Acti
   const { error } = await sb.from("products").update({ tn_sync: value }).eq("id", productId);
   if (error) return { error: error.message };
 
-  // Al prender el flag, publicar el producto en la web (crearlo en TN si es nuevo).
-  // Si ya está adoptado/publicado, publishTNProduct es un no-op.
-  if (value) {
-    const { data: org } = await sb.rpc("current_org_id");
-    if (org) {
-      const pub = await publishTNProduct(org as string, productId);
+  // Simétrico: prender el flag = subir/mostrar en la web; apagar = bajar (ocultar).
+  const { data: org } = await sb.rpc("current_org_id");
+  if (org) {
+    const orgId = org as string;
+    if (value) {
+      const pub = await publishTNProduct(orgId, productId); // crea si es nuevo (no-op si ya existe)
       if (!pub.ok) {
         revalidatePath(`/productos/${productId}`);
         return { error: `Se marcó como sincronizado, pero no se pudo publicar en la web: ${pub.error}` };
+      }
+      const vis = await setTNProductPublished(orgId, productId, true); // asegurar visible (re-activación)
+      if (!vis.ok) {
+        revalidatePath(`/productos/${productId}`);
+        return { error: `Publicado, pero no se pudo mostrar en la web: ${vis.error}` };
+      }
+    } else {
+      const hid = await setTNProductPublished(orgId, productId, false); // bajar de la web
+      if (!hid.ok) {
+        revalidatePath(`/productos/${productId}`);
+        return { error: `Se apagó el flag, pero no se pudo bajar de la web: ${hid.error}` };
       }
     }
   }
