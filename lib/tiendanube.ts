@@ -213,9 +213,12 @@ export async function syncTNStockAll(limit = 100): Promise<Array<{ org: string; 
 
 const IMG_BUCKET = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
 
-/** Publica un producto NUEVO en Tiendanube (lo crea con variantes, precio Público,
- *  stock disponible e imágenes) y guarda los tiendanube_links. Idempotente: si ya
- *  tiene vínculos, no hace nada. Match de variante por SKU. */
+type LinkRow = { organization_id: string; variant_id: string; tn_product_id: string; tn_variant_id: string; last_synced_at: string };
+
+/** Publica un producto en Tiendanube (lo crea con variantes, precio Público, stock
+ *  disponible e imágenes) y guarda los tiendanube_links. IDEMPOTENTE Y ANTI-DUPLICADO:
+ *  si el producto ya existe en TN (match por SKU) lo ADOPTA en vez de crear otro, y si
+ *  la respuesta del create viene sin SKUs, re-consulta el producto para vincular bien. */
 export async function publishTNProduct(orgId: string, productId: string): Promise<{ ok: boolean; tnProductId?: string; linked?: number; error?: string }> {
   const admin = createAdminClient();
   const creds = await getTNCreds(orgId);
@@ -232,10 +235,26 @@ export async function publishTNProduct(orgId: string, productId: string): Promis
   const { data: vars } = await admin.from("product_variants").select("id, sku, size, color").eq("product_id", productId).eq("active", true).not("sku", "is", null);
   const active = vars ?? [];
   if (!active.length) return { ok: false, error: "El producto no tiene variantes activas con SKU" };
+  const key = (s: unknown) => String(s ?? "").trim().toLowerCase();
 
+  // Fast path: si TODAS las variantes ya están vinculadas, no hay nada que hacer.
   const { count: yaLinks } = await admin.from("tiendanube_links").select("*", { count: "exact", head: true }).eq("organization_id", orgId).in("variant_id", active.map((v) => v.id));
-  if (yaLinks && yaLinks > 0) return { ok: true, linked: 0 }; // ya publicado/adoptado
+  if (yaLinks && yaLinks >= active.length) return { ok: true, linked: 0 };
 
+  // ── Idempotencia fuerte: ¿el producto YA existe en TN por SKU? Adoptar, no duplicar.
+  let catalog;
+  try { catalog = await fetchTNProducts(creds); } catch { return { ok: false, error: "No se pudo leer el catálogo de Tiendanube" }; }
+  const tnBySku = new Map<string, { prod: string; variant: string }>();
+  for (const tp of catalog) for (const tv of tp.variants) if (tv.sku) tnBySku.set(key(tv.sku), { prod: tp.id, variant: tv.tnVariantId });
+  const adopt = active
+    .map((v) => { const m = tnBySku.get(key(v.sku)); return m ? { organization_id: orgId, variant_id: v.id, tn_product_id: m.prod, tn_variant_id: m.variant, last_synced_at: new Date().toISOString() } : null; })
+    .filter(Boolean) as LinkRow[];
+  if (adopt.length) {
+    await admin.from("tiendanube_links").upsert(adopt, { onConflict: "organization_id,variant_id" });
+    return { ok: true, tnProductId: adopt[0].tn_product_id, linked: adopt.length };
+  }
+
+  // ── No existe en TN → crear.
   const { data: pubList } = await admin.from("price_lists").select("id").eq("organization_id", orgId).eq("name", "Publico").maybeSingle();
   if (!pubList) return { ok: false, error: "No existe la lista Publico" };
   const { data: pl } = await admin.from("price_list_items").select("price").eq("price_list_id", pubList.id).eq("product_id", productId).is("variant_id", null).maybeSingle();
@@ -244,7 +263,6 @@ export async function publishTNProduct(orgId: string, productId: string): Promis
 
   const { data: st } = await admin.from("stock").select("variant_id, quantity, reserved").eq("warehouse_id", wh).in("variant_id", active.map((v) => v.id));
   const disp = new Map((st ?? []).map((s) => [s.variant_id as string, Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0))]));
-
   const { data: imgs } = await admin.from("product_images").select("path, is_primary").eq("product_id", productId).order("is_primary", { ascending: false }).limit(9);
 
   const vt = prod.variation_type as string;
@@ -270,14 +288,22 @@ export async function publishTNProduct(orgId: string, productId: string): Promis
   const res = await tnFetch(creds, "/products", { method: "POST", body: JSON.stringify(payload) });
   if (!res.ok) return { ok: false, error: `Tiendanube ${res.status}: ${(await res.text()).slice(0, 180)}` };
   const body = (await res.json()) as { id: number | string; variants?: { id: number | string; sku?: string }[] };
+  const tnPid = String(body.id);
 
-  const tnBySku = new Map((body.variants ?? []).map((v) => [String(v.sku ?? "").trim().toLowerCase(), v.id]));
+  // Vincular por SKU. Si la respuesta vino sin SKUs, re-consultar el producto creado
+  // (clave para NO dejarlo sin vínculo, que es lo que causaba re-crearlo duplicado).
+  let respVars = (body.variants ?? []) as { id: number | string; sku?: string }[];
+  if (!respVars.length || respVars.some((v) => !v.sku)) {
+    const r2 = await tnFetch(creds, `/products/${tnPid}?fields=id,variants`, {});
+    if (r2.ok) respVars = ((await r2.json()) as { variants?: { id: number | string; sku?: string }[] }).variants ?? respVars;
+  }
+  const bySku = new Map(respVars.filter((v) => v.sku).map((v) => [key(v.sku), v.id]));
   const links = active
-    .map((v) => ({ organization_id: orgId, variant_id: v.id, tn_product_id: String(body.id), tn_variant_id: tnBySku.has(String(v.sku).trim().toLowerCase()) ? String(tnBySku.get(String(v.sku).trim().toLowerCase())) : null, last_synced_at: new Date().toISOString() }))
-    .filter((l) => l.tn_variant_id) as { organization_id: string; variant_id: string; tn_product_id: string; tn_variant_id: string; last_synced_at: string }[];
+    .map((v) => { const tv = bySku.get(key(v.sku)); return tv != null ? { organization_id: orgId, variant_id: v.id, tn_product_id: tnPid, tn_variant_id: String(tv), last_synced_at: new Date().toISOString() } : null; })
+    .filter(Boolean) as LinkRow[];
   if (links.length) await admin.from("tiendanube_links").upsert(links, { onConflict: "organization_id,variant_id" });
 
-  return { ok: true, tnProductId: String(body.id), linked: links.length };
+  return { ok: true, tnProductId: tnPid, linked: links.length };
 }
 
 /** Muestra u oculta un producto en la tienda (published true/false). No lo borra:
