@@ -15,6 +15,18 @@ export async function categoriasActivas(): Promise<{ id: string; name: string }[
   return data ?? [];
 }
 
+export async function categoriasPrincipales(org: string): Promise<{ id: string; name: string }[]> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("main_categories").select("id, name").eq("organization_id", org).order("name");
+  return data ?? [];
+}
+
+export async function temporadasActivas(org: string): Promise<{ id: string; name: string }[]> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("seasons").select("id, name").eq("organization_id", org).order("name");
+  return data ?? [];
+}
+
 export type CatalogItem = { id: string; name: string; price: number; publicPrice: number | null; stock: number; featured: boolean; image: string | null };
 
 /** Id de la lista "Publico" (precio de referencia minorista) de la organización. */
@@ -40,7 +52,8 @@ async function publicPriceByProduct(org: string, productIds: string[]): Promise<
 /** Catálogo paginado (precio de la lista del cliente + stock de Central). */
 export async function catalog(opts: {
   org: string; list: string; warehouse: string;
-  category?: string | null; search?: string | null; featured?: boolean;
+  category?: string | null; mainCategory?: string | null; season?: string | null;
+  search?: string | null; featured?: boolean;
   limit: number; offset: number;
 }): Promise<{ items: CatalogItem[]; total: number }> {
   const admin = createAdminClient();
@@ -48,6 +61,7 @@ export async function catalog(opts: {
     p_org: opts.org, p_list: opts.list, p_warehouse: opts.warehouse,
     p_category: opts.category ?? null, p_search: opts.search ?? null,
     p_featured: opts.featured ?? false, p_limit: opts.limit, p_offset: opts.offset,
+    p_main_category: opts.mainCategory ?? null, p_season: opts.season ?? null,
   });
   const rows = (data ?? []) as { id: string; name: string; has_image: boolean; price: number; stock: number; featured: boolean; total: number }[];
   const total = rows[0]?.total != null ? Number(rows[0].total) : 0;
