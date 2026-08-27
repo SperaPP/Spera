@@ -59,16 +59,19 @@ export async function POST(request: Request, ctx: { params: Promise<{ topic: str
         p_payload: payload,
       });
       if (error) {
-        // Devolvemos 500 para que TN reintente el webhook más tarde.
-        console.error("ingest_tn_order:", error.message);
-        return new NextResponse("error de ingesta", { status: 500 });
+        // Error de negocio/validación de la RPC = PERMANENTE. Acusamos 200 para no
+        // envenenar la cola de reintentos de TN (evita que deshabilite el webhook).
+        // Se loggea para revisión; order/updated o el reintento lo reconcilian luego.
+        console.error("ingest_tn_order (permanente, acusado):", error.message);
+        return NextResponse.json({ ok: true, warning: "ingesta con error" });
       }
       // La reserva cambió el disponible → empujar a la web enseguida (post-respuesta).
       after(() => syncTNStockOnce(cred.organization_id).catch(() => {}));
       return NextResponse.json({ ok: true });
     } catch (e) {
-      console.error("webhook order:", e);
-      return new NextResponse("error", { status: 500 }); // TN reintenta
+      // Falla de infraestructura (red/DB) = TRANSITORIA → 500 para que TN reintente.
+      console.error("webhook order (transitorio):", e);
+      return new NextResponse("error", { status: 500 });
     }
   }
 

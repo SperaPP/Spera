@@ -1,6 +1,7 @@
 // Cliente de la API de Tiendanube (Nuvemshop). Solo server-side.
-// API versionada por fecha: https://api.tiendanube.com/2025-03/{store_id}
-// Auth: header "Authorization: Bearer TOKEN" + "User-Agent" obligatorio.
+// IMPORTANTE: se usa la API v1 (https://api.tiendanube.com/v1/{store_id}) con header
+// "Authentication: bearer TOKEN" (NO "Authorization: Bearer") + "User-Agent" obligatorio.
+// Es intencional y está verificado contra la tienda real; no cambiar el header.
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -126,9 +127,14 @@ export async function fetchStoreName(creds: TNCreds): Promise<string | null> {
   return typeof s.name === "object" ? Object.values(s.name)[0] ?? null : (s.name ?? null);
 }
 
+const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const MAX_FAILS = 10; // tras N fallos consecutivos, se descarta (dead-letter)
+
 /** Drena la cola de sync de stock de una organización: empuja el disponible de cada
- *  variante encolada a TN y la saca de la cola. Deja en la cola las que fallan (reintento). */
-export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ processed: number; failed: number; remaining: number }> {
+ *  variante encolada a TN. Un solo drenador por org a la vez (lease). Borra la fila
+ *  solo si no fue re-encolada durante el PUT (no pierde updates). Las fallidas van al
+ *  fondo (no starvan a las buenas) y se descartan tras MAX_FAILS. */
+export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ processed: number; failed: number; remaining: number; skipped?: boolean }> {
   const admin = createAdminClient();
   const creds = await getTNCreds(orgId);
   if (!creds) return { processed: 0, failed: 0, remaining: 0 };
@@ -138,34 +144,58 @@ export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ pro
   if (!store?.warehouse_id) return { processed: 0, failed: 0, remaining: 0 };
   const wh = store.warehouse_id as string;
 
-  const { data: queue } = await admin.from("tn_stock_sync_queue")
-    .select("variant_id").eq("organization_id", orgId).order("enqueued_at", { ascending: true }).limit(limit);
-  if (!queue || queue.length === 0) return { processed: 0, failed: 0, remaining: 0 };
-  const varIds = queue.map((q) => q.variant_id as string);
-
-  const { data: links } = await admin.from("tiendanube_links")
-    .select("variant_id, tn_product_id, tn_variant_id").eq("organization_id", orgId).in("variant_id", varIds);
-  const linkByVar = new Map((links ?? []).map((l) => [l.variant_id as string, l]));
-  const { data: stocks } = await admin.from("stock")
-    .select("variant_id, quantity, reserved").eq("warehouse_id", wh).in("variant_id", varIds);
-  const dispByVar = new Map((stocks ?? []).map((s) => [s.variant_id as string, Math.max(0, (s.quantity ?? 0) - (s.reserved ?? 0))]));
+  // Lease: un solo drenador por org a la vez (se auto-libera a los 90s si el drenado muere).
+  await admin.from("tn_sync_lock").upsert({ organization_id: orgId, locked_until: new Date(0).toISOString() }, { onConflict: "organization_id", ignoreDuplicates: true });
+  const { data: lease } = await admin.from("tn_sync_lock")
+    .update({ locked_until: new Date(Date.now() + 90_000).toISOString() })
+    .eq("organization_id", orgId).lt("locked_until", new Date().toISOString()).select("organization_id");
+  if (!lease || lease.length === 0) return { processed: 0, failed: 0, remaining: 0, skipped: true };
 
   let processed = 0, failed = 0;
-  for (const vId of varIds) {
-    const link = linkByVar.get(vId);
-    if (!link) { // variante sin link: no se sincroniza, sacar de la cola
-      await admin.from("tn_stock_sync_queue").delete().eq("organization_id", orgId).eq("variant_id", vId);
-      continue;
+  try {
+    const { data: queue } = await admin.from("tn_stock_sync_queue")
+      .select("variant_id, enqueued_at, fail_count").eq("organization_id", orgId)
+      .order("enqueued_at", { ascending: true }).limit(limit);
+    if (queue && queue.length) {
+      const varIds = queue.map((q) => q.variant_id as string);
+      const { data: links } = await admin.from("tiendanube_links")
+        .select("variant_id, tn_product_id, tn_variant_id").eq("organization_id", orgId).in("variant_id", varIds);
+      const linkByVar = new Map((links ?? []).map((l) => [l.variant_id as string, l]));
+
+      for (const q of queue) {
+        const vId = q.variant_id as string;
+        const enq = q.enqueued_at as string; // token de versión de la fila
+        const link = linkByVar.get(vId);
+        if (!link) { // sin link: no se sincroniza, sacar de la cola (condicionado)
+          await admin.from("tn_stock_sync_queue").delete().eq("organization_id", orgId).eq("variant_id", vId).eq("enqueued_at", enq);
+          continue;
+        }
+        // Disponible leído lo más tarde posible (justo antes del PUT).
+        const { data: s } = await admin.from("stock").select("quantity, reserved").eq("warehouse_id", wh).eq("variant_id", vId).maybeSingle();
+        const disp = Math.max(0, (s?.quantity ?? 0) - (s?.reserved ?? 0));
+        const res = await tnFetch(creds, `/products/${link.tn_product_id}/variants/${link.tn_variant_id}`,
+          { method: "PUT", body: JSON.stringify({ stock: disp }) });
+        if (res.ok) {
+          // Borrado condicionado por enqueued_at: si el trigger re-encoló durante el PUT
+          // (venta física en el medio), este delete NO matchea y la variante se reprocesa.
+          await admin.from("tn_stock_sync_queue").delete().eq("organization_id", orgId).eq("variant_id", vId).eq("enqueued_at", enq);
+          processed++;
+        } else {
+          failed++;
+          const fc = (q.fail_count as number) ?? 0;
+          if (fc + 1 >= MAX_FAILS) { // poison message: descartar y avisar
+            await admin.from("tn_stock_sync_queue").delete().eq("organization_id", orgId).eq("variant_id", vId).eq("enqueued_at", enq);
+            console.error(`tn-sync: descarto variante ${vId} tras ${fc + 1} fallos (PUT ${res.status})`);
+          } else { // al fondo, para no starvar a las buenas
+            await admin.from("tn_stock_sync_queue").update({ enqueued_at: new Date().toISOString(), fail_count: fc + 1 })
+              .eq("organization_id", orgId).eq("variant_id", vId).eq("enqueued_at", enq);
+          }
+        }
+        await sleepMs(250); // respeta el rate limit de TN
+      }
     }
-    const disp = dispByVar.get(vId) ?? 0;
-    const res = await tnFetch(creds, `/products/${link.tn_product_id}/variants/${link.tn_variant_id}`,
-      { method: "PUT", body: JSON.stringify({ stock: disp }) });
-    if (res.ok) {
-      await admin.from("tn_stock_sync_queue").delete().eq("organization_id", orgId).eq("variant_id", vId);
-      processed++;
-    } else {
-      failed++; // queda en la cola para el próximo drenado
-    }
+  } finally {
+    await admin.from("tn_sync_lock").update({ locked_until: new Date().toISOString() }).eq("organization_id", orgId);
   }
   const { count } = await admin.from("tn_stock_sync_queue")
     .select("*", { count: "exact", head: true }).eq("organization_id", orgId);
@@ -173,10 +203,10 @@ export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ pro
 }
 
 /** Drena la cola de todas las organizaciones conectadas a TN. */
-export async function syncTNStockAll(limit = 100): Promise<Array<{ org: string; processed: number; failed: number; remaining: number }>> {
+export async function syncTNStockAll(limit = 100): Promise<Array<{ org: string; processed: number; failed: number; remaining: number; skipped?: boolean }>> {
   const admin = createAdminClient();
   const { data: creds } = await admin.from("tiendanube_credentials").select("organization_id");
-  const out: Array<{ org: string; processed: number; failed: number; remaining: number }> = [];
+  const out: Array<{ org: string; processed: number; failed: number; remaining: number; skipped?: boolean }> = [];
   for (const c of creds ?? []) out.push({ org: c.organization_id as string, ...(await syncTNStockOnce(c.organization_id as string, limit)) });
   return out;
 }
