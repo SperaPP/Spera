@@ -161,9 +161,11 @@ export default async function PosPage() {
 
   // Lista Publico para mostrador; perfil Mayorista para el flujo mayorista.
   const retailPriceListId = (priceLists ?? []).find((l) => l.name === "Publico")?.id ?? null;
-  const wholesaleProfiles = (profiles ?? [])
-    .filter((p) => p.name === "Mayorista")
+  const asProfiles = (name: string) => (profiles ?? [])
+    .filter((p) => p.name === name)
     .map((p) => ({ customerTypeId: p.id, name: p.name, priceListId: p.price_list_id as string | null }));
+  const wholesaleProfiles = asProfiles("Mayorista");
+  const retailProfiles = asProfiles("Publico"); // tipo de cliente para mostrador (minorista)
 
   return (
     <PosTerminal
@@ -172,6 +174,7 @@ export default async function PosPage() {
       isAdmin={isAdmin === true}
       retailPriceListId={retailPriceListId}
       wholesaleProfiles={wholesaleProfiles}
+      retailProfiles={retailProfiles}
       paymentMethods={methods ?? []}
     />
   );

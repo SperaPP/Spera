@@ -6,7 +6,6 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard, Receipt, Gift, RefreshCw } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { isValidEmail, isValidPhone } from "@/lib/validation";
 import { listarProductosPOS, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, buscarClientesSimilares, crearClienteRapido } from "@/app/(app)/pos/actions";
 
 type GridProduct = Awaited<ReturnType<typeof listarProductosPOS>>[number];
@@ -32,19 +31,13 @@ function Thumb({ src, size = "h-10 w-10" }: { src: string | null; size?: string 
   return <img src={src} alt="" loading="lazy" decoding="async" className={`${size} shrink-0 rounded-md object-cover`} />;
 }
 
-type RetailForm = { name: string; apellido: string; doc: string; phone: string; email: string };
-function toSnapshot(d: RetailForm) {
-  const name = [d.name, d.apellido].filter(Boolean).join(" ").trim();
-  const s = { name: name || undefined, doc: d.doc.trim() || undefined, phone: d.phone.trim() || undefined, email: d.email.trim() || undefined };
-  return (s.name || s.doc || s.phone || s.email) ? s : null;
-}
-
 export function PosTerminal({
   stores,
   lockedToStore,
   isAdmin,
   retailPriceListId,
   wholesaleProfiles,
+  retailProfiles,
   paymentMethods,
 }: {
   stores: PosStore[];
@@ -52,6 +45,7 @@ export function PosTerminal({
   isAdmin: boolean;
   retailPriceListId: string | null;
   wholesaleProfiles: Profile[];
+  retailProfiles: Profile[];
   paymentMethods: Method[];
 }) {
   const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
@@ -79,7 +73,7 @@ export function PosTerminal({
 
   if (store.sessionId && store.stale) return <CajaVieja store={store} storeSelector={storeSelector} />;
   return store.sessionId
-    ? <Terminal store={store} storeSelector={storeSelector} retailPriceListId={retailPriceListId} wholesaleProfiles={wholesaleProfiles} paymentMethods={paymentMethods} />
+    ? <Terminal store={store} storeSelector={storeSelector} retailPriceListId={retailPriceListId} wholesaleProfiles={wholesaleProfiles} retailProfiles={retailProfiles} paymentMethods={paymentMethods} />
     : <AbrirCaja store={store} storeSelector={storeSelector} />;
 }
 
@@ -304,12 +298,14 @@ function Terminal({
   storeSelector,
   retailPriceListId,
   wholesaleProfiles,
+  retailProfiles,
   paymentMethods,
 }: {
   store: PosStore;
   storeSelector: React.ReactNode;
   retailPriceListId: string | null;
   wholesaleProfiles: Profile[];
+  retailProfiles: Profile[];
   paymentMethods: Method[];
 }) {
   const router = useRouter();
@@ -322,9 +318,6 @@ function Terminal({
   const [closing, setClosing] = useState(false);
   const [couponCode, setCouponCode] = useState("");
   const [coupon, setCoupon] = useState<{ id: string; code: string; type: "percent" | "amount"; value: number; minAmount: number | null } | null>(null);
-  const [retailData, setRetailData] = useState<RetailForm | null>(null);
-  const [showRetail, setShowRetail] = useState(false);
-  const [checkout, setCheckout] = useState(false);
   const [lastSale, setLastSale] = useState<{ id: string; number: number } | null>(null);
   const [mode, setMode] = useState<"vender" | "cambio">("vender");
   const [pending, start] = useTransition();
@@ -365,7 +358,7 @@ function Terminal({
     }, 250);
   }
   function addItem(variantId: string, name: string, label: string | null, price: number | null, image: string | null, stock: number) {
-    if (wholesale && !customer) return toast.error("Identificá al cliente antes de cargar productos.");
+    if (!customer) return toast.error("Identificá al cliente antes de cargar productos.");
     const tag = `${name}${label ? ` ${label}` : ""}`;
     if (stock <= 0) return toast.error(`${tag}: sin stock`);
     const existing = cart.find((x) => x.variantId === variantId);
@@ -377,7 +370,7 @@ function Terminal({
     });
   }
   function onTile(p: GridProduct) {
-    if (wholesale && !customer) return toast.error("Identificá al cliente antes de cargar productos.");
+    if (!customer) return toast.error("Identificá al cliente antes de cargar productos.");
     if (p.stock <= 0) return toast.error(`${p.name}: sin stock`);
     if (p.variants.length <= 1) {
       const v = p.variants[0];
@@ -434,25 +427,24 @@ function Terminal({
 
   function confirmar() {
     if (cart.length === 0) return toast.error("El carrito está vacío.");
-    if (wholesale && !customer) return toast.error("Identificá al cliente (mayorista).");
+    if (!customer) return toast.error("Identificá al cliente antes de cobrar.");
     if (couponBelowMin) return toast.error("El carrito ya no alcanza el mínimo del cupón.");
     if (remaining > 0) return toast.error(`Faltan cobrar ${formatMoney(remaining)}`);
     if (!wholesale && remaining < 0) return toast.error(`Cobro excedido en ${formatMoney(overpay)}`);
-
-    // Mostrador: al cobrar se ofrece registrar los datos del cliente (opcional).
-    if (!wholesale) { setCheckout(true); return; }
-    finalizar(null);
+    finalizar();
   }
 
-  function finalizar(snapshot: { name?: string; doc?: string; phone?: string; email?: string } | null) {
+  function finalizar() {
     start(async () => {
+      // Tanto mostrador como mayorista identifican al cliente: la venta queda
+      // vinculada al customer_id (ya no se guarda un snapshot suelto).
       const res = await crearVenta({
         storeId: store.id,
         cashSessionId: store.sessionId!,
-        customerId: wholesale ? customer!.id : null,
+        customerId: customer!.id,
         priceListId,
         couponId: !wholesale ? coupon?.id ?? null : null,
-        customerData: !wholesale ? snapshot : null,
+        customerData: null,
         items: cart.map((i) => ({ variantId: i.variantId, productName: i.name, variantLabel: i.label, quantity: i.quantity, unitPrice: i.unitPrice })),
         payments: payments.filter((p) => p.methodId && Number(p.amount) > 0).map((p) => ({ paymentMethodId: p.methodId, amount: Number(p.amount), surcharge: 0 })),
       });
@@ -460,8 +452,8 @@ function Terminal({
       toast.success(`Venta #${res.number} registrada${overpay > 0 ? ` · $${overpay.toLocaleString("es-AR")} a favor` : ""}`);
       if (res.id && res.number != null) setLastSale({ id: res.id, number: res.number });
       setCart([]); setPayments([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
-      setCoupon(null); setCouponCode(""); setRetailData(null); setCheckout(false); setQuery(""); setResults([]);
-      if (wholesale) setCustomer(null);
+      setCoupon(null); setCouponCode(""); setQuery(""); setResults([]);
+      setCustomer(null);
       router.refresh(); // actualiza el arqueo de caja del POS con la venta recién hecha
     });
   }
@@ -568,9 +560,12 @@ function Terminal({
 
         {/* Derecha: el pedido (carrito + cobro) fijo */}
         <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          {wholesale
-            ? <ClienteMayorista customer={customer} setCustomer={setCustomer} profiles={wholesaleProfiles} />
-            : <ClienteMostrador data={retailData} onOpen={() => setShowRetail(true)} onClear={() => setRetailData(null)} />}
+          <ClienteMayorista
+            customer={customer}
+            setCustomer={setCustomer}
+            profiles={wholesale ? wholesaleProfiles : retailProfiles}
+            title={wholesale ? "Cliente mayorista" : "Cliente"}
+          />
 
           <div className={card}>
             <div className="flex items-center gap-2 border-b border-line px-5 py-3.5">
@@ -710,88 +705,12 @@ function Terminal({
         </div>
       )}
 
-      {showRetail && <RetailDataModal mode="edit" data={retailData} onClose={() => setShowRetail(false)} onSave={(d) => { setRetailData(d); setShowRetail(false); }} />}
-      {checkout && (
-        <RetailDataModal
-          mode="checkout"
-          data={retailData}
-          onClose={() => setCheckout(false)}
-          onSave={(d) => { setRetailData(d); setCheckout(false); finalizar(toSnapshot(d)); }}
-        />
-      )}
     </div>
   );
 }
 
-// ── Cliente mostrador (datos opcionales) ──────────────────────
-function ClienteMostrador({ data, onOpen, onClear }: { data: RetailForm | null; onOpen: () => void; onClear: () => void }) {
-  const has = data && (data.name || data.apellido || data.doc || data.phone || data.email);
-  return (
-    <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-ink">Cliente</span>
-        <button onClick={onOpen} className="text-xs text-accent hover:underline">{has ? "Editar datos" : "Cargar datos"}</button>
-      </div>
-      {has ? (
-        <div className="mt-1.5 flex items-center justify-between text-sm">
-          <span className="text-ink">{[data!.name, data!.apellido].filter(Boolean).join(" ") || data!.phone || data!.email || "Sin nombre"}{data!.doc ? ` · ${data!.doc}` : ""}</span>
-          <button onClick={onClear} className="text-faint hover:text-danger"><X className="h-3.5 w-3.5" /></button>
-        </div>
-      ) : (
-        <p className="mt-1 text-xs text-muted">Consumidor final. Al cobrar se pide <span className="font-medium text-ink">teléfono o email</span>.</p>
-      )}
-    </div>
-  );
-}
-
-function RetailDataModal({ data, mode, onClose, onSave }: {
-  data: RetailForm | null;
-  mode: "edit" | "checkout";
-  onClose: () => void;
-  onSave: (d: RetailForm) => void;
-}) {
-  const [f, setF] = useState<RetailForm>(data ?? { name: "", apellido: "", doc: "", phone: "", email: "" });
-  const set = (k: keyof RetailForm, v: string) => setF((p) => ({ ...p, [k]: v }));
-  const checkout = mode === "checkout";
-  const hasContact = !!(f.phone.trim() || f.email.trim());
-  const emailBad = !!f.email.trim() && !isValidEmail(f.email);
-  const phoneBad = !!f.phone.trim() && !isValidPhone(f.phone);
-  const blocked = (checkout && !hasContact) || emailBad || phoneBad;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-line bg-card p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-sm font-medium text-ink">Datos del cliente</h2>
-        <p className="mt-1 text-xs text-muted">{checkout ? "Dejá teléfono o email (uno de los dos es obligatorio) para poder cobrar y enviarle la factura cuando activemos facturación." : "Para poder enviar la factura por mail cuando activemos facturación. Todo es opcional."}</p>
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div><label className="mb-1 block text-xs font-medium text-muted">Nombre</label><input autoFocus className={input} value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
-          <div><label className="mb-1 block text-xs font-medium text-muted">Apellido</label><input className={input} value={f.apellido} onChange={(e) => set("apellido", e.target.value)} /></div>
-          <div><label className="mb-1 block text-xs font-medium text-muted">DNI</label><input className={input} value={f.doc} onChange={(e) => set("doc", e.target.value)} /></div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Teléfono{checkout && <span className="text-warn"> *</span>}</label>
-            <input className={input} value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Ej. 11 5555 4444" />
-            {phoneBad && <p className="mt-1 text-xs text-danger">Teléfono inválido (entre 8 y 15 dígitos).</p>}
-          </div>
-          <div className="col-span-2">
-            <label className="mb-1 block text-xs font-medium text-muted">Email{checkout && <span className="text-warn"> *</span>}</label>
-            <input type="email" className={input} value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="nombre@correo.com" />
-            {emailBad && <p className="mt-1 text-xs text-danger">Email inválido.</p>}
-          </div>
-        </div>
-        {checkout && !hasContact && <p className="mt-2 text-xs text-warn">Ingresá teléfono o email para poder cobrar.</p>}
-        {checkout && hasContact && !emailBad && !phoneBad && <p className="mt-2 text-xs text-muted">Con teléfono o email alcanza.</p>}
-        <div className="mt-5 flex justify-end gap-3">
-          <button onClick={onClose} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
-          <button onClick={() => { if (blocked) return; onSave(f); }} disabled={blocked} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50">
-            {checkout ? "Guardar y cobrar" : "Guardar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Cliente mayorista (DNI/CUIT obligatorio) ──────────────────
-function ClienteMayorista({ customer, setCustomer, profiles }: { customer: Customer | null; setCustomer: (c: Customer | null) => void; profiles: Profile[] }) {
+// ── Identificación del cliente (mostrador y mayorista) ─────────
+function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente mayorista" }: { customer: Customer | null; setCustomer: (c: Customer | null) => void; profiles: Profile[]; title?: string }) {
   const [doc, setDoc] = useState("");
   const [searched, setSearched] = useState(false);
   const [similar, setSimilar] = useState<Customer[]>([]);
@@ -845,7 +764,7 @@ function ClienteMayorista({ customer, setCustomer, profiles }: { customer: Custo
     <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
       <div className="mb-2 flex items-center gap-2">
         <IdCard className="h-4 w-4 text-muted" />
-        <span className="text-sm font-medium text-ink">Cliente mayorista</span>
+        <span className="text-sm font-medium text-ink">{title}</span>
         <span className="ml-auto text-xs text-warn">DNI/CUIT obligatorio</span>
       </div>
       <div className="flex items-center gap-2">
@@ -872,14 +791,16 @@ function ClienteMayorista({ customer, setCustomer, profiles }: { customer: Custo
           <div className="flex items-center gap-1.5 text-xs text-muted"><UserPlus className="h-3.5 w-3.5" /> Cliente nuevo</div>
           <input value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} placeholder="Nombre / Razón social" className={input} />
           <div className="flex gap-2">
-            <select value={nf.docType} onChange={(e) => setNf({ ...nf, docType: e.target.value })} className={`${input} w-24`}>
+            <select value={nf.docType} onChange={(e) => setNf({ ...nf, docType: e.target.value })} className={`${input} ${profiles.length > 1 ? "w-24" : "flex-1"}`}>
               <option value="DNI">DNI</option>
               <option value="CUIT">CUIT</option>
               <option value="CUIL">CUIL</option>
             </select>
-            <select value={nf.profileTypeId} onChange={(e) => setNf({ ...nf, profileTypeId: e.target.value })} className={`${input} flex-1`}>
-              {profiles.map((p) => <option key={p.customerTypeId} value={p.customerTypeId}>{p.name}</option>)}
-            </select>
+            {profiles.length > 1 && (
+              <select value={nf.profileTypeId} onChange={(e) => setNf({ ...nf, profileTypeId: e.target.value })} className={`${input} flex-1`}>
+                {profiles.map((p) => <option key={p.customerTypeId} value={p.customerTypeId}>{p.name}</option>)}
+              </select>
+            )}
           </div>
           <div className="flex gap-2">
             <input value={nf.email} onChange={(e) => setNf({ ...nf, email: e.target.value })} placeholder="Email (opc.)" className={input} />
