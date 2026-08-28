@@ -13,16 +13,18 @@ export function CerrarCajaAdmin({ sessionId, isTitular }: { sessionId: string; i
   const [open, setOpen] = useState(false);
   const [declared, setDeclared] = useState("");
   const [kept, setKept] = useState("");
+  const [expenses, setExpenses] = useState("");
   const [notes, setNotes] = useState("");
   const [pending, start] = useTransition();
 
   function submit() {
     const d = Number(declared);
     const k = isTitular ? Number(kept) : 0;
+    const e = Math.max(0, Number(expenses) || 0);
     if (!isFinite(d) || d < 0) return toast.error("Ingresá el efectivo contado.");
     if (isTitular && (!isFinite(k) || k < 0)) return toast.error("Ingresá cuánto queda en caja chica.");
     start(async () => {
-      const r = await cerrarCajaAdmin(sessionId, d, k, notes);
+      const r = await cerrarCajaAdmin(sessionId, d, k, e, notes);
       if (r.error) { toast.error(r.error); return; }
       toast.success("Caja cerrada por administración.");
       router.refresh();
@@ -54,6 +56,11 @@ export function CerrarCajaAdmin({ sessionId, isTitular }: { sessionId: string; i
             <input type="number" min={0} value={kept} onChange={(e) => setKept(e.target.value)} className={input} placeholder="0" />
           </div>
         )}
+        <div className={isTitular ? "sm:col-span-2" : ""}>
+          <label className="mb-1 block text-xs font-medium text-muted">Gastos en efectivo (opcional)</label>
+          <input type="number" min={0} value={expenses} onChange={(e) => setExpenses(e.target.value)} className={input} placeholder="0" />
+          <p className="mt-1 text-xs text-muted">Plata del cajón usada para gastos del local. Se descuenta del esperado.</p>
+        </div>
         <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-medium text-muted">Motivo (opcional)</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={input} placeholder="Ej: el cajero faltó" />

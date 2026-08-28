@@ -190,12 +190,16 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
   const apoyo = store.role === "apoyo";
   const [declared, setDeclared] = useState("");
   const [kept, setKept] = useState(String(store.openingAmount));
+  const [expenses, setExpenses] = useState("");
   const [notes, setNotes] = useState("");
   const [pending, start] = useTransition();
 
   const declaredN = Number(declared) || 0;
   const keptN = Number(kept) || 0;
-  const diff = declared !== "" && sum ? declaredN - sum.expectedCash : null;
+  const expensesN = Number(expenses) || 0;
+  // Los gastos en efectivo ya salieron del cajón: se restan del esperado.
+  const expectedAdj = (sum?.expectedCash ?? 0) - expensesN;
+  const diff = declared !== "" && sum ? declaredN - expectedAdj : null;
   const toSafe = Math.max(0, declaredN - keptN);
   const keptTooBig = declared !== "" && keptN > declaredN;
   const blockedByApoyos = !apoyo && store.openApoyoCount > 0;
@@ -226,13 +230,16 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
       </div>
 
       {apoyo ? (
-        <div className="mt-4 border-t border-line pt-4">
-          <label className="mb-1.5 block text-sm font-medium text-ink">Efectivo contado</label>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted">$</span>
-            <input type="number" min={0} className={input} value={declared} onChange={(e) => setDeclared(e.target.value)} placeholder="0" />
+        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink">Efectivo contado</label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted">$</span>
+              <input type="number" min={0} className={input} value={declared} onChange={(e) => setDeclared(e.target.value)} placeholder="0" />
+            </div>
+            {diff !== null && <p className={`mt-1.5 text-xs ${diff === 0 ? "text-ok" : "text-warn"}`}>{diff === 0 ? "Cuadra exacto" : `Diferencia con lo esperado: ${formatMoney(diff)}`}</p>}
           </div>
-          {diff !== null && <p className={`mt-1.5 text-xs ${diff === 0 ? "text-ok" : "text-warn"}`}>{diff === 0 ? "Cuadra exacto" : `Diferencia con lo esperado: ${formatMoney(diff)}`}</p>}
+          <GastosInput expenses={expenses} setExpenses={setExpenses} expectedAdj={expectedAdj} show={expensesN > 0} />
         </div>
       ) : (
         <>
@@ -253,6 +260,7 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
               </div>
               {keptTooBig && <p className="mt-1.5 text-xs text-danger">No podés dejar más de lo contado.</p>}
             </div>
+            <GastosInput expenses={expenses} setExpenses={setExpenses} expectedAdj={expectedAdj} show={expensesN > 0} />
           </div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-canvas px-4 py-3 text-sm">
@@ -272,7 +280,7 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
         <button
           disabled={pending || declared === "" || (!apoyo && (keptTooBig || blockedByApoyos))}
           onClick={() => start(async () => {
-            const r = await cerrarCaja(store.sessionId!, declaredN, apoyo ? 0 : keptN, notes);
+            const r = await cerrarCaja(store.sessionId!, declaredN, apoyo ? 0 : keptN, expensesN, notes);
             if (r.error) { toast.error(r.error); return; }
             toast.success(apoyo ? "Caja de apoyo cerrada." : `Caja cerrada. ${formatMoney(toSafe)} a caja fuerte.`); router.refresh();
           })}
@@ -281,6 +289,23 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
           <Lock className="h-4 w-4" /> {pending ? "Cerrando…" : apoyo ? "Cerrar caja de apoyo" : "Cerrar caja"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// Gastos en efectivo del turno: plata del cajón usada para gastos varios. Se
+// resta del esperado al cerrar; se rinde por fuera del sistema.
+function GastosInput({ expenses, setExpenses, expectedAdj, show }: { expenses: string; setExpenses: (v: string) => void; expectedAdj: number; show: boolean }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-sm font-medium text-ink">Gastos en efectivo <span className="font-normal text-muted">(opcional)</span></label>
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted">$</span>
+        <input type="number" min={0} className={input} value={expenses} onChange={(e) => setExpenses(e.target.value)} placeholder="0" />
+      </div>
+      {show
+        ? <p className="mt-1.5 text-xs text-muted">Se descuenta del esperado → queda {formatMoney(expectedAdj)}</p>
+        : <p className="mt-1.5 text-xs text-muted">Plata del cajón usada para gastos del local.</p>}
     </div>
   );
 }

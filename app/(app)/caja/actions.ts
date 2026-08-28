@@ -20,6 +20,7 @@ export async function cerrarCaja(
   sessionId: string,
   declaredAmount: number,
   keptAmount: number,
+  expenses: number,
   notes: string
 ): Promise<ActionState> {
   const denied = await requireCan("caja", true);
@@ -30,6 +31,7 @@ export async function cerrarCaja(
     p_session_id: sessionId,
     p_declared_amount: declaredAmount,
     p_kept_amount: keptAmount,
+    p_expenses: Math.max(0, expenses || 0),
     p_notes: notes || null,
   });
   if (error) return { error: error.message };
@@ -44,6 +46,7 @@ export async function cerrarCajaAdmin(
   sessionId: string,
   declaredAmount: number,
   keptAmount: number,
+  expenses: number,
   notes: string
 ): Promise<ActionState> {
   const denied = await requireCan("caja_admin", true);
@@ -54,6 +57,7 @@ export async function cerrarCajaAdmin(
     p_session_id: sessionId,
     p_declared_amount: declaredAmount,
     p_kept_amount: keptAmount,
+    p_expenses: Math.max(0, expenses || 0),
     p_notes: notes ? `[Cierre administrativo] ${notes}` : "[Cierre administrativo]",
   });
   if (error) return { error: error.message };

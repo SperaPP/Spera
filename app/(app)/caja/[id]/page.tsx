@@ -21,7 +21,7 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
 
   const { data: s } = await sb
     .from("cash_sessions")
-    .select("id, status, role, store_id, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, notes, opened_by, stores(name)")
+    .select("id, status, role, store_id, opening_amount, opened_at, closed_at, declared_amount, kept_amount, to_safe_amount, cash_expenses, expected_cash, cash_difference, notes, opened_by, stores(name)")
     .eq("id", id).single();
   if (!s) notFound();
   const { storeId: scopeStore } = await getStoreScope();
@@ -75,9 +75,12 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
 
   const opening = Number(s.opening_amount);
   const sold = (sales ?? []).reduce((a, x) => a + Number(x.total), 0) - cambio;
-  const expectedCash = opening + cash + apoyoCash;
+  const expenses = Number(s.cash_expenses ?? 0);
+  // Sesión cerrada: usa lo que guardó el cierre (ya contempla gastos y apoyos).
+  // Sesión abierta: estima en vivo.
+  const expectedCash = s.expected_cash != null ? Number(s.expected_cash) : opening + cash + apoyoCash - expenses;
   const declared = s.declared_amount == null ? null : Number(s.declared_amount);
-  const diff = declared == null ? null : declared - expectedCash;
+  const diff = s.cash_difference != null ? Number(s.cash_difference) : (declared == null ? null : declared - expectedCash);
   const openerName = (opener as { full_name: string | null; email: string | null } | null);
 
   return (
@@ -115,6 +118,9 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
       </div>
       {apoyoCash > 0 && (
         <p className="mb-5 -mt-2 text-xs text-muted">El efectivo esperado incluye {formatMoney(apoyoCash)} rendido por las cajas de apoyo de este turno.</p>
+      )}
+      {expenses > 0 && (
+        <p className="mb-5 -mt-2 text-xs text-muted">Se descontaron {formatMoney(expenses)} de <span className="font-medium text-ink">gastos en efectivo</span> del turno (se rinden por fuera del sistema).</p>
       )}
 
       {s.kept_amount != null && (

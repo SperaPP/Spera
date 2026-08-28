@@ -16,7 +16,7 @@ export default async function CierresPage() {
   const sb = await createClient();
   const { data: sessions } = await sb
     .from("cash_sessions")
-    .select("id, opening_amount, declared_amount, opened_at, closed_at, stores(name)")
+    .select("id, opening_amount, declared_amount, cash_expenses, expected_cash, cash_difference, opened_at, closed_at, stores(name)")
     .in("status", ["cerrada", "entregada"])
     .order("closed_at", { ascending: false })
     .limit(30);
@@ -65,12 +65,14 @@ export default async function CierresPage() {
   const rows = (sessions ?? []).map((s) => {
     const opening = Number(s.opening_amount);
     const cash = cashBySession.get(s.id) ?? 0;
-    const expected = opening + cash;
+    const expenses = Number(s.cash_expenses ?? 0);
+    // Cerrada: usa lo guardado (contempla gastos y cajas de apoyo). Fallback en vivo.
+    const expected = s.expected_cash != null ? Number(s.expected_cash) : opening + cash - expenses;
     const declared = s.declared_amount == null ? null : Number(s.declared_amount);
     return {
       id: s.id, store: relName(s.stores) ?? "—", closedAt: s.closed_at as string,
-      opening, sold: (soldBySession.get(s.id) ?? 0) - (cambioBySession.get(s.id) ?? 0), expected, declared,
-      diff: declared == null ? null : declared - expected,
+      opening, sold: (soldBySession.get(s.id) ?? 0) - (cambioBySession.get(s.id) ?? 0), expected, declared, expenses,
+      diff: s.cash_difference != null ? Number(s.cash_difference) : (declared == null ? null : declared - expected),
     };
   });
 
@@ -93,6 +95,7 @@ export default async function CierresPage() {
                 <th className="px-4 py-3 font-medium">Cerrado</th>
                 <th className="px-4 py-3 text-right font-medium">Fondo</th>
                 <th className="px-4 py-3 text-right font-medium">Vendido</th>
+                <th className="px-4 py-3 text-right font-medium">Gastos efvo.</th>
                 <th className="px-4 py-3 text-right font-medium">Efvo. esperado</th>
                 <th className="px-4 py-3 text-right font-medium">Declarado</th>
                 <th className="px-4 py-3 text-right font-medium">Diferencia</th>
@@ -105,6 +108,7 @@ export default async function CierresPage() {
                   <td className="px-4 py-3 text-muted">{formatDateTime(r.closedAt)}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted">{formatMoney(r.opening)}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(r.sold)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-muted">{r.expenses > 0 ? formatMoney(r.expenses) : "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(r.expected)}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink">{r.declared == null ? "—" : formatMoney(r.declared)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">
