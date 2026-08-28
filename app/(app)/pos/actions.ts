@@ -17,7 +17,16 @@ function imageUrl(images: { path: string; is_primary: boolean }[] | null | undef
   return `${renderUrl}/${chosen.path}?width=300&quality=70`;
 }
 
-/** Busca productos por nombre y devuelve su precio en la lista indicada. */
+/** Precio EFECTIVO: si hay promo activa (no nula y menor al precio de lista), ese es
+ *  el precio a cobrar y `compareAt` es el precio de lista (para mostrarlo tachado).
+ *  Un solo número: lo que se muestra es lo que se cobra. */
+function efectivo(base: number | null, promo: number | null | undefined): { price: number | null; compareAt: number | null } {
+  if (base == null) return { price: null, compareAt: null };
+  if (promo != null && promo < base) return { price: promo, compareAt: base };
+  return { price: base, compareAt: null };
+}
+
+/** Busca productos por nombre y devuelve su precio efectivo en la lista indicada. */
 export async function buscarProductos(query: string, priceListId: string | null) {
   const q = query.trim();
   if (q.length < 2) return [];
@@ -25,7 +34,7 @@ export async function buscarProductos(query: string, priceListId: string | null)
   const sb = await createClient();
   let req = sb
     .from("products")
-    .select("id, name, variation_type, product_images(path, is_primary), product_variants(id, size, color, sku, barcode), price_list_items(price, variant_id, price_list_id)")
+    .select("id, name, variation_type, product_images(path, is_primary), product_variants(id, size, color, sku, barcode), price_list_items(price, promo_price, variant_id, price_list_id)")
     .eq("active", true)
     .ilike("name", `%${q}%`)
     .limit(15);
@@ -33,12 +42,14 @@ export async function buscarProductos(query: string, priceListId: string | null)
 
   const { data } = await req;
   return (data ?? []).map((p) => {
-    const items = (p.price_list_items ?? []) as { price: number; variant_id: string | null }[];
-    const price = items.find((i) => i.variant_id === null)?.price ?? null;
+    const items = (p.price_list_items ?? []) as { price: number; promo_price: number | null; variant_id: string | null }[];
+    const item = items.find((i) => i.variant_id === null);
+    const { price, compareAt } = efectivo(item?.price ?? null, item?.promo_price);
     return {
       id: p.id,
       name: p.name,
       price,
+      compareAt,
       image: imageUrl(p.product_images as { path: string; is_primary: boolean }[] | null),
       variants: ((p.product_variants ?? []) as { id: string; size: string | null; color: string | null; sku: string | null; barcode: string | null }[])
         .map((v) => ({ id: v.id, label: label(v.size, v.color), sku: v.sku })),
@@ -53,7 +64,7 @@ export async function listarProductosPOS(query: string, priceListId: string | nu
   const sb = await createClient();
   let req = sb
     .from("products")
-    .select("id, name, product_images(path, is_primary), product_variants(id, size, color, sku, barcode, active), price_list_items(price, variant_id, price_list_id)")
+    .select("id, name, product_images(path, is_primary), product_variants(id, size, color, sku, barcode, active), price_list_items(price, promo_price, variant_id, price_list_id)")
     .eq("active", true);
   if (priceListId) req = req.eq("price_list_items.price_list_id", priceListId);
   req = q.length >= 2
@@ -67,13 +78,14 @@ export async function listarProductosPOS(query: string, priceListId: string | nu
   const avail = await availByVariant(sb, warehouseId, rows.flatMap((p) => ((p.product_variants ?? []) as { id: string }[]).map((v) => v.id)));
 
   return rows.map((p) => {
-    const items = (p.price_list_items ?? []) as { price: number; variant_id: string | null }[];
-    const price = priceListId ? (items.find((i) => i.variant_id === null)?.price ?? null) : null;
+    const items = (p.price_list_items ?? []) as { price: number; promo_price: number | null; variant_id: string | null }[];
+    const item = priceListId ? items.find((i) => i.variant_id === null) : undefined;
+    const { price, compareAt } = efectivo(item?.price ?? null, item?.promo_price);
     const variants = ((p.product_variants ?? []) as { id: string; size: string | null; color: string | null; sku: string | null; active: boolean }[])
       .filter((v) => v.active)
       .map((v) => ({ id: v.id, label: label(v.size, v.color), sku: v.sku, stock: avail(v.id) }));
     return {
-      id: p.id, name: p.name, price,
+      id: p.id, name: p.name, price, compareAt,
       image: imageUrl(p.product_images as { path: string; is_primary: boolean }[] | null),
       stock: variants.reduce((a, v) => a + v.stock, 0),
       variants,
@@ -108,15 +120,16 @@ export async function buscarPorCodigo(code: string, priceListId: string | null, 
   const avail = await availByVariant(sb, warehouseId, [v.id]);
 
   let price: number | null = null;
+  let compareAt: number | null = null;
   if (priceListId) {
     const { data: pli } = await sb
       .from("price_list_items")
-      .select("price")
+      .select("price, promo_price")
       .eq("price_list_id", priceListId)
       .eq("product_id", v.product_id)
       .is("variant_id", null)
       .maybeSingle();
-    price = pli?.price ?? null;
+    ({ price, compareAt } = efectivo(pli?.price ?? null, pli?.promo_price));
   }
   const prod = (Array.isArray(v.products) ? v.products[0] : v.products) as { name: string; product_images: { path: string; is_primary: boolean }[] } | null;
   const name = prod?.name ?? "";
@@ -129,6 +142,7 @@ export async function buscarPorCodigo(code: string, priceListId: string | null, 
     label: label(v.size, v.color),
     sku: v.sku,
     price,
+    compareAt,
     stock: avail(v.id),
     image: imageUrl(prod?.product_images),
   };

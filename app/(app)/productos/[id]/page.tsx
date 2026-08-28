@@ -48,7 +48,7 @@ export default async function ProductoDetallePage({
     variantIds.length
       ? sb.from("stock").select("variant_id, quantity").in("variant_id", variantIds)
       : Promise.resolve({ data: [] as { variant_id: string; quantity: number }[] }),
-    sb.from("price_list_items").select("price, price_lists(name)").eq("product_id", id).is("variant_id", null),
+    sb.from("price_list_items").select("price, promo_price, price_lists(name)").eq("product_id", id).is("variant_id", null),
     sb.from("product_images").select("id, path, color, is_primary").eq("product_id", id).order("is_primary", { ascending: false }).order("created_at"),
     sb.from("sizes").select("id, name").eq("active", true).order("position"),
     sb.from("colors").select("id, name").eq("active", true).order("name"),
@@ -64,11 +64,14 @@ export default async function ProductoDetallePage({
     stockByVariant.set(s.variant_id, (stockByVariant.get(s.variant_id) ?? 0) + s.quantity);
   }
 
-  const priceByList = new Map<string, number>();
+  const priceByList = new Map<string, { price: number; promo: number | null }>();
   for (const p of prices ?? []) {
     const ln = relName(p.price_lists);
-    if (ln) priceByList.set(ln, Number(p.price));
+    if (ln) priceByList.set(ln, { price: Number(p.price), promo: p.promo_price != null ? Number(p.promo_price) : null });
   }
+  // Ids de las listas base para editar precio/promo (aunque el producto aún no tenga item).
+  const { data: allLists } = await sb.from("price_lists").select("id, name").eq("active", true);
+  const listId = (name: string) => (allLists ?? []).find((l) => l.name === name)?.id ?? null;
 
   const bucketUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
   const photos = (images ?? []).map((im) => ({
@@ -140,8 +143,12 @@ export default async function ProductoDetallePage({
 
         <PrecioEditor
           productId={product.id}
-          mayorista={priceByList.get("Mayorista") ?? null}
-          publico={priceByList.get("Publico") ?? null}
+          mayoristaListId={listId("Mayorista")}
+          publicoListId={listId("Publico")}
+          mayorista={priceByList.get("Mayorista")?.price ?? null}
+          mayoristaPromo={priceByList.get("Mayorista")?.promo ?? null}
+          publico={priceByList.get("Publico")?.price ?? null}
+          publicoPromo={priceByList.get("Publico")?.promo ?? null}
           canEdit={editable}
         />
       </div>

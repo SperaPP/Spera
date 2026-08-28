@@ -16,7 +16,7 @@ import type { PosStore } from "@/app/(app)/pos/page";
 type Method = { id: string; name: string; kind: string };
 type Profile = { customerTypeId: string; name: string; priceListId: string | null };
 type Customer = NonNullable<Awaited<ReturnType<typeof buscarClientePorDoc>>>;
-type CartItem = { variantId: string; name: string; label: string | null; quantity: number; unitPrice: number; image: string | null; stock: number };
+type CartItem = { variantId: string; name: string; label: string | null; quantity: number; unitPrice: number; compareAt: number | null; image: string | null; stock: number };
 type Payment = { methodId: string; amount: string };
 
 const inputBase =
@@ -386,7 +386,7 @@ function Terminal({
       setResults(await listarProductosPOS(v, priceListId, store.warehouseId));
     }, 250);
   }
-  function addItem(variantId: string, name: string, label: string | null, price: number | null, image: string | null, stock: number) {
+  function addItem(variantId: string, name: string, label: string | null, price: number | null, image: string | null, stock: number, compareAt: number | null = null) {
     if (!customer) return toast.error("Identificá al cliente antes de cargar productos.");
     const tag = `${name}${label ? ` ${label}` : ""}`;
     if (stock <= 0) return toast.error(`${tag}: sin stock`);
@@ -395,7 +395,7 @@ function Terminal({
     setCart((prev) => {
       const i = prev.findIndex((x) => x.variantId === variantId);
       if (i >= 0) { const next = [...prev]; next[i] = { ...next[i], quantity: Math.min(next[i].quantity + 1, stock), stock }; return next; }
-      return [...prev, { variantId, name, label, quantity: 1, unitPrice: price ?? 0, image, stock }];
+      return [...prev, { variantId, name, label, quantity: 1, unitPrice: price ?? 0, compareAt, image, stock }];
     });
   }
   function onTile(p: GridProduct) {
@@ -404,7 +404,7 @@ function Terminal({
     if (p.variants.length <= 1) {
       const v = p.variants[0];
       if (!v) return toast.error("El producto no tiene variantes.");
-      addItem(v.id, p.name, v.label, p.price, p.image, v.stock);
+      addItem(v.id, p.name, v.label, p.price, p.image, v.stock, p.compareAt);
     } else {
       setVariantPick(p);
     }
@@ -415,7 +415,7 @@ function Terminal({
   async function onScan(code: string) {
     const r = await buscarPorCodigo(code, priceListId, store.warehouseId);
     if (r.notFound) return toast.error(`Código ${code}: sin resultados`);
-    addItem(r.variantId, r.name, r.label, r.price, r.image, r.stock);
+    addItem(r.variantId, r.name, r.label, r.price, r.image, r.stock, r.compareAt);
   }
   function aplicarCupon() {
     const code = couponCode.trim();
@@ -590,7 +590,10 @@ function Terminal({
                       ? <div className="mt-0.5 text-xs font-medium text-danger">Sin stock</div>
                       : p.variants.length > 1 && <div className="mt-0.5 text-xs text-muted">{p.variants.length} variantes · {p.stock} disp.</div>}
                   </div>
-                  <span className={`shrink-0 text-sm font-semibold tabular-nums ${p.price != null ? "text-ink" : "text-faint"}`}>{p.price != null ? formatMoney(p.price) : "sin precio"}</span>
+                  <span className="flex shrink-0 flex-col items-end tabular-nums">
+                    {p.compareAt != null && <span className="text-[11px] text-faint line-through">{formatMoney(p.compareAt)}</span>}
+                    <span className={`text-sm font-semibold ${p.compareAt != null ? "text-danger" : p.price != null ? "text-ink" : "text-faint"}`}>{p.price != null ? formatMoney(p.price) : "sin precio"}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -626,7 +629,7 @@ function Terminal({
                     <Thumb src={i.image} size="h-11 w-11" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-ink">{i.name}</div>
-                      <div className="text-xs text-muted">{i.label ? `${i.label} · ` : ""}{formatMoney(i.unitPrice)}</div>
+                      <div className="text-xs text-muted">{i.label ? `${i.label} · ` : ""}{i.compareAt != null && <span className="text-faint line-through">{formatMoney(i.compareAt)} </span>}<span className={i.compareAt != null ? "font-semibold text-danger" : ""}>{formatMoney(i.unitPrice)}</span></div>
                     </div>
                     <div className="flex items-center rounded-lg border border-line-strong">
                       <button onClick={() => setQty(i.variantId, i.quantity - 1)} className="p-1.5 text-muted transition-colors hover:text-ink"><Minus className="h-3.5 w-3.5" /></button>
@@ -724,7 +727,10 @@ function Terminal({
               <Thumb src={variantPick.image} size="h-12 w-12" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-ink">{variantPick.name}</div>
-                <div className="text-xs text-muted">{variantPick.price != null ? formatMoney(variantPick.price) : "sin precio"} · elegí la variante</div>
+                <div className="text-xs text-muted">
+                  {variantPick.compareAt != null && <span className="text-faint line-through">{formatMoney(variantPick.compareAt)} </span>}
+                  <span className={variantPick.compareAt != null ? "font-semibold text-danger" : ""}>{variantPick.price != null ? formatMoney(variantPick.price) : "sin precio"}</span> · elegí la variante
+                </div>
               </div>
               <button onClick={() => setVariantPick(null)} className="rounded-md p-1 text-muted hover:text-ink"><X className="h-4 w-4" /></button>
             </div>
@@ -733,7 +739,7 @@ function Terminal({
                 <button
                   key={v.id}
                   disabled={v.stock <= 0}
-                  onClick={() => { addItem(v.id, variantPick.name, v.label, variantPick.price, variantPick.image, v.stock); setVariantPick(null); }}
+                  onClick={() => { addItem(v.id, variantPick.name, v.label, variantPick.price, variantPick.image, v.stock, variantPick.compareAt); setVariantPick(null); }}
                   className="flex flex-col rounded-xl border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line-strong disabled:hover:bg-transparent disabled:hover:text-ink"
                 >
                   <span>{v.label ?? "Único"}</span>

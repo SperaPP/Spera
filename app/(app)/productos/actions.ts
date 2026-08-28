@@ -204,13 +204,39 @@ export async function setTnSync(productId: string, value: boolean): Promise<Acti
   return { ok: true };
 }
 
-// ── Precio Mayorista (base) → deriva Publico (= Mayorista × 2) ──
+// ── Precio Mayorista (base): guarda Mayorista; solo inicializa Publico si está vacío ──
 export async function setPrecioMayorista(productId: string, mayorista: number): Promise<ActionState> {
   const denied = await requireCan("productos", true);
   if (denied) return denied;
   if (!isFinite(mayorista) || mayorista < 0) return { error: "Precio inválido" };
   const sb = await createClient();
   const { error } = await sb.rpc("apply_product_pricing", { p_product_id: productId, p_base: mayorista });
+  if (error) return { error: error.message };
+  revalidatePath(`/productos/${productId}`);
+  revalidatePath("/precios");
+  return { ok: true };
+}
+
+// ── Precio Publico (editable a mano, independiente de la fórmula) ──
+export async function setPrecioPublico(productId: string, publico: number): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  if (!isFinite(publico) || publico < 0) return { error: "Precio inválido" };
+  const sb = await createClient();
+  const { error } = await sb.rpc("set_precio_publico", { p_product_id: productId, p_price: publico });
+  if (error) return { error: error.message };
+  revalidatePath(`/productos/${productId}`);
+  revalidatePath("/precios");
+  return { ok: true };
+}
+
+// ── Precio promocional por lista (null = apagar). Se cobra la promo si es menor. ──
+export async function setPromoPrice(productId: string, listId: string, promo: number | null): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  if (promo != null && (!isFinite(promo) || promo < 0)) return { error: "Promo inválida" };
+  const sb = await createClient();
+  const { error } = await sb.rpc("set_promo_price", { p_list: listId, p_product: productId, p_promo: promo });
   if (error) return { error: error.message };
   revalidatePath(`/productos/${productId}`);
   revalidatePath("/precios");

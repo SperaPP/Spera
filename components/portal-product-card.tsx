@@ -34,9 +34,16 @@ export function PortalProductCard({ p }: { p: CatalogItem }) {
         )}
 
         <div className="mt-auto flex flex-wrap items-baseline gap-x-2 pt-0.5">
-          <span className="text-base font-semibold tabular-nums text-accent">{formatMoney(p.price)}</span>
-          {p.publicPrice != null && p.publicPrice > p.price && (
-            <span className="text-xs tabular-nums text-faint" title="Precio público de referencia">Público {formatMoney(p.publicPrice)}</span>
+          <span className={`text-base font-semibold tabular-nums ${p.compareAt != null ? "text-danger" : "text-accent"}`}>{formatMoney(p.price)}</span>
+          {p.compareAt != null ? (
+            <>
+              <span className="text-xs tabular-nums text-faint line-through">{formatMoney(p.compareAt)}</span>
+              <span className="rounded-full bg-danger/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-danger">Oferta</span>
+            </>
+          ) : (
+            p.publicPrice != null && p.publicPrice > p.price && (
+              <span className="text-xs tabular-nums text-faint" title="Precio público de referencia">Público {formatMoney(p.publicPrice)}</span>
+            )
           )}
         </div>
 

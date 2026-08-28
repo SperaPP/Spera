@@ -30,9 +30,16 @@ export default async function PortalProductoPage({ params }: { params: Promise<{
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">{p.name}</h1>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-3">
-            <span className="text-2xl font-bold tabular-nums text-accent">{formatMoney(p.price)}</span>
-            {p.publicPrice != null && p.publicPrice > p.price && (
-              <span className="text-sm tabular-nums text-faint" title="Precio público de referencia">Público {formatMoney(p.publicPrice)}</span>
+            <span className={`text-2xl font-bold tabular-nums ${p.compareAt != null ? "text-danger" : "text-accent"}`}>{formatMoney(p.price)}</span>
+            {p.compareAt != null ? (
+              <>
+                <span className="text-base tabular-nums text-faint line-through">{formatMoney(p.compareAt)}</span>
+                <span className="rounded-full bg-danger/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-danger">Oferta</span>
+              </>
+            ) : (
+              p.publicPrice != null && p.publicPrice > p.price && (
+                <span className="text-sm tabular-nums text-faint" title="Precio público de referencia">Público {formatMoney(p.publicPrice)}</span>
+              )
             )}
           </div>
           {p.description && <p className="mt-3 text-sm text-muted">{p.description}</p>}

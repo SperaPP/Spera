@@ -25,7 +25,7 @@ export default async function PreciosPage() {
     <div className="mx-auto max-w-3xl">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Listas de precios</h1>
       <p className="mt-1 mb-6 text-sm text-muted">
-        Mayorista es la base (se edita acá o en cada producto). Publico se calcula solo (Mayorista × 2). Exportá a Excel, editá Mayorista y volvé a importar.
+        Cada lista se edita por separado (acá con Excel, o en cada producto). Al cargar un producto nuevo, Publico se inicializa en Mayorista × 2, pero después es editable. Sumá un precio promocional en la columna <span className="font-medium text-ink">promo</span> del Excel o en el producto.
       </p>
       <PreciosManager lists={infos} totalProducts={totalProducts ?? 0} />
     </div>

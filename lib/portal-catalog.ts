@@ -62,7 +62,14 @@ export async function portalFacets(opts: {
   return { mains, cats, seasons };
 }
 
-export type CatalogItem = { id: string; name: string; price: number; publicPrice: number | null; stock: number; featured: boolean; image: string | null; sizes: string[] };
+export type CatalogItem = { id: string; name: string; price: number; compareAt: number | null; publicPrice: number | null; stock: number; featured: boolean; image: string | null; sizes: string[] };
+
+/** Precio efectivo: si hay promo activa (no nula y menor al de lista), ese es el
+ *  precio; `compareAt` = precio de lista para mostrarlo tachado. */
+function efectivo(base: number, promo: number | null): { price: number; compareAt: number | null } {
+  if (promo != null && promo < base) return { price: promo, compareAt: base };
+  return { price: base, compareAt: null };
+}
 
 /** Talles disponibles (variante activa con stock) por producto, para mostrar en la card. */
 async function availableSizesByProduct(productIds: string[], warehouse: string): Promise<Map<string, string[]>> {
@@ -122,7 +129,7 @@ export async function catalog(opts: {
     p_main_category: opts.mainCategory ?? null, p_season: opts.season ?? null,
     p_sort: opts.sort ?? "name",
   });
-  const rows = (data ?? []) as { id: string; name: string; has_image: boolean; price: number; stock: number; featured: boolean; total: number }[];
+  const rows = (data ?? []) as { id: string; name: string; has_image: boolean; price: number; promo: number | null; stock: number; featured: boolean; total: number }[];
   const total = rows[0]?.total != null ? Number(rows[0].total) : 0;
 
   // Portada por producto (una query para toda la página).
@@ -143,17 +150,20 @@ export async function catalog(opts: {
 
   return {
     total,
-    items: rows.map((r) => ({
-      id: r.id, name: r.name, price: Number(r.price), publicPrice: pubByProduct.get(r.id) ?? null,
-      stock: Number(r.stock), featured: r.featured,
-      image: imgByProduct.has(r.id) ? `${BUCKET_URL}/${imgByProduct.get(r.id)}` : null,
-      sizes: sizesByProduct.get(r.id) ?? [],
-    })),
+    items: rows.map((r) => {
+      const { price, compareAt } = efectivo(Number(r.price), r.promo != null ? Number(r.promo) : null);
+      return {
+        id: r.id, name: r.name, price, compareAt, publicPrice: pubByProduct.get(r.id) ?? null,
+        stock: Number(r.stock), featured: r.featured,
+        image: imgByProduct.has(r.id) ? `${BUCKET_URL}/${imgByProduct.get(r.id)}` : null,
+        sizes: sizesByProduct.get(r.id) ?? [],
+      };
+    }),
   };
 }
 
 export type PortalProduct = {
-  id: string; name: string; description: string | null; price: number; publicPrice: number | null;
+  id: string; name: string; description: string | null; price: number; compareAt: number | null; publicPrice: number | null;
   variationType: string;
   images: string[];
   variants: { id: string; label: string | null; size: string | null; color: string | null; stock: number }[];
@@ -168,8 +178,9 @@ export async function portalProduct(productId: string, org: string, list: string
   if (!p || p.organization_id !== org || !p.active) return null;
 
   const { data: pl } = await admin.from("price_list_items")
-    .select("price").eq("product_id", productId).is("variant_id", null).eq("price_list_id", list).maybeSingle();
+    .select("price, promo_price").eq("product_id", productId).is("variant_id", null).eq("price_list_id", list).maybeSingle();
   if (!pl) return null; // sin precio en la lista del cliente → no visible
+  const { price: effPrice, compareAt } = efectivo(Number(pl.price), pl.promo_price != null ? Number(pl.promo_price) : null);
 
   // Solo variantes activas.
   const vars = ((p.product_variants ?? []) as { id: string; size: string | null; color: string | null; active: boolean }[]).filter((v) => v.active);
@@ -191,7 +202,7 @@ export async function portalProduct(productId: string, org: string, list: string
   const { data: imgs } = await admin.from("product_images").select("path, is_primary").eq("product_id", productId).order("is_primary", { ascending: false });
 
   return {
-    id: p.id, name: p.name, description: p.description, price: Number(pl.price), publicPrice: pubById.get(productId) ?? null,
+    id: p.id, name: p.name, description: p.description, price: effPrice, compareAt, publicPrice: pubById.get(productId) ?? null,
     variationType: (p.variation_type as string) ?? "none",
     images: (imgs ?? []).map((im) => `${BUCKET_URL}/${im.path}`),
     variants,

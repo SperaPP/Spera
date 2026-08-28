@@ -37,9 +37,13 @@ export function PortalQuickAdd({ productId }: { productId: string }) {
                 <h2 className="truncate text-sm font-semibold text-ink">{prod?.name ?? "Cargando…"}</h2>
                 {prod && (
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-bold tabular-nums text-accent">{formatMoney(prod.price)}</span>
-                    {prod.publicPrice != null && prod.publicPrice > prod.price && (
-                      <span className="text-xs tabular-nums text-faint">Público {formatMoney(prod.publicPrice)}</span>
+                    <span className={`text-sm font-bold tabular-nums ${prod.compareAt != null ? "text-danger" : "text-accent"}`}>{formatMoney(prod.price)}</span>
+                    {prod.compareAt != null ? (
+                      <span className="text-xs tabular-nums text-faint line-through">{formatMoney(prod.compareAt)}</span>
+                    ) : (
+                      prod.publicPrice != null && prod.publicPrice > prod.price && (
+                        <span className="text-xs tabular-nums text-faint">Público {formatMoney(prod.publicPrice)}</span>
+                      )
                     )}
                   </div>
                 )}
