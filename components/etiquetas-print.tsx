@@ -23,7 +23,7 @@ const ctl = "rounded-lg border border-line-strong bg-card px-2 py-1.5 text-sm te
 
 export function EtiquetasPrint({ productName, variants }: { productName: string; variants: Variant[] }) {
   const printable = variants.filter((v) => v.sku);
-  const [sizeKey, setSizeKey] = useState("42x29");
+  const [sizeKey, setSizeKey] = useState("62x29");
   const [customW, setCustomW] = useState("70");
   const [customH, setCustomH] = useState("45");
   const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(printable.map((v) => [v.id, "1"])));
