@@ -177,13 +177,35 @@ function shapeCustomer(c: {
 
 const CUSTOMER_SEL = "id, name, doc_type, doc_number, email, phone, balance, customer_types(id, name, price_list_id)";
 
-/** Busca un cliente por documento (DNI/CUIT) para el flujo mayorista. */
+/** Busca un cliente por documento (DNI/CUIT), ignorando puntos/guiones/espacios.
+ *  "22.502.172" y "22502172" son lo mismo. Devuelve el match EXACTO por dígitos. */
 export async function buscarClientePorDoc(doc: string): Promise<ShapedCustomer | null> {
-  const clean = doc.trim();
-  if (!clean) return null;
+  const norm = (doc ?? "").replace(/\D/g, "");
+  if (norm.length < 6) return null;
   const sb = await createClient();
-  const { data } = await sb.from("customers").select(CUSTOMER_SEL).eq("doc_number", clean).eq("active", true).limit(1).maybeSingle();
+  const { data } = await sb.from("customers").select(CUSTOMER_SEL).eq("doc_digits", norm).eq("active", true).limit(1).maybeSingle();
   return data ? shapeCustomer(data) : null;
+}
+
+/** Clientes PARECIDOS (misma persona, otro formato de documento): un DNI que aparece
+ *  dentro de un CUIT ya cargado (20-DNI-3), o viceversa. Para preguntar "¿es este o es
+ *  otro?" antes de crear un duplicado. No incluye el match exacto. */
+export async function buscarClientesSimilares(doc: string): Promise<ShapedCustomer[]> {
+  const norm = (doc ?? "").replace(/\D/g, "");
+  if (norm.length < 7) return [];
+  const sb = await createClient();
+  const out = new Map<string, ShapedCustomer>();
+  if (norm.length === 8) {
+    // DNI ingresado → buscar CUITs que lo contengan (11 dígitos: 2 + DNI + 1).
+    const { data } = await sb.from("customers").select(CUSTOMER_SEL).like("doc_digits", `__${norm}_`).eq("active", true).limit(6);
+    for (const c of data ?? []) out.set(c.id, shapeCustomer(c));
+  } else if (norm.length === 11) {
+    // CUIT ingresado → buscar el DNI del medio (dígitos 3 a 10).
+    const dni = norm.slice(2, 10);
+    const { data } = await sb.from("customers").select(CUSTOMER_SEL).eq("doc_digits", dni).eq("active", true).limit(6);
+    for (const c of data ?? []) out.set(c.id, shapeCustomer(c));
+  }
+  return [...out.values()];
 }
 
 /** Crea un cliente mayorista rápido desde el POS y lo devuelve listo para usar. */
@@ -201,6 +223,13 @@ export async function crearClienteRapido(input: {
   const sb = await createClient();
   const { data: orgId } = await sb.rpc("current_org_id");
   if (!orgId) return { ok: false, error: "Sin organización" };
+
+  // Anti-duplicado: si ya existe un cliente con ese documento (mismos dígitos), no crear otro.
+  const norm = doc.replace(/\D/g, "");
+  if (norm) {
+    const { data: dup } = await sb.from("customers").select("name").eq("doc_digits", norm).eq("active", true).limit(1).maybeSingle();
+    if (dup) return { ok: false, error: `Ya existe un cliente con ese documento: ${dup.name}. Buscalo en vez de crearlo.` };
+  }
 
   const { data: ct } = await sb.from("customer_types").select("default_fiscal_condition").eq("id", input.customerTypeId).maybeSingle();
 
