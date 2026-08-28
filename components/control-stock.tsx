@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ScanLine, Plus, Minus, ClipboardCheck, RotateCcw, Printer, AlertTriangle, Trash2 } from "lucide-react";
 import { escanearConteo, cargarCategoriaConteo, aplicarConteo, type CountProduct } from "@/app/(app)/stock/control/actions";
@@ -20,9 +20,43 @@ export function ControlStock({ warehouses, categories, canApply }: { warehouses:
   const [counted, setCounted] = useState<Record<string, number>>({});
   const [unknown, setUnknown] = useState<Record<string, number>>({}); // código → veces escaneado
   const [pending, start] = useTransition();
+  const [ready, setReady] = useState(false);
 
-  function reset() { setScope([]); setCounted({}); setUnknown({}); setCatId(""); }
-  function changeWh(id: string) { setWhId(id); reset(); }
+  // Persistencia local: el conteo sobrevive a cortes de internet, cierre o refresh.
+  // Solo se limpia con "Limpiar" o al aplicar el ajuste.
+  const KEY = "stock_control_v1";
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s.whId && warehouses.some((w) => w.id === s.whId)) setWhId(s.whId);
+        if (Array.isArray(s.scope)) setScope(s.scope);
+        if (s.counted && typeof s.counted === "object") setCounted(s.counted);
+        if (s.unknown && typeof s.unknown === "object") setUnknown(s.unknown);
+        if ((s.scope?.length ?? 0) > 0) toast.message("Recuperamos el control de stock que estabas haciendo.");
+      }
+    } catch { /* ignore */ }
+    setReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    try {
+      if (scope.length || Object.keys(unknown).length) localStorage.setItem(KEY, JSON.stringify({ whId, scope, counted, unknown }));
+      else localStorage.removeItem(KEY);
+    } catch { /* ignore */ }
+  }, [ready, whId, scope, counted, unknown]);
+
+  function reset() {
+    setScope([]); setCounted({}); setUnknown({}); setCatId("");
+    try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+  }
+  function changeWh(id: string) {
+    // Cambiar de depósito limpia el conteo (es otro control). Confirmar para no perderlo sin querer.
+    if ((scope.length || Object.keys(unknown).length) && !confirm("Cambiar de depósito va a limpiar el control actual. ¿Seguir?")) return;
+    setWhId(id); reset();
+  }
 
   function addProducts(prods: CountProduct[]) {
     setScope((prev) => {
