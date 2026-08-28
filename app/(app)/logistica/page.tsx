@@ -56,7 +56,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
   } else {
     let req = sb
       .from("sales")
-      .select("id, number, created_at, total, paid_amount, channel, fulfillment_status, stores(name), customers(name), shipping_methods(name)")
+      .select("id, number, created_at, total, paid_amount, channel, customer_name, tn_order_number, fulfillment_status, stores(name), customers(name), shipping_methods(name)")
       .eq("status", "completada").order("created_at", { ascending: false }).limit(100);
     if (scopeStore) req = req.eq("store_id", scopeStore);
     if (filter !== "todos") req = req.eq("fulfillment_status", filter);
@@ -145,10 +145,13 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
                 const sinPagar = actionable && Number(s.paid_amount) < Number(s.total) - 0.01;
                 return (
                   <tr key={s.id as string} className="border-b border-line last:border-0 hover:bg-canvas">
-                    <td className="px-4 py-3 font-medium text-ink">#{s.number as number}{s.channel === "cambio" && <span className="ml-1.5 text-xs text-muted">(cambio)</span>}</td>
+                    <td className="px-4 py-3 font-medium text-ink">#{s.number as number}
+                      {s.channel === "cambio" && <span className="ml-1.5 text-xs text-muted">(cambio)</span>}
+                      {s.channel === "tiendanube" && s.tn_order_number ? <span className="ml-1.5 text-xs text-muted">(TN #{s.tn_order_number as string})</span> : null}
+                    </td>
                     <td className="px-4 py-3 text-muted">{formatDateTime(s.created_at as string)}</td>
                     <td className="px-4 py-3 text-muted">{relName(s.stores) ?? "—"}</td>
-                    <td className="px-4 py-3 text-muted">{relName(s.customers) ?? "Consumidor final"}</td>
+                    <td className="px-4 py-3 text-muted">{relName(s.customers) ?? (s.customer_name as string | null) ?? "Consumidor final"}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(Number(s.total))}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>

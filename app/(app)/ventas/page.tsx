@@ -30,7 +30,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   // Gestión por mostradores: si está acotado, sólo su local (en query y en el filtro).
   const stores = scopeStore ? (storesAll ?? []).filter((s) => s.id === scopeStore) : storesAll;
 
-  const sel = "id, number, status, fulfillment_status, created_at, total, paid_amount, armado_printed_at, customers(name), stores(name), sale_items(count)";
+  const sel = "id, number, status, fulfillment_status, created_at, total, paid_amount, channel, customer_name, tn_order_number, armado_printed_at, customers(name), stores(name), sale_items(count)";
   const FULFILL: Record<string, { label: string; cls: string }> = {
     entregado: { label: "Completado", cls: "bg-ok-bg text-ok" },
     despachado: { label: "Completado", cls: "bg-ok-bg text-ok" },
@@ -136,11 +136,12 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                 <tr key={s.id} className="border-b border-line last:border-0 hover:bg-canvas">
                   <td className="px-4 py-3 font-medium">
                     <Link href={`/ventas/${s.id}`} className="text-ink transition-colors hover:text-accent">{s.number}</Link>
+                    {s.channel === "tiendanube" && s.tn_order_number && <span className="ml-1.5 text-xs font-normal text-muted">(TN #{s.tn_order_number})</span>}
                     {s.status === "anulada" && <span className="ml-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-medium text-danger">Anulada</span>}
                   </td>
                   <td className="px-4 py-3 text-muted">{formatDateTime(s.created_at)}</td>
                   <td className="px-4 py-3 text-muted">{relName(s.stores) ?? "—"}</td>
-                  <td className="px-4 py-3 text-ink">{relName(s.customers) ?? "—"}</td>
+                  <td className="px-4 py-3 text-ink">{relName(s.customers) ?? s.customer_name ?? "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted">{(s.sale_items as { count: number }[] | null)?.[0]?.count ?? 0}</td>
                   <td className="px-4 py-3 text-right tabular-nums font-medium text-ink">{formatMoney(Number(s.total))}</td>
                   <td className="px-4 py-3">

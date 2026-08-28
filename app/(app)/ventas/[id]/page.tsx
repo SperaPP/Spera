@@ -17,7 +17,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, status, channel, store_id, created_at, subtotal, discount, total, coupon_id, coupons(code), stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
+    .select("id, number, status, channel, store_id, created_at, subtotal, discount, total, coupon_id, coupons(code), tn_order_number, customer_name, customer_doc, customer_phone, customer_email, customer_address, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
     .eq("id", id)
     .single();
 
@@ -56,7 +56,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Venta #{sale.number}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Venta #{sale.number}{sale.channel === "tiendanube" && sale.tn_order_number ? <span className="ml-2 text-lg font-normal text-muted">(TN #{sale.tn_order_number})</span> : null}</h1>
           <div className="flex items-center gap-2">
             <Link href={`/ventas/${sale.id}/ticket`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
               <Receipt className="h-3.5 w-3.5" /> Ticket
@@ -76,8 +76,12 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
           {field("Fecha", formatDateTime(sale.created_at))}
           {field("Local", relName(sale.stores))}
-          {field("Cliente", relName(sale.customers))}
+          {field("Cliente", relName(sale.customers) ?? sale.customer_name)}
           {field("Lista", relName(sale.price_lists))}
+          {field("DNI/CUIT", sale.customer_doc)}
+          {field("Teléfono", sale.customer_phone)}
+          {field("Email", sale.customer_email)}
+          {field("Dirección", sale.customer_address)}
         </div>
 
         {(cambioDeVenta || generoCambios.length > 0) && (

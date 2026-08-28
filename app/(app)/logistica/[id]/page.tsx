@@ -17,7 +17,7 @@ export default async function ControlPedidoPage({ params }: { params: Promise<{ 
 
   const [{ data: sale }, { data: methods }] = await Promise.all([
     sb.from("sales")
-      .select("id, number, channel, status, store_id, customer_id, total, paid_amount, fulfillment_status, created_at, tracking, dispatch_notes, dispatched_at, stores(name), customers(name), shipping_methods(name), sale_items(id, product_name, variant_label, quantity, product_variants(sku, barcode))")
+      .select("id, number, channel, status, store_id, customer_id, total, paid_amount, fulfillment_status, created_at, tracking, dispatch_notes, dispatched_at, tn_order_number, customer_name, customer_doc, customer_phone, customer_email, customer_address, stores(name), customers(name), shipping_methods(name), sale_items(id, product_name, variant_label, quantity, product_variants(sku, barcode))")
       .eq("id", id).single(),
     sb.from("shipping_methods").select("id, name").eq("active", true).order("position"),
   ]);
@@ -37,12 +37,23 @@ export default async function ControlPedidoPage({ params }: { params: Promise<{ 
       </Link>
 
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Pedido #{sale.number}{sale.channel === "cambio" && <span className="ml-2 text-sm font-normal text-muted">(cambio)</span>}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Pedido #{sale.number}
+          {sale.channel === "cambio" && <span className="ml-2 text-sm font-normal text-muted">(cambio)</span>}
+          {sale.channel === "tiendanube" && sale.tn_order_number ? <span className="ml-2 text-lg font-normal text-muted">(TN #{sale.tn_order_number})</span> : null}
+        </h1>
         <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
           <span>{formatDateTime(sale.created_at)}</span>
           <span>{relName(sale.stores) ?? "—"}</span>
-          <span>{relName(sale.customers) ?? "Consumidor final"}</span>
+          <span className="text-ink">{relName(sale.customers) ?? sale.customer_name ?? "Consumidor final"}</span>
         </div>
+        {(sale.customer_doc || sale.customer_phone || sale.customer_email || sale.customer_address) && (
+          <div className="mt-3 grid gap-1 border-t border-line pt-3 text-sm sm:grid-cols-2">
+            {sale.customer_doc && <div><span className="text-muted">DNI/CUIT: </span><span className="text-ink">{sale.customer_doc}</span></div>}
+            {sale.customer_phone && <div><span className="text-muted">Teléfono: </span><span className="text-ink">{sale.customer_phone}</span></div>}
+            {sale.customer_email && <div><span className="text-muted">Email: </span><span className="text-ink">{sale.customer_email}</span></div>}
+            {sale.customer_address && <div className="sm:col-span-2"><span className="text-muted">Dirección: </span><span className="text-ink">{sale.customer_address}</span></div>}
+          </div>
+        )}
       </div>
 
       <ControlPedido
