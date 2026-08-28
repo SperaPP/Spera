@@ -16,6 +16,7 @@ export type PosSummary = {
 export type PosStore = {
   id: string;
   name: string;
+  warehouseId: string | null;
   isWholesale: boolean;
   sessionId: string | null;
   role: "titular" | "apoyo" | null;
@@ -88,7 +89,7 @@ export default async function PosPage() {
   const [{ data: profile }, { data: isAdmin }, { data: stores }, { data: sessions }, { data: priceLists }, { data: profiles }, { data: methods }] = await Promise.all([
     auth?.user ? sb.from("profiles").select("store_id, is_cash_titular").eq("id", auth.user.id).maybeSingle() : Promise.resolve({ data: null }),
     sb.rpc("is_admin"),
-    sb.from("stores").select("id, name, is_wholesale").eq("has_cash_register", true).eq("active", true).order("name"),
+    sb.from("stores").select("id, name, is_wholesale, warehouse_id").eq("has_cash_register", true).eq("active", true).order("name"),
     sb.from("cash_sessions").select("id, store_id, role, opening_amount, opened_at, opened_by").eq("status", "abierta"),
     sb.from("price_lists").select("id, name").eq("active", true),
     sb.from("customer_types").select("id, name, price_list_id").eq("active", true).order("name"),
@@ -142,6 +143,7 @@ export default async function PosPage() {
     posStores.push({
       id: s.id,
       name: s.name,
+      warehouseId: (s.warehouse_id as string | null) ?? null,
       isWholesale: s.is_wholesale ?? false,
       sessionId: sess?.id ?? null,
       role,

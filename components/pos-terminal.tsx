@@ -17,7 +17,7 @@ import type { PosStore } from "@/app/(app)/pos/page";
 type Method = { id: string; name: string; kind: string };
 type Profile = { customerTypeId: string; name: string; priceListId: string | null };
 type Customer = NonNullable<Awaited<ReturnType<typeof buscarClientePorDoc>>>;
-type CartItem = { variantId: string; name: string; label: string | null; quantity: number; unitPrice: number; image: string | null };
+type CartItem = { variantId: string; name: string; label: string | null; quantity: number; unitPrice: number; image: string | null; stock: number };
 type Payment = { methodId: string; amount: string };
 
 const inputBase =
@@ -353,7 +353,7 @@ function Terminal({
 
   // Grilla de productos: carga por defecto (con foto) y filtra al buscar.
   useEffect(() => {
-    listarProductosPOS(query, priceListId).then(setResults);
+    listarProductosPOS(query, priceListId, store.warehouseId).then(setResults);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priceListId]);
 
@@ -361,34 +361,39 @@ function Terminal({
     setQuery(v);
     if (debounce.current) clearTimeout(debounce.current);
     debounce.current = setTimeout(async () => {
-      setResults(await listarProductosPOS(v, priceListId));
+      setResults(await listarProductosPOS(v, priceListId, store.warehouseId));
     }, 250);
   }
-  function addItem(variantId: string, name: string, label: string | null, price: number | null, image: string | null) {
+  function addItem(variantId: string, name: string, label: string | null, price: number | null, image: string | null, stock: number) {
     if (wholesale && !customer) return toast.error("Identificá al cliente antes de cargar productos.");
+    const tag = `${name}${label ? ` ${label}` : ""}`;
+    if (stock <= 0) return toast.error(`${tag}: sin stock`);
+    const existing = cart.find((x) => x.variantId === variantId);
+    if (existing && existing.quantity >= stock) return toast.error(`${tag}: no hay más stock (máx ${stock})`);
     setCart((prev) => {
       const i = prev.findIndex((x) => x.variantId === variantId);
-      if (i >= 0) { const next = [...prev]; next[i] = { ...next[i], quantity: next[i].quantity + 1 }; return next; }
-      return [...prev, { variantId, name, label, quantity: 1, unitPrice: price ?? 0, image }];
+      if (i >= 0) { const next = [...prev]; next[i] = { ...next[i], quantity: Math.min(next[i].quantity + 1, stock), stock }; return next; }
+      return [...prev, { variantId, name, label, quantity: 1, unitPrice: price ?? 0, image, stock }];
     });
   }
   function onTile(p: GridProduct) {
     if (wholesale && !customer) return toast.error("Identificá al cliente antes de cargar productos.");
+    if (p.stock <= 0) return toast.error(`${p.name}: sin stock`);
     if (p.variants.length <= 1) {
       const v = p.variants[0];
       if (!v) return toast.error("El producto no tiene variantes.");
-      addItem(v.id, p.name, v.label, p.price, p.image);
+      addItem(v.id, p.name, v.label, p.price, p.image, v.stock);
     } else {
       setVariantPick(p);
     }
   }
   function setQty(variantId: string, qty: number) {
-    setCart((prev) => prev.flatMap((x) => (x.variantId === variantId ? (qty <= 0 ? [] : [{ ...x, quantity: qty }]) : [x])));
+    setCart((prev) => prev.flatMap((x) => (x.variantId === variantId ? (qty <= 0 ? [] : [{ ...x, quantity: Math.min(qty, x.stock) }]) : [x])));
   }
   async function onScan(code: string) {
-    const r = await buscarPorCodigo(code, priceListId);
+    const r = await buscarPorCodigo(code, priceListId, store.warehouseId);
     if (r.notFound) return toast.error(`Código ${code}: sin resultados`);
-    addItem(r.variantId, r.name, r.label, r.price, r.image);
+    addItem(r.variantId, r.name, r.label, r.price, r.image, r.stock);
   }
   function aplicarCupon() {
     const code = couponCode.trim();
@@ -542,14 +547,17 @@ function Terminal({
                 <button
                   key={p.id}
                   onClick={() => onTile(p)}
-                  className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-canvas"
+                  disabled={p.stock <= 0}
+                  className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent"
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas text-muted transition-colors group-hover:bg-accent-soft group-hover:text-accent">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas text-muted transition-colors group-hover:bg-accent-soft group-hover:text-accent group-disabled:bg-canvas group-disabled:text-faint">
                     <Plus className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-ink">{p.name}</div>
-                    {p.variants.length > 1 && <div className="mt-0.5 text-xs text-muted">{p.variants.length} variantes</div>}
+                    {p.stock <= 0
+                      ? <div className="mt-0.5 text-xs font-medium text-danger">Sin stock</div>
+                      : p.variants.length > 1 && <div className="mt-0.5 text-xs text-muted">{p.variants.length} variantes · {p.stock} disp.</div>}
                   </div>
                   <span className={`shrink-0 text-sm font-semibold tabular-nums ${p.price != null ? "text-ink" : "text-faint"}`}>{p.price != null ? formatMoney(p.price) : "sin precio"}</span>
                 </button>
@@ -689,10 +697,12 @@ function Terminal({
               {variantPick.variants.map((v) => (
                 <button
                   key={v.id}
-                  onClick={() => { addItem(v.id, variantPick.name, v.label, variantPick.price, variantPick.image); setVariantPick(null); }}
-                  className="rounded-xl border border-line-strong px-3 py-2.5 text-sm font-medium text-ink transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent"
+                  disabled={v.stock <= 0}
+                  onClick={() => { addItem(v.id, variantPick.name, v.label, variantPick.price, variantPick.image, v.stock); setVariantPick(null); }}
+                  className="flex flex-col rounded-xl border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line-strong disabled:hover:bg-transparent disabled:hover:text-ink"
                 >
-                  {v.label ?? "Único"}
+                  <span>{v.label ?? "Único"}</span>
+                  <span className={`text-[11px] font-normal tabular-nums ${v.stock <= 0 ? "text-danger" : "text-muted"}`}>{v.stock <= 0 ? "sin stock" : `${v.stock} disp.`}</span>
                 </button>
               ))}
             </div>

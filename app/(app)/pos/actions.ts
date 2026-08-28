@@ -48,12 +48,12 @@ export async function buscarProductos(query: string, priceListId: string | null)
 
 /** Lista productos para la grilla del POS: por defecto (sin query) prioriza los que
  *  tienen foto; con query filtra por nombre. Devuelve precio en la lista indicada. */
-export async function listarProductosPOS(query: string, priceListId: string | null) {
+export async function listarProductosPOS(query: string, priceListId: string | null, warehouseId?: string | null) {
   const q = query.trim();
   const sb = await createClient();
   let req = sb
     .from("products")
-    .select("id, name, product_images(path, is_primary), product_variants(id, size, color, sku, barcode), price_list_items(price, variant_id, price_list_id)")
+    .select("id, name, product_images(path, is_primary), product_variants(id, size, color, sku, barcode, active), price_list_items(price, variant_id, price_list_id)")
     .eq("active", true);
   if (priceListId) req = req.eq("price_list_items.price_list_id", priceListId);
   req = q.length >= 2
@@ -61,22 +61,41 @@ export async function listarProductosPOS(query: string, priceListId: string | nu
     : req.order("name").limit(40);
 
   const { data } = await req;
-  return (data ?? []).map((p) => {
+  const rows = data ?? [];
+
+  // Disponible (físico − reservado) por variante en el depósito del local.
+  const avail = await availByVariant(sb, warehouseId, rows.flatMap((p) => ((p.product_variants ?? []) as { id: string }[]).map((v) => v.id)));
+
+  return rows.map((p) => {
     const items = (p.price_list_items ?? []) as { price: number; variant_id: string | null }[];
     const price = priceListId ? (items.find((i) => i.variant_id === null)?.price ?? null) : null;
+    const variants = ((p.product_variants ?? []) as { id: string; size: string | null; color: string | null; sku: string | null; active: boolean }[])
+      .filter((v) => v.active)
+      .map((v) => ({ id: v.id, label: label(v.size, v.color), sku: v.sku, stock: avail(v.id) }));
     return {
-      id: p.id,
-      name: p.name,
-      price,
+      id: p.id, name: p.name, price,
       image: imageUrl(p.product_images as { path: string; is_primary: boolean }[] | null),
-      variants: ((p.product_variants ?? []) as { id: string; size: string | null; color: string | null; sku: string | null; barcode: string | null }[])
-        .map((v) => ({ id: v.id, label: label(v.size, v.color), sku: v.sku })),
+      stock: variants.reduce((a, v) => a + v.stock, 0),
+      variants,
     };
   });
 }
 
+/** Devuelve una función id→disponible en el depósito. Si no hay depósito, todo = 9999
+ *  (no bloquea: evita romper el POS si un local no tiene depósito configurado). */
+async function availByVariant(sb: Awaited<ReturnType<typeof createClient>>, warehouseId: string | null | undefined, variantIds: string[]) {
+  if (!warehouseId || !variantIds.length) return () => 9999;
+  const map = new Map<string, number>();
+  const uniq = [...new Set(variantIds)];
+  for (let i = 0; i < uniq.length; i += 200) {
+    const { data: st } = await sb.from("stock").select("variant_id, quantity, reserved").eq("warehouse_id", warehouseId).in("variant_id", uniq.slice(i, i + 200));
+    for (const s of st ?? []) map.set(s.variant_id, Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0)));
+  }
+  return (id: string) => map.get(id) ?? 0;
+}
+
 /** Busca una variante por código de barras o SKU (para el lector). */
-export async function buscarPorCodigo(code: string, priceListId: string | null) {
+export async function buscarPorCodigo(code: string, priceListId: string | null, warehouseId?: string | null) {
   const c = code.trim();
   if (!c) return { notFound: true as const };
 
@@ -85,6 +104,8 @@ export async function buscarPorCodigo(code: string, priceListId: string | null) 
   let { data: v } = await sb.from("product_variants").select(sel).eq("barcode", c).limit(1).maybeSingle();
   if (!v) ({ data: v } = await sb.from("product_variants").select(sel).eq("sku", c).limit(1).maybeSingle());
   if (!v) return { notFound: true as const };
+
+  const avail = await availByVariant(sb, warehouseId, [v.id]);
 
   let price: number | null = null;
   if (priceListId) {
@@ -108,6 +129,7 @@ export async function buscarPorCodigo(code: string, priceListId: string | null) 
     label: label(v.size, v.color),
     sku: v.sku,
     price,
+    stock: avail(v.id),
     image: imageUrl(prod?.product_images),
   };
 }
