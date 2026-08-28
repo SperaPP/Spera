@@ -38,6 +38,7 @@ export function PosTerminal({
   retailPriceListId,
   wholesaleProfiles,
   retailProfiles,
+  walkInCustomer,
   paymentMethods,
 }: {
   stores: PosStore[];
@@ -46,6 +47,7 @@ export function PosTerminal({
   retailPriceListId: string | null;
   wholesaleProfiles: Profile[];
   retailProfiles: Profile[];
+  walkInCustomer: Customer | null;
   paymentMethods: Method[];
 }) {
   const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
@@ -73,7 +75,7 @@ export function PosTerminal({
 
   if (store.sessionId && store.stale) return <CajaVieja store={store} storeSelector={storeSelector} />;
   return store.sessionId
-    ? <Terminal store={store} storeSelector={storeSelector} retailPriceListId={retailPriceListId} wholesaleProfiles={wholesaleProfiles} retailProfiles={retailProfiles} paymentMethods={paymentMethods} />
+    ? <Terminal store={store} storeSelector={storeSelector} retailPriceListId={retailPriceListId} wholesaleProfiles={wholesaleProfiles} retailProfiles={retailProfiles} walkInCustomer={walkInCustomer} paymentMethods={paymentMethods} />
     : <AbrirCaja store={store} storeSelector={storeSelector} />;
 }
 
@@ -299,6 +301,7 @@ function Terminal({
   retailPriceListId,
   wholesaleProfiles,
   retailProfiles,
+  walkInCustomer,
   paymentMethods,
 }: {
   store: PosStore;
@@ -306,6 +309,7 @@ function Terminal({
   retailPriceListId: string | null;
   wholesaleProfiles: Profile[];
   retailProfiles: Profile[];
+  walkInCustomer: Customer | null;
   paymentMethods: Method[];
 }) {
   const router = useRouter();
@@ -565,6 +569,7 @@ function Terminal({
             setCustomer={setCustomer}
             profiles={wholesale ? wholesaleProfiles : retailProfiles}
             title={wholesale ? "Cliente mayorista" : "Cliente"}
+            walkIn={wholesale ? null : walkInCustomer}
           />
 
           <div className={card}>
@@ -710,7 +715,7 @@ function Terminal({
 }
 
 // ── Identificación del cliente (mostrador y mayorista) ─────────
-function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente mayorista" }: { customer: Customer | null; setCustomer: (c: Customer | null) => void; profiles: Profile[]; title?: string }) {
+function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente mayorista", walkIn = null }: { customer: Customer | null; setCustomer: (c: Customer | null) => void; profiles: Profile[]; title?: string; walkIn?: Customer | null }) {
   const [doc, setDoc] = useState("");
   const [searched, setSearched] = useState(false);
   const [similar, setSimilar] = useState<Customer[]>([]);
@@ -771,6 +776,11 @@ function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente ma
         <input value={doc} onChange={(e) => { setDoc(e.target.value); setSearched(false); setSimilar([]); }} onKeyDown={(e) => { if (e.key === "Enter") buscar(); }} placeholder="DNI o CUIT" className={input} />
         <button onClick={buscar} disabled={pending || !doc.trim()} className="shrink-0 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-50">Buscar</button>
       </div>
+      {walkIn && (
+        <button onClick={() => { setCustomer(walkIn); toast.message("Venta sin identificar (Consumidor Final)."); }} className="mt-2 w-full rounded-lg border border-dashed border-line-strong px-3 py-2 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent">
+          Vender sin identificar → Consumidor Final
+        </button>
+      )}
 
       {similar.length > 0 && (
         <div className="mt-3 space-y-2 border-t border-line pt-3">

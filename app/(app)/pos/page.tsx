@@ -86,7 +86,7 @@ export default async function PosPage() {
   const sb = await createClient();
   const { data: auth } = await sb.auth.getUser();
 
-  const [{ data: profile }, { data: isAdmin }, { data: stores }, { data: sessions }, { data: priceLists }, { data: profiles }, { data: methods }] = await Promise.all([
+  const [{ data: profile }, { data: isAdmin }, { data: stores }, { data: sessions }, { data: priceLists }, { data: profiles }, { data: methods }, { data: walkInRow }] = await Promise.all([
     auth?.user ? sb.from("profiles").select("store_id, is_cash_titular").eq("id", auth.user.id).maybeSingle() : Promise.resolve({ data: null }),
     sb.rpc("is_admin"),
     sb.from("stores").select("id, name, is_wholesale, warehouse_id").eq("has_cash_register", true).eq("active", true).order("name"),
@@ -94,6 +94,7 @@ export default async function PosPage() {
     sb.from("price_lists").select("id, name").eq("active", true),
     sb.from("customer_types").select("id, name, price_list_id").eq("active", true).order("name"),
     sb.from("payment_methods").select("id, name, kind").eq("active", true).order("position"),
+    sb.from("customers").select("id, name, doc_type, doc_number, email, phone, balance, customer_types(id, name, price_list_id)").eq("name", "Consumidor Final").eq("active", true).limit(1).maybeSingle(),
   ]);
 
   // La sucursal del usuario ancla el POS. Admin sin sucursal → puede operar todas.
@@ -167,6 +168,15 @@ export default async function PosPage() {
   const wholesaleProfiles = asProfiles("Mayorista");
   const retailProfiles = asProfiles("Publico"); // tipo de cliente para mostrador (minorista)
 
+  // Cliente genérico "Consumidor Final" (semilla 0003) para la venta rápida de
+  // mostrador sin identificar. La venta igual queda vinculada a un customer real.
+  const wct = walkInRow ? (Array.isArray(walkInRow.customer_types) ? walkInRow.customer_types[0] : walkInRow.customer_types) as { id: string; name: string; price_list_id: string | null } | null : null;
+  const walkInCustomer = walkInRow ? {
+    id: walkInRow.id, name: walkInRow.name, docType: walkInRow.doc_type, docNumber: walkInRow.doc_number,
+    email: walkInRow.email, phone: walkInRow.phone, balance: Number(walkInRow.balance),
+    profileTypeId: wct?.id ?? null, profileName: wct?.name ?? null, priceListId: wct?.price_list_id ?? null,
+  } : null;
+
   return (
     <PosTerminal
       stores={posStores}
@@ -175,6 +185,7 @@ export default async function PosPage() {
       retailPriceListId={retailPriceListId}
       wholesaleProfiles={wholesaleProfiles}
       retailProfiles={retailProfiles}
+      walkInCustomer={walkInCustomer}
       paymentMethods={methods ?? []}
     />
   );
