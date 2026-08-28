@@ -243,6 +243,32 @@ export async function crearClienteRapido(input: {
   return { ok: true, customer: shapeCustomer(data) };
 }
 
+/** Cliente genérico "Consumidor Final" para la venta rápida de mostrador sin
+ *  identificar. Lo busca; si no existe (semilla ausente), lo crea con el tipo
+ *  Publico. Así el botón funciona sin depender de que la semilla esté cargada. */
+export async function clienteConsumidorFinal(): Promise<ShapedCustomer | null> {
+  const denied = await requireCan("pos", true);
+  if (denied) return null;
+  const sb = await createClient();
+
+  const { data: found } = await sb.from("customers").select(CUSTOMER_SEL)
+    .eq("name", "Consumidor Final").eq("active", true).order("created_at").limit(1);
+  if (found && found.length) return shapeCustomer(found[0]);
+
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return null;
+  const { data: ct } = await sb.from("customer_types")
+    .select("id, default_fiscal_condition").eq("name", "Publico").eq("active", true).limit(1).maybeSingle();
+
+  const { data, error } = await sb.from("customers").insert({
+    organization_id: orgId, name: "Consumidor Final",
+    customer_type_id: ct?.id ?? null,
+    fiscal_condition: ct?.default_fiscal_condition ?? "consumidor_final",
+  }).select(CUSTOMER_SEL).single();
+  if (error) return null;
+  return shapeCustomer(data);
+}
+
 const schema = z.object({
   storeId: z.string().uuid(),
   cashSessionId: z.string().uuid(),

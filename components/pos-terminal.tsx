@@ -6,7 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard, Receipt, Gift, RefreshCw } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { listarProductosPOS, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, buscarClientesSimilares, crearClienteRapido } from "@/app/(app)/pos/actions";
+import { listarProductosPOS, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, buscarClientesSimilares, crearClienteRapido, clienteConsumidorFinal } from "@/app/(app)/pos/actions";
 
 type GridProduct = Awaited<ReturnType<typeof listarProductosPOS>>[number];
 import { abrirCaja, cerrarCaja } from "@/app/(app)/caja/actions";
@@ -454,6 +454,16 @@ function Terminal({
     setPayments([...others, { methodId: m.id, amount: String(rest) }]);
   }
 
+  // Venta rápida de mostrador sin identificar: usa el "Consumidor Final".
+  function usarConsumidorFinal() {
+    if (walkInCustomer) { setCustomer(walkInCustomer); toast.message("Venta sin identificar (Consumidor Final)."); return; }
+    start(async () => {
+      const c = await clienteConsumidorFinal();
+      if (c) { setCustomer(c); toast.message("Venta sin identificar (Consumidor Final)."); }
+      else toast.error("No se pudo usar Consumidor Final. Identificá al cliente.");
+    });
+  }
+
   function confirmar() {
     if (cart.length === 0) return toast.error("El carrito está vacío.");
     if (!customer) return toast.error("Identificá al cliente antes de cobrar.");
@@ -594,7 +604,7 @@ function Terminal({
             setCustomer={setCustomer}
             profiles={wholesale ? wholesaleProfiles : retailProfiles}
             title={wholesale ? "Cliente mayorista" : "Cliente"}
-            walkIn={wholesale ? null : walkInCustomer}
+            onWalkIn={wholesale ? undefined : usarConsumidorFinal}
           />
 
           <div className={card}>
@@ -740,7 +750,7 @@ function Terminal({
 }
 
 // ── Identificación del cliente (mostrador y mayorista) ─────────
-function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente mayorista", walkIn = null }: { customer: Customer | null; setCustomer: (c: Customer | null) => void; profiles: Profile[]; title?: string; walkIn?: Customer | null }) {
+function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente mayorista", onWalkIn }: { customer: Customer | null; setCustomer: (c: Customer | null) => void; profiles: Profile[]; title?: string; onWalkIn?: () => void }) {
   const [doc, setDoc] = useState("");
   const [searched, setSearched] = useState(false);
   const [similar, setSimilar] = useState<Customer[]>([]);
@@ -801,8 +811,8 @@ function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente ma
         <input value={doc} onChange={(e) => { setDoc(e.target.value); setSearched(false); setSimilar([]); }} onKeyDown={(e) => { if (e.key === "Enter") buscar(); }} placeholder="DNI o CUIT" className={input} />
         <button onClick={buscar} disabled={pending || !doc.trim()} className="shrink-0 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-50">Buscar</button>
       </div>
-      {walkIn && (
-        <button onClick={() => { setCustomer(walkIn); toast.message("Venta sin identificar (Consumidor Final)."); }} className="mt-2 w-full rounded-lg border border-dashed border-line-strong px-3 py-2 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent">
+      {onWalkIn && (
+        <button onClick={onWalkIn} className="mt-2 w-full rounded-lg border border-dashed border-line-strong px-3 py-2 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent">
           Vender sin identificar → Consumidor Final
         </button>
       )}
