@@ -103,3 +103,35 @@ export async function cancelarTransferencia(id: string): Promise<ActionState> {
   revalidatePath("/logistica");
   return { ok: true };
 }
+
+/** Busca productos por NOMBRE y devuelve sus variantes con disponible en el origen.
+ *  Para planificar la transferencia sin tener las prendas físicas (sin SKU). */
+export async function buscarProductosTransferencia(query: string, fromWarehouseId: string) {
+  const q = (query ?? "").trim();
+  if (q.length < 2 || !fromWarehouseId) return [];
+  const sb = await createClient();
+
+  const { data: prods } = await sb.from("products").select("id, name").ilike("name", `%${q}%`).eq("active", true).order("name").limit(15);
+  const ids = (prods ?? []).map((p) => p.id);
+  if (!ids.length) return [];
+
+  const { data: vars } = await sb.from("product_variants").select("id, size, color, product_id").in("product_id", ids).eq("active", true);
+  const varIds = (vars ?? []).map((v) => v.id);
+  const availByVar = new Map<string, number>();
+  for (let i = 0; i < varIds.length; i += 200) {
+    const { data: st } = await sb.from("stock").select("variant_id, quantity, reserved").eq("warehouse_id", fromWarehouseId).in("variant_id", varIds.slice(i, i + 200));
+    for (const s of st ?? []) availByVar.set(s.variant_id, Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0)));
+  }
+
+  const byProduct = new Map<string, { id: string; name: string; variants: { variantId: string; label: string | null; available: number }[] }>();
+  for (const p of prods ?? []) byProduct.set(p.id, { id: p.id, name: p.name, variants: [] });
+  for (const v of vars ?? []) {
+    const avail = availByVar.get(v.id) ?? 0;
+    if (avail <= 0) continue; // solo lo que hay en el origen (transferible)
+    const l = [v.size, v.color].filter(Boolean).join(" / ") || null;
+    byProduct.get(v.product_id)?.variants.push({ variantId: v.id, label: l, available: avail });
+  }
+  return [...byProduct.values()]
+    .filter((p) => p.variants.length)
+    .map((p) => ({ ...p, variants: p.variants.sort((a, b) => (a.label ?? "").localeCompare(b.label ?? "", "es")) }));
+}
