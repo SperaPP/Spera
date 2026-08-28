@@ -17,7 +17,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, status, channel, store_id, created_at, subtotal, discount, total, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
+    .select("id, number, status, channel, store_id, created_at, subtotal, discount, total, coupon_id, coupons(code), stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
     .eq("id", id)
     .single();
 
@@ -29,6 +29,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const items = (sale.sale_items ?? []) as { product_name: string; variant_label: string | null; quantity: number; unit_price: number; line_total: number; returned_qty: number }[];
   const payments = (sale.sale_payments ?? []) as { amount: number; surcharge: number; payment_methods: unknown }[];
+  const couponCode = (Array.isArray(sale.coupons) ? sale.coupons[0]?.code : (sale.coupons as { code: string } | null)?.code) ?? null;
 
   // Cambios asociados: esta venta como origen (se cambiaron prendas) o como resultado de un cambio.
   const [{ data: exFrom }, { data: exTo }] = await Promise.all([
@@ -139,7 +140,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
         </div>
         <div className="rounded-xl border border-line bg-card p-5">
           <div className="flex justify-between py-1 text-sm"><span className="text-muted">Subtotal</span><span className="tabular-nums text-ink">{formatMoney(Number(sale.subtotal))}</span></div>
-          {Number(sale.discount) > 0 && <div className="flex justify-between py-1 text-sm"><span className="text-muted">Descuento</span><span className="tabular-nums text-ink">− {formatMoney(Number(sale.discount))}</span></div>}
+          {Number(sale.discount) > 0 && <div className="flex justify-between gap-3 py-1 text-sm"><span className="text-muted">Descuento{couponCode ? <> · <span className="font-medium text-ink">cupón {couponCode}</span></> : ""}</span><span className="shrink-0 tabular-nums text-ink">− {formatMoney(Number(sale.discount))}</span></div>}
           <div className="mt-2 flex justify-between border-t border-line pt-2"><span className="font-medium text-ink">Total</span><span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(Number(sale.total))}</span></div>
         </div>
       </div>
