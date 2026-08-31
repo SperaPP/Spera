@@ -8,13 +8,15 @@ import { isValidEmail, isValidPhone } from "@/lib/validation";
 const label = (size: string | null, color: string | null) =>
   [size, color].filter(Boolean).join(" / ") || null;
 
-// Miniatura vía el redimensionado de Supabase: mucho más liviana para el POS.
-const renderUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/product-images`;
+// Imagen directa (objeto público), igual que el portal. NO usa el endpoint de
+// "image transformations" de Supabase (que está limitado a 100/mes en el plan Pro
+// y nos hacía pasar la cuota). El egress tiene lugar de sobra.
+const bucketUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
 function imageUrl(images: { path: string; is_primary: boolean }[] | null | undefined): string | null {
   const list = images ?? [];
   if (list.length === 0) return null;
   const chosen = list.find((i) => i.is_primary) ?? list[0];
-  return `${renderUrl}/${chosen.path}?width=300&quality=70`;
+  return `${bucketUrl}/${chosen.path}`;
 }
 
 /** Precio EFECTIVO: si hay promo activa (no nula y menor al precio de lista), ese es
