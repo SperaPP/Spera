@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, Printer } from "lucide-react";
+import { ArrowLeft, ArrowRight, Printer, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/format";
 import { ControlTransferencia } from "@/components/control-transferencia";
@@ -14,12 +14,15 @@ export default async function TransferenciaDetallePage({ params }: { params: Pro
   const { id } = await params;
   const sb = await createClient();
 
-  const { data: t } = await sb
-    .from("stock_transfers")
-    .select("id, status, notes, created_at, sent_at, received_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
-    .eq("id", id)
-    .single();
+  const [{ data: t }, { data: isAdmin }] = await Promise.all([
+    sb.from("stock_transfers")
+      .select("id, status, notes, created_at, sent_at, received_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
+      .eq("id", id)
+      .single(),
+    sb.rpc("is_admin"),
+  ]);
   if (!t) notFound();
+  const canEdit = isAdmin === true && t.status === "creada";
 
   const items = ((t.stock_transfer_items ?? []) as { quantity: number; product_variants: unknown }[]).map((it, i) => {
     const v = (Array.isArray(it.product_variants) ? it.product_variants[0] : it.product_variants) as { sku: string | null; barcode: string | null; size: string | null; color: string | null; products: unknown } | null;
@@ -44,9 +47,16 @@ export default async function TransferenciaDetallePage({ params }: { params: Pro
           <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-ink">
             {relName(t.from_warehouse) ?? "—"} <ArrowRight className="h-5 w-5 text-faint" /> {relName(t.to_warehouse) ?? "—"}
           </h1>
-          <Link href={`/transferencias/${t.id}/imprimir`} className="flex shrink-0 items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
-            <Printer className="h-4 w-4" /> Imprimir pedido
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            {canEdit && (
+              <Link href={`/transferencias/${t.id}/editar`} className="flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+                <Pencil className="h-4 w-4" /> Editar
+              </Link>
+            )}
+            <Link href={`/transferencias/${t.id}/imprimir`} className="flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+              <Printer className="h-4 w-4" /> Imprimir pedido
+            </Link>
+          </div>
         </div>
         <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
           <span>Creada {formatDateTime(t.created_at)}</span>

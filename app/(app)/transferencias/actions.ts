@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireCan, type ActionState } from "@/lib/auth";
+import { requireCan, requireAdmin, type ActionState } from "@/lib/auth";
 
 /** Busca la variante por código y devuelve su stock disponible en el depósito origen. */
 export async function buscarVarianteTransferencia(code: string, fromWarehouseId: string) {
@@ -66,6 +66,34 @@ export async function crearTransferencia(input: CrearTransferenciaInput): Promis
   revalidatePath("/transferencias");
   revalidatePath("/logistica");
   return { ok: true, id: data as string };
+}
+
+const editSchema = z.array(z.object({
+  variantId: z.string().uuid(),
+  productName: z.string().min(1),
+  quantity: z.number().int().positive(),
+}));
+
+/** Edita los ítems de una transferencia 'creada' (solo admin). La RPC edit_transfer
+ *  libera la reserva vieja y reserva los ítems nuevos en el origen. */
+export async function editarTransferencia(id: string, items: unknown): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const parsed = editSchema.safeParse(items);
+  if (!parsed.success) return { error: "Ítems inválidos" };
+  if (parsed.data.length === 0) return { error: "La transferencia no puede quedar sin ítems" };
+
+  const sb = await createClient();
+  const { error } = await sb.rpc("edit_transfer", {
+    p_transfer_id: id,
+    p_items: parsed.data.map((i) => ({ variant_id: i.variantId, product_name: i.productName, quantity: i.quantity })),
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/transferencias");
+  revalidatePath(`/transferencias/${id}`);
+  revalidatePath("/logistica");
+  return { ok: true };
 }
 
 export async function enviarTransferencia(id: string): Promise<ActionState> {
