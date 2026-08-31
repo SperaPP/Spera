@@ -1,8 +1,44 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin, requireCan, type ActionState } from "@/lib/auth";
+
+const editItemsSchema = z.array(z.object({
+  variantId: z.string().uuid(),
+  productName: z.string().min(1),
+  variantLabel: z.string().nullable(),
+  quantity: z.number().int().positive(),
+  unitPrice: z.number().min(0),
+}));
+
+/** Edita los ítems de un pedido mayorista aún no controlado (solo admin).
+ *  La RPC edit_sale revierte y re-aplica stock, cuenta corriente y totales. */
+export async function editarPedido(saleId: string, items: unknown): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
+  const parsed = editItemsSchema.safeParse(items);
+  if (!parsed.success) return { error: "Ítems inválidos" };
+  if (parsed.data.length === 0) return { error: "El pedido no puede quedar sin ítems" };
+
+  const sb = await createClient();
+  const { error } = await sb.rpc("edit_sale", {
+    p_sale_id: saleId,
+    p_items: parsed.data.map((i) => ({
+      variant_id: i.variantId, product_name: i.productName, variant_label: i.variantLabel,
+      quantity: i.quantity, unit_price: i.unitPrice,
+    })),
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/ventas");
+  revalidatePath(`/ventas/${saleId}`);
+  revalidatePath("/logistica");
+  revalidatePath(`/logistica/${saleId}`);
+  return { ok: true };
+}
 
 /** Anula una venta (destructivo → reservado a administrador). */
 export async function anularVenta(saleId: string): Promise<ActionState> {

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Receipt, Gift } from "lucide-react";
+import { ArrowLeft, Receipt, Gift, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
@@ -17,7 +17,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, status, channel, store_id, created_at, subtotal, discount, total, coupon_id, coupons(code), tn_order_number, customer_name, customer_doc, customer_phone, customer_email, customer_address, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
+    .select("id, number, status, channel, fulfillment_status, store_id, created_at, subtotal, discount, total, coupon_id, coupons(code), tn_order_number, customer_name, customer_doc, customer_phone, customer_email, customer_address, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
     .eq("id", id)
     .single();
 
@@ -26,6 +26,12 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
   // Gestión por mostradores: un usuario acotado no ve ventas de otro local.
   const { storeId: scopeStore } = await getStoreScope();
   if (scopeStore && sale.store_id !== scopeStore) notFound();
+
+  const { data: isAdmin } = await sb.rpc("is_admin");
+  // Editable: pedido mayorista pendiente (antes de controlar), solo admin. La página
+  // de edición vuelve a validar pagos/cobranzas.
+  const canEditPedido = isAdmin === true && sale.status === "completada"
+    && sale.fulfillment_status === "pendiente" && sale.channel !== "cambio" && sale.channel !== "tiendanube";
 
   const items = (sale.sale_items ?? []) as { product_name: string; variant_label: string | null; quantity: number; unit_price: number; line_total: number; returned_qty: number }[];
   const payments = (sale.sale_payments ?? []) as { amount: number; surcharge: number; payment_methods: unknown }[];
@@ -64,6 +70,11 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
             <Link href={`/ventas/${sale.id}/ticket?regalo=1`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
               <Gift className="h-3.5 w-3.5" /> Regalo
             </Link>
+            {canEditPedido && (
+              <Link href={`/ventas/${sale.id}/editar`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
+                <Pencil className="h-3.5 w-3.5" /> Editar
+              </Link>
+            )}
             {sale.status === "anulada" ? (
               <span className="rounded-full bg-danger-bg px-2.5 py-0.5 text-xs font-medium text-danger">Anulada</span>
             ) : sale.channel === "cambio" ? (
