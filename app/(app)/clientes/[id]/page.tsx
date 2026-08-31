@@ -29,6 +29,13 @@ const REASON_LABEL: Record<string, string> = {
   anulacion: "Anulación",
   ajuste: "Ajuste",
 };
+// Estado del pedido (fulfillment), igual que en la pantalla de Ventas.
+const FULFILL: Record<string, { label: string; cls: string }> = {
+  entregado: { label: "Completado", cls: "bg-ok-bg text-ok" },
+  despachado: { label: "Completado", cls: "bg-ok-bg text-ok" },
+  controlado: { label: "Controlado", cls: "bg-accent-soft text-accent" },
+  pendiente: { label: "En preparación", cls: "bg-warn-bg text-warn" },
+};
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -49,7 +56,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
   // Historial de compras: TODAS las ventas del cliente (contado incluido).
   const { data: sales } = await sb
     .from("sales")
-    .select("id, number, created_at, total, status, channel")
+    .select("id, number, created_at, total, status, channel, fulfillment_status")
     .eq("customer_id", id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -115,7 +122,8 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
 
       <div className="rounded-xl border border-line bg-card">
         <div className="border-b border-line px-5 py-3.5">
-          <h2 className="text-sm font-medium text-ink">Movimientos</h2>
+          <h2 className="text-sm font-medium text-ink">Cuenta corriente</h2>
+          <p className="mt-0.5 text-xs text-muted"><span className="font-medium text-ink">Debe</span> = lo que se le cargó (ventas). <span className="font-medium text-ink">Haber</span> = lo que pagó o se le acreditó. <span className="font-medium text-ink">Saldo</span> = lo que queda debiendo.</p>
         </div>
         {rows.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-muted">Sin movimientos de cuenta corriente.</p>
@@ -126,7 +134,8 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
                 <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
                   <th className="px-5 py-2.5 font-medium">Fecha</th>
                   <th className="px-5 py-2.5 font-medium">Concepto</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Importe</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Debe</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Haber</th>
                   <th className="px-5 py-2.5 text-right font-medium">Saldo</th>
                 </tr>
               </thead>
@@ -134,9 +143,10 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
                 {rows.map((m) => {
                   const delta = Number(m.delta);
                   const href = movHref(m.reference_type, m.reference_id);
+                  const saldo = Number(m.balance);
                   return (
                     <tr key={m.id} className="border-b border-line last:border-0 hover:bg-canvas">
-                      <td className="px-5 py-2.5 text-muted">{formatDateTime(m.created_at)}</td>
+                      <td className="px-5 py-2.5 whitespace-nowrap text-muted">{formatDateTime(m.created_at)}</td>
                       <td className="px-5 py-2.5">
                         {href ? (
                           <Link href={href} className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline">
@@ -147,10 +157,17 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
                         )}
                         {m.note && <div className="text-xs text-muted">{m.note}</div>}
                       </td>
-                      <td className={`px-5 py-2.5 text-right tabular-nums ${delta > 0 ? "text-danger" : "text-ok"}`}>
-                        {delta > 0 ? "+" : ""}{formatMoney(delta)}
+                      <td className="px-5 py-2.5 text-right tabular-nums text-ink">{delta > 0 ? formatMoney(delta) : ""}</td>
+                      <td className="px-5 py-2.5 text-right tabular-nums text-ok">{delta < 0 ? formatMoney(-delta) : ""}</td>
+                      <td className="px-5 py-2.5 whitespace-nowrap text-right tabular-nums font-medium">
+                        {saldo > 0 ? (
+                          <span className="text-danger">{formatMoney(saldo)}</span>
+                        ) : saldo < 0 ? (
+                          <span className="text-ok">{formatMoney(-saldo)} <span className="text-xs font-normal">a favor</span></span>
+                        ) : (
+                          <span className="text-ink">{formatMoney(0)}</span>
+                        )}
                       </td>
-                      <td className="px-5 py-2.5 text-right tabular-nums text-ink">{formatMoney(m.balance)}</td>
                     </tr>
                   );
                 })}
@@ -191,9 +208,12 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
                     </td>
                     <td className={`px-5 py-2.5 text-right tabular-nums ${s.status === "anulada" ? "text-faint line-through" : "text-ink"}`}>{formatMoney(Number(s.total))}</td>
                     <td className="px-5 py-2.5">
-                      {s.status === "anulada"
-                        ? <span className="rounded-full bg-danger-bg px-2 py-0.5 text-xs font-medium text-danger">Anulada</span>
-                        : <span className="rounded-full bg-ok-bg px-2 py-0.5 text-xs font-medium text-ok">Completada</span>}
+                      {s.status === "anulada" ? (
+                        <span className="rounded-full bg-danger-bg px-2 py-0.5 text-xs font-medium text-danger">Anulada</span>
+                      ) : (() => {
+                        const f = FULFILL[s.fulfillment_status] ?? { label: s.fulfillment_status, cls: "bg-canvas text-muted" };
+                        return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${f.cls}`}>{f.label}</span>;
+                      })()}
                     </td>
                     <td className="px-5 py-2.5 text-right">
                       <Link href={`/ventas/${s.id}`} className="inline-flex items-center gap-1 text-accent hover:underline">Ver <ExternalLink className="h-3.5 w-3.5" /></Link>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LogOut, Clock, XCircle } from "lucide-react";
 import { getPortalCustomer } from "@/lib/portal";
 import { CartProvider, CartButton } from "@/components/portal-cart";
+import { PortalBottomNav } from "@/components/portal-bottom-nav";
 import { logoutPortal } from "../actions";
 
 export default async function TiendaLayout({ children }: { children: React.ReactNode }) {
@@ -57,7 +58,8 @@ export default async function TiendaLayout({ children }: { children: React.React
             </form>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 pt-6 pb-24 sm:px-6 sm:pb-6">{children}</main>
+        <PortalBottomNav />
       </div>
     </CartProvider>
   );
