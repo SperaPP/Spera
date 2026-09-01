@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, Printer, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getScopeWarehouseId } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { ControlTransferencia } from "@/components/control-transferencia";
 
@@ -16,12 +17,17 @@ export default async function TransferenciaDetallePage({ params }: { params: Pro
 
   const [{ data: t }, { data: isAdmin }] = await Promise.all([
     sb.from("stock_transfers")
-      .select("id, status, notes, created_at, sent_at, received_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
+      .select("id, status, notes, created_at, sent_at, received_at, from_warehouse_id, to_warehouse_id, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
       .eq("id", id)
       .single(),
     sb.rpc("is_admin"),
   ]);
   if (!t) notFound();
+
+  // Acotado por sucursal: solo si su depósito participa (origen o destino).
+  const whId = await getScopeWarehouseId();
+  if (whId && t.from_warehouse_id !== whId && t.to_warehouse_id !== whId) notFound();
+
   const canEdit = isAdmin === true && t.status === "creada";
 
   const items = ((t.stock_transfer_items ?? []) as { quantity: number; product_variants: unknown }[]).map((it, i) => {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, ArrowLeftRight, ArrowRight, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getScopeWarehouseId } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 
 function relName(r: unknown): string | null {
@@ -17,11 +18,15 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 
 export default async function TransferenciasPage() {
   const sb = await createClient();
-  const { data } = await sb
+  // Acotado por sucursal: solo transferencias donde participa su depósito (origen o destino).
+  const whId = await getScopeWarehouseId();
+  let req = sb
     .from("stock_transfers")
     .select("id, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
     .order("created_at", { ascending: false })
     .limit(100);
+  if (whId) req = req.or(`from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`);
+  const { data } = await req;
 
   const rows = data ?? [];
 

@@ -34,6 +34,16 @@ export async function getStoreScope(): Promise<{ storeId: string | null; scoped:
   return { storeId: scoped ? storeId : null, scoped };
 }
 
+/** Depósito de la sucursal del usuario acotado (para transferencias/stock).
+ *  null si es admin o no tiene sucursal (ve todo). */
+export async function getScopeWarehouseId(): Promise<string | null> {
+  const { storeId } = await getStoreScope();
+  if (!storeId) return null;
+  const sb = await createClient();
+  const { data } = await sb.from("stores").select("warehouse_id").eq("id", storeId).maybeSingle();
+  return (data?.warehouse_id as string | null) ?? null;
+}
+
 /**
  * Guard de server action (capa 2 de la seguridad en 3 capas).
  * Patrón de uso:

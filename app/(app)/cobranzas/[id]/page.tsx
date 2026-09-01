@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AnularCobranzaButton } from "@/components/anular-cobranza-button";
 
@@ -15,11 +16,15 @@ export default async function CobranzaDetallePage({ params }: { params: Promise<
 
   const [{ data: receipt }, { data: isAdmin }] = await Promise.all([
     sb.from("receipts")
-      .select("id, number, total, notes, status, created_at, customers(id, name), stores(name), receipt_payments(amount, payment_methods(name))")
+      .select("id, number, total, notes, status, created_at, store_id, customers(id, name), stores(name), receipt_payments(amount, payment_methods(name))")
       .eq("id", id).single(),
     sb.rpc("is_admin"),
   ]);
   if (!receipt) notFound();
+
+  // Acotado por sucursal.
+  const { storeId: scopeStore } = await getStoreScope();
+  if (scopeStore && receipt.store_id !== scopeStore) notFound();
 
   const customer = rel<{ id: string; name: string }>(receipt.customers);
   const payments = (receipt.receipt_payments ?? []) as { amount: number; payment_methods: unknown }[];

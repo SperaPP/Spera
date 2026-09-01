@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Truck, ScanLine, ChevronRight, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getStoreScope } from "@/lib/auth";
+import { getStoreScope, getScopeWarehouseId } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 
 function relName(r: unknown): string | null {
@@ -35,23 +35,28 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
   const sb = await createClient();
   const isTransfers = filter === "transferencias";
   const { storeId: scopeStore } = await getStoreScope();
+  const whId = await getScopeWarehouseId(); // depósito de la sucursal (para transferencias)
 
   const pendReq = sb.from("sales").select("*", { count: "exact", head: true }).eq("status", "completada").eq("fulfillment_status", "pendiente");
   const ctrlReq = sb.from("sales").select("*", { count: "exact", head: true }).eq("status", "completada").eq("fulfillment_status", "controlado");
+  let envReq = sb.from("stock_transfers").select("*", { count: "exact", head: true }).in("status", ["creada", "enviada"]);
+  if (whId) envReq = envReq.or(`from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`);
   const [{ count: pend }, { count: ctrl }, { count: envs }] = await Promise.all([
     scopeStore ? pendReq.eq("store_id", scopeStore) : pendReq,
     scopeStore ? ctrlReq.eq("store_id", scopeStore) : ctrlReq,
-    sb.from("stock_transfers").select("*", { count: "exact", head: true }).in("status", ["creada", "enviada"]),
+    envReq,
   ]);
   const counts: Record<string, number> = { pendiente: pend ?? 0, controlado: ctrl ?? 0, transferencias: envs ?? 0 };
 
   let sales: Record<string, unknown>[] = [];
   let transfers: Record<string, unknown>[] = [];
   if (isTransfers) {
-    const { data } = await sb
+    let treq = sb
       .from("stock_transfers")
       .select("id, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
       .order("created_at", { ascending: false }).limit(100);
+    if (whId) treq = treq.or(`from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`);
+    const { data } = await treq;
     transfers = data ?? [];
   } else {
     let req = sb

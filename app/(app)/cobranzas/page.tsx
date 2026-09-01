@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, HandCoins, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 
 const CHANNEL_LABEL: Record<string, string> = {
@@ -21,7 +22,8 @@ export default async function CobranzasPage({ searchParams }: { searchParams: Pr
   const offset = (page - 1) * PAGE_SIZE;
 
   const sb = await createClient();
-  const { data } = await sb.rpc("cobros_list", { p_limit: PAGE_SIZE, p_offset: offset });
+  const { storeId: scopeStore } = await getStoreScope();
+  const { data } = await sb.rpc("cobros_list", { p_limit: PAGE_SIZE, p_offset: offset, p_store: scopeStore });
   const rows = (data ?? []) as Cobro[];
 
   const total = rows[0] ? Number(rows[0].total_count) : 0;

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 
 function relName(r: unknown): string | null {
@@ -14,12 +15,15 @@ function affectsCash(r: unknown): boolean {
 
 export default async function CierresPage() {
   const sb = await createClient();
-  const { data: sessions } = await sb
+  const { storeId: scopeStore } = await getStoreScope();
+  let sessReq = sb
     .from("cash_sessions")
     .select("id, opening_amount, declared_amount, cash_expenses, expected_cash, cash_difference, opened_at, closed_at, stores(name)")
     .in("status", ["cerrada", "entregada"])
     .order("closed_at", { ascending: false })
     .limit(30);
+  if (scopeStore) sessReq = sessReq.eq("store_id", scopeStore);
+  const { data: sessions } = await sessReq;
 
   const ids = (sessions ?? []).map((s) => s.id);
 

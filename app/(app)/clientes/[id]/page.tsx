@@ -4,6 +4,7 @@ import { ArrowLeft, HandCoins, Pencil, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AjusteSaldoButton } from "@/components/ajuste-saldo-button";
+import { CambiarPasswordClienteButton } from "@/components/cambiar-password-cliente-button";
 
 /** Link al comprobante que originó el movimiento de cuenta corriente. */
 function movHref(referenceType: string | null, referenceId: string | null): string | null {
@@ -47,7 +48,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
   const sb = await createClient();
 
   const [{ data: customer }, { data: movs }, { data: isAdmin }] = await Promise.all([
-    sb.from("customers").select("id, name, fiscal_condition, balance, doc_type, doc_number, email, phone, customer_types(name)").eq("id", id).single(),
+    sb.from("customers").select("id, name, fiscal_condition, balance, doc_type, doc_number, email, phone, auth_user_id, portal_status, customer_types(name)").eq("id", id).single(),
     sb.from("customer_movements").select("id, delta, reason, note, created_at, reference_type, reference_id").eq("customer_id", id).order("created_at", { ascending: true }),
     sb.rpc("is_admin"),
   ]);
@@ -108,6 +109,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
               <HandCoins className="h-4 w-4" />
               Cobrar
             </Link>
+            {isAdmin === true && customer.auth_user_id && <CambiarPasswordClienteButton customerId={customer.id} />}
             {isAdmin === true && <AjusteSaldoButton customerId={customer.id} balance={balance} />}
           </div>
         </div>

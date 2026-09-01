@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireCan, requireAdmin, type ActionState } from "@/lib/auth";
 
 const schema = z.object({
@@ -106,6 +107,24 @@ export async function rechazarPortalCliente(customerId: string): Promise<ActionS
   const { error } = await sb.from("customers").update({ portal_status: "rechazado" }).eq("id", customerId).eq("organization_id", orgId);
   if (error) return { error: error.message };
   revalidatePath("/clientes");
+  return { ok: true };
+}
+
+/** Cambia la contraseña del portal mayorista del cliente (reservado a administración). */
+export async function cambiarPasswordCliente(customerId: string, newPassword: string): Promise<ActionState> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  if (!newPassword || newPassword.length < 6) return { error: "Mínimo 6 caracteres" };
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  const { data: c } = await sb.from("customers").select("auth_user_id").eq("id", customerId).eq("organization_id", orgId).maybeSingle();
+  if (!c) return { error: "Cliente inválido" };
+  if (!c.auth_user_id) return { error: "El cliente no tiene cuenta de portal (todavía no se registró)." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(c.auth_user_id as string, { password: newPassword });
+  if (error) return { error: error.message };
   return { ok: true };
 }
 
