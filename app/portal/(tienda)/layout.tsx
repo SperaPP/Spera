@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { LogOut, Clock, XCircle } from "lucide-react";
 import { getPortalCustomer } from "@/lib/portal";
 import { CartProvider, CartButton } from "@/components/portal-cart";
-import { PortalBottomNav } from "@/components/portal-bottom-nav";
 import { logoutPortal } from "../actions";
 
 export default async function TiendaLayout({ children }: { children: React.ReactNode }) {
@@ -38,28 +37,28 @@ export default async function TiendaLayout({ children }: { children: React.React
   return (
     <CartProvider>
       <div className="min-h-screen bg-canvas">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-4 border-b border-line bg-card px-4 sm:px-6">
-          <Link href="/portal" className="flex items-center gap-2">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-card px-4 sm:gap-4 sm:px-6">
+          <Link href="/portal" className="flex shrink-0 items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-fg">B</span>
-            <span className="font-semibold text-ink">Portal Mayorista</span>
+            <span className="hidden font-semibold text-ink sm:inline">Portal Mayorista</span>
           </Link>
-          <nav className="flex items-center gap-4">
+          {/* Accesos SIEMPRE visibles (también en celular), en el header fijo de arriba. */}
+          <nav className="flex items-center gap-3 sm:gap-4">
             <Link href="/portal/catalogo" className="text-sm font-medium text-muted transition-colors hover:text-ink">Catálogo</Link>
-            <Link href="/portal/pedidos" className="hidden text-sm font-medium text-muted transition-colors hover:text-ink sm:inline">Mis pedidos</Link>
-            <Link href="/portal/cuenta" className="hidden text-sm font-medium text-muted transition-colors hover:text-ink sm:inline">Mi cuenta</Link>
+            <Link href="/portal/pedidos" className="text-sm font-medium text-muted transition-colors hover:text-ink">Pedidos</Link>
+            <Link href="/portal/cuenta" className="text-sm font-medium text-muted transition-colors hover:text-ink">Mi cuenta</Link>
           </nav>
           <div className="ml-auto flex items-center gap-2 sm:gap-4">
             <span className="hidden text-sm text-muted sm:inline">{customer.name}</span>
             <CartButton />
             <form action={logoutPortal}>
-              <button className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-ink">
+              <button className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-ink">
                 <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Salir</span>
               </button>
             </form>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 pt-6 pb-24 sm:px-6 sm:pb-6">{children}</main>
-        <PortalBottomNav />
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
       </div>
     </CartProvider>
   );
