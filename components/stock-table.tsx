@@ -6,7 +6,7 @@ import { StockMatrix } from "@/components/stock-matrix";
 import { cargarMatrizStock } from "@/app/(app)/stock/actions";
 
 type Warehouse = { id: string; name: string };
-type Row = { id: string; name: string; perWh: Record<string, number>; total: number };
+type Row = { id: string; name: string; perWh: Record<string, number>; perWhRes?: Record<string, number>; total: number };
 type Matrix = { variants: { id: string; label: string; sku: string | null }[]; stockMap: Record<string, number> };
 
 export function StockTable({ rows, warehouses, canEdit }: { rows: Row[]; warehouses: Warehouse[]; canEdit: boolean }) {
@@ -47,7 +47,18 @@ export function StockTable({ rows, warehouses, canEdit }: { rows: Row[]; warehou
                   <td className="px-4 py-3 font-medium text-ink">{p.name}</td>
                   {warehouses.map((w) => {
                     const qty = p.perWh[w.id] ?? 0;
-                    return <td key={w.id} className="px-3 py-3 text-right tabular-nums"><span className={qty > 0 ? "text-ink" : qty < 0 ? "text-danger" : "text-faint"}>{qty}</span></td>;
+                    const res = p.perWhRes?.[w.id] ?? 0;
+                    const disp = qty - res;
+                    return (
+                      <td key={w.id} className="px-3 py-3 text-right tabular-nums">
+                        <span className={qty > 0 ? "text-ink" : qty < 0 ? "text-danger" : "text-faint"}>{qty}</span>
+                        {res > 0 && (
+                          <span className="block text-[11px] font-medium text-warn" title={`${res} reservado(s) en pedidos/transferencias sin cerrar`}>
+                            {disp > 0 ? `${disp} disp.` : "0 disp."}
+                          </span>
+                        )}
+                      </td>
+                    );
                   })}
                   <td className="px-4 py-3 text-right font-semibold tabular-nums"><span className={p.total > 0 ? "text-ink" : p.total < 0 ? "text-danger" : "text-faint"}>{p.total}</span></td>
                   <td className="px-3 py-3 text-right text-faint">{open ? <ChevronDown className="ml-auto h-4 w-4" /> : <ChevronRight className="ml-auto h-4 w-4" />}</td>

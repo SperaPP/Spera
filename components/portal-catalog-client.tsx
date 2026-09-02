@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PackageOpen, Search, X, Tag } from "lucide-react";
 import type { CatalogFullItem } from "@/lib/portal-catalog";
 import { PortalProductCard } from "@/components/portal-product-card";
-import { sizeCmp } from "@/lib/sizes";
 
 type Opt = { id: string; name: string };
 const STEP = 24;
@@ -24,26 +23,23 @@ export function PortalCatalogClient({
   const [cat, setCat] = useState<string | null>(initial.cat ?? null);
   const [season, setSeason] = useState<string | null>(initial.season ?? null);
   const [q, setQ] = useState(initial.q ?? "");
-  const [sizes, setSizes] = useState<Set<string>>(new Set());
   const [onlyOffers, setOnlyOffers] = useState(false);
   const [sort, setSort] = useState<string>("name");
   const [visible, setVisible] = useState(STEP);
 
-  useEffect(() => { setVisible(STEP); }, [main, cat, season, q, sort, onlyOffers, sizes]);
+  useEffect(() => { setVisible(STEP); }, [main, cat, season, q, sort, onlyOffers]);
 
   const qn = norm(q.trim());
   const matchesQ = useMemo(() => (p: CatalogFullItem) => !qn || norm(p.name).includes(qn), [qn]);
 
-  // Filtro base reutilizable; con "ignore" para calcular conteos y talles disponibles.
-  const base = useMemo(() => (o: { ignoreMain?: boolean; ignoreCat?: boolean; ignoreSeason?: boolean; ignoreSize?: boolean; ignoreOffer?: boolean } = {}) =>
+  const base = useMemo(() => (o: { ignoreMain?: boolean; ignoreCat?: boolean; ignoreSeason?: boolean; ignoreOffer?: boolean } = {}) =>
     products.filter((p) =>
       (o.ignoreMain || !main || p.mainCategoryId === main) &&
       (o.ignoreCat || !cat || p.categoryId === cat) &&
       (o.ignoreSeason || !season || p.seasonId === season) &&
       (o.ignoreOffer || !onlyOffers || p.compareAt != null) &&
-      (o.ignoreSize || sizes.size === 0 || p.sizes.some((s) => sizes.has(s))) &&
       matchesQ(p)),
-    [products, main, cat, season, onlyOffers, sizes, matchesQ]);
+    [products, main, cat, season, onlyOffers, matchesQ]);
 
   const countBy = (arr: CatalogFullItem[], key: (p: CatalogFullItem) => string | null) => {
     const m = new Map<string, number>();
@@ -54,11 +50,6 @@ export function PortalCatalogClient({
   const catsCount = useMemo(() => countBy(base({ ignoreCat: true }), (p) => p.categoryId), [base]);
   const seasonsCount = useMemo(() => countBy(base({ ignoreSeason: true }), (p) => p.seasonId), [base]);
   const offersCount = useMemo(() => base({ ignoreOffer: true }).filter((p) => p.compareAt != null).length, [base]);
-  const availableSizes = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of base({ ignoreSize: true })) for (const s of p.sizes) set.add(s);
-    return [...set].sort(sizeCmp);
-  }, [base]);
 
   const filtered = useMemo(() => {
     const list = base();
@@ -77,9 +68,6 @@ export function PortalCatalogClient({
     return () => io.disconnect();
   }, [hasMore, filtered.length]);
 
-  const toggleSize = (s: string) => setSizes((prev) => { const n = new Set(prev); if (n.has(s)) n.delete(s); else n.add(s); return n; });
-
-  // Chips de filtros activos.
   const chips: { label: string; clear: () => void }[] = [];
   const mainName = mains.find((m) => m.id === main)?.name;
   const catName = cats.find((c) => c.id === cat)?.name;
@@ -87,13 +75,11 @@ export function PortalCatalogClient({
   if (main && mainName) chips.push({ label: mainName, clear: () => { setMain(null); setCat(null); } });
   if (cat && catName) chips.push({ label: catName, clear: () => setCat(null) });
   if (season && seasonName) chips.push({ label: seasonName, clear: () => setSeason(null) });
-  if (sizes.size) chips.push({ label: `Talle ${[...sizes].sort(sizeCmp).join(", ")}`, clear: () => setSizes(new Set()) });
   if (onlyOffers) chips.push({ label: "En oferta", clear: () => setOnlyOffers(false) });
 
   const mainPills = mains.filter((m) => (mainsCount.get(m.id) ?? 0) > 0 || m.id === main);
   const catOpts = cats.filter((c) => (catsCount.get(c.id) ?? 0) > 0 || c.id === cat);
   const seasonOpts = seasons.filter((s) => (seasonsCount.get(s.id) ?? 0) > 0 || s.id === season);
-
   const selectCls = "rounded-lg border border-line-strong bg-card px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent";
 
   return (
@@ -106,7 +92,6 @@ export function PortalCatalogClient({
             className="h-11 w-full rounded-xl border border-line-strong bg-card pl-11 pr-3 text-base text-ink outline-none transition-colors focus:border-accent focus:ring-4 focus:ring-accent/15" />
         </div>
 
-        {/* Fila de categorías (scroll horizontal) */}
         <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button onClick={() => { setMain(null); setCat(null); setSeason(null); }}
             className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${!main && !cat && !season ? "bg-accent text-accent-fg" : "border border-line-strong text-ink hover:bg-card"}`}>
@@ -120,24 +105,11 @@ export function PortalCatalogClient({
           ))}
         </div>
 
-        {/* Fila de filtros: oferta + talles + tipo/temporada + orden */}
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <button onClick={() => setOnlyOffers((v) => !v)} disabled={offersCount === 0 && !onlyOffers}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${onlyOffers ? "bg-danger text-white" : "border border-line-strong text-ink hover:bg-card"}`}>
             <Tag className="h-3.5 w-3.5" /> En oferta{offersCount > 0 && <span className={onlyOffers ? "text-white/80" : "text-faint"}>{offersCount}</span>}
           </button>
-
-          {availableSizes.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-faint">Talle</span>
-              <div className="flex flex-wrap gap-1">
-                {availableSizes.map((s) => (
-                  <button key={s} onClick={() => toggleSize(s)}
-                    className={`min-w-8 rounded-lg px-2 py-1 text-xs font-bold transition-colors ${sizes.has(s) ? "bg-accent text-accent-fg" : "border border-line-strong text-ink hover:bg-card"}`}>{s}</button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {catOpts.length > 0 && (
             <select value={cat ?? ""} onChange={(e) => setCat(e.target.value || null)} className={selectCls}>
@@ -160,7 +132,6 @@ export function PortalCatalogClient({
         </div>
       </div>
 
-      {/* Chips de filtros activos + conteo */}
       {chips.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {chips.map((c) => (
@@ -176,7 +147,7 @@ export function PortalCatalogClient({
         <div className="flex flex-col items-center rounded-2xl border border-dashed border-line-strong bg-card py-16 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft text-accent"><PackageOpen className="h-6 w-6" /></span>
           <p className="mt-3 font-medium text-ink">Sin productos</p>
-          <p className="mt-1 text-sm text-muted">Probá con otra categoría, talle o búsqueda.</p>
+          <p className="mt-1 text-sm text-muted">Probá con otra categoría o búsqueda.</p>
         </div>
       ) : (
         <>

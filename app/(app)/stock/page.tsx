@@ -50,29 +50,33 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
     rows = (data ?? []) as Row[];
   }
 
-  // Stock por (producto, depósito).
+  // Stock por (producto, depósito): físico y reservado.
   const byProdWh = new Map<string, Map<string, number>>();
+  const byProdWhRes = new Map<string, Map<string, number>>();
   if (rows.length) {
     const { data: st } = await sb
       .from("stock")
-      .select("quantity, warehouse_id, product_variants!inner(product_id)")
+      .select("quantity, reserved, warehouse_id, product_variants!inner(product_id)")
       .in("product_variants.product_id", rows.map((r) => r.id));
     for (const s of st ?? []) {
       const pv = s.product_variants as unknown;
       const pid = (Array.isArray(pv) ? pv[0]?.product_id : (pv as { product_id: string } | null)?.product_id) as string | undefined;
       if (!pid) continue;
       if (!byProdWh.has(pid)) byProdWh.set(pid, new Map());
-      const m = byProdWh.get(pid)!;
+      if (!byProdWhRes.has(pid)) byProdWhRes.set(pid, new Map());
+      const m = byProdWh.get(pid)!, mr = byProdWhRes.get(pid)!;
       m.set(s.warehouse_id, (m.get(s.warehouse_id) ?? 0) + Number(s.quantity));
+      mr.set(s.warehouse_id, (mr.get(s.warehouse_id) ?? 0) + Number(s.reserved ?? 0));
     }
   }
 
   const tableRows = rows.map((p) => {
-    const m = byProdWh.get(p.id);
+    const m = byProdWh.get(p.id), mr = byProdWhRes.get(p.id);
     const perWh: Record<string, number> = {};
+    const perWhRes: Record<string, number> = {};
     let total = 0;
-    for (const w of whs) { const qy = m?.get(w.id) ?? 0; perWh[w.id] = qy; total += qy; }
-    return { id: p.id, name: p.name, perWh, total };
+    for (const w of whs) { const qy = m?.get(w.id) ?? 0; perWh[w.id] = qy; perWhRes[w.id] = mr?.get(w.id) ?? 0; total += qy; }
+    return { id: p.id, name: p.name, perWh, perWhRes, total };
   });
 
   return (
@@ -80,7 +84,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Stock</h1>
-          <p className="mt-1 text-sm text-muted">Existencias por depósito. Clic en un producto para ajustar.</p>
+          <p className="mt-1 text-sm text-muted">Existencias por depósito. Si hay stock <span className="font-medium text-warn">reservado</span> (comprometido en pedidos o transferencias sin cerrar), se muestra cuánto queda <span className="font-medium text-ink">disponible</span> para vender. Clic en un producto para ajustar.</p>
         </div>
         {canControl && (
           <Link href="/stock/control" className="flex shrink-0 items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
