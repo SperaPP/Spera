@@ -1,33 +1,28 @@
 import "server-only";
-import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const BUCKET_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
 
-// Datos casi estáticos (catálogo de categorías/temporadas, depósito central): se
-// cachean unos minutos para no reconsultarlos en CADA navegación del portal.
-const CACHE = { revalidate: 300 };
-
-export const centralWarehouseId = unstable_cache(async (): Promise<string | null> => {
+export async function centralWarehouseId(): Promise<string | null> {
   const admin = createAdminClient();
   const { data } = await admin.from("warehouses").select("id").eq("name", "Mayorista - Central").maybeSingle();
   return data?.id ?? null;
-}, ["portal-central-wh"], CACHE);
+}
 
-export const categoriasActivas = unstable_cache(async (): Promise<{ id: string; name: string }[]> => {
+export async function categoriasActivas(): Promise<{ id: string; name: string }[]> {
   const admin = createAdminClient();
   const { data } = await admin.from("categories").select("id, name").eq("active", true).order("name");
   return data ?? [];
-}, ["portal-cats"], CACHE);
+}
 
-export const categoriasPrincipales = unstable_cache(async (org: string): Promise<{ id: string; name: string }[]> => {
+export async function categoriasPrincipales(org: string): Promise<{ id: string; name: string }[]> {
   const admin = createAdminClient();
   const { data } = await admin.from("main_categories").select("id, name").eq("organization_id", org).order("name");
   return data ?? [];
-}, ["portal-main-cats"], CACHE);
+}
 
 /** Categorías madre con una imagen representativa (primer producto con foto), para el home. */
-export const mainCategoryTiles = unstable_cache(async (org: string): Promise<{ id: string; name: string; image: string | null }[]> => {
+export async function mainCategoryTiles(org: string): Promise<{ id: string; name: string; image: string | null }[]> {
   const admin = createAdminClient();
   const { data: mains } = await admin.from("main_categories").select("id, name").eq("organization_id", org).order("position").order("name");
   const out: { id: string; name: string; image: string | null }[] = [];
@@ -41,13 +36,13 @@ export const mainCategoryTiles = unstable_cache(async (org: string): Promise<{ i
     out.push({ id: m.id, name: m.name, image });
   }
   return out;
-}, ["portal-main-tiles"], CACHE);
+}
 
-export const temporadasActivas = unstable_cache(async (org: string): Promise<{ id: string; name: string }[]> => {
+export async function temporadasActivas(org: string): Promise<{ id: string; name: string }[]> {
   const admin = createAdminClient();
   const { data } = await admin.from("seasons").select("id, name").eq("organization_id", org).order("name");
   return data ?? [];
-}, ["portal-seasons"], CACHE);
+}
 
 /** Opciones con productos disponibles + su conteo, para el contexto actual. */
 export async function portalFacets(opts: {
@@ -100,11 +95,11 @@ async function availableSizesByProduct(productIds: string[], warehouse: string):
 }
 
 /** Id de la lista "Publico" (precio de referencia minorista) de la organización. */
-export const publicListId = unstable_cache(async (org: string): Promise<string | null> => {
+export async function publicListId(org: string): Promise<string | null> {
   const admin = createAdminClient();
   const { data } = await admin.from("price_lists").select("id").eq("organization_id", org).eq("name", "Publico").maybeSingle();
   return data?.id ?? null;
-}, ["portal-public-list"], CACHE);
+}
 
 /** Precio público por producto (variant_id null) para un set de productos. */
 async function publicPriceByProduct(org: string, productIds: string[]): Promise<Map<string, number>> {

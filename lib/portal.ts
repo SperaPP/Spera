@@ -1,5 +1,4 @@
 import "server-only";
-import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -18,7 +17,7 @@ export type PortalCustomer = {
  * empleado, así que la RLS interna (current_org_id) no aplica → leemos el
  * customer con service-role, ligado por auth_user_id.
  */
-export const getPortalCustomer = cache(async (): Promise<{ userId: string | null; customer: PortalCustomer | null }> => {
+export async function getPortalCustomer(): Promise<{ userId: string | null; customer: PortalCustomer | null }> {
   const sb = await createClient();
   const { data: auth } = await sb.auth.getUser();
   if (!auth?.user) return { userId: null, customer: null };
@@ -42,4 +41,4 @@ export const getPortalCustomer = cache(async (): Promise<{ userId: string | null
       organizationId: c.organization_id,
     },
   };
-});
+}
