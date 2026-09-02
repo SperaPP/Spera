@@ -290,7 +290,7 @@ const schema = z.object({
   cashSessionId: z.string().uuid(),
   customerId: z.string().uuid().nullable(),
   priceListId: z.string().uuid().nullable(),
-  couponId: z.string().uuid().nullable(),
+  couponIds: z.array(z.string().uuid()).default([]),
   customerData: z.object({
     name: z.string().trim().optional(),
     doc: z.string().trim().optional(),
@@ -337,7 +337,8 @@ export async function crearVenta(input: CrearVentaInput): Promise<ActionState & 
     p_cash_session_id: d.cashSessionId,
     p_customer_id: d.customerId,
     p_price_list_id: d.priceListId,
-    p_coupon_id: d.couponId,
+    p_coupon_id: null,
+    p_coupon_ids: d.couponIds,
     p_customer_data: d.customerData ?? null,
     p_items: d.items.map((i) => ({
       variant_id: i.variantId,

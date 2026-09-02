@@ -17,6 +17,7 @@ type Method = { id: string; name: string; kind: string };
 type Profile = { customerTypeId: string; name: string; priceListId: string | null };
 type Customer = NonNullable<Awaited<ReturnType<typeof buscarClientePorDoc>>>;
 type CartItem = { variantId: string; name: string; label: string | null; quantity: number; unitPrice: number; compareAt: number | null; image: string | null; stock: number };
+type AppliedCoupon = { id: string; code: string; type: "percent" | "amount"; value: number; minAmount: number | null };
 type Payment = { methodId: string; amount: string };
 
 const inputBase =
@@ -346,11 +347,41 @@ function Terminal({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [closing, setClosing] = useState(false);
   const [couponCode, setCouponCode] = useState("");
-  const [coupon, setCoupon] = useState<{ id: string; code: string; type: "percent" | "amount"; value: number; minAmount: number | null } | null>(null);
+  const [coupons, setCoupons] = useState<AppliedCoupon[]>([]);
   const [lastSale, setLastSale] = useState<{ id: string; number: number } | null>(null);
   const [mode, setMode] = useState<"vender" | "cambio">("vender");
   const [pending, start] = useTransition();
+  const [ready, setReady] = useState(false); // hidratación desde localStorage lista
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Persistencia de la venta en curso ──────────────────────────
+  // Se guarda en el navegador para que la venta NO se pierda si se corta internet,
+  // se cierra la pestaña o se recarga. Se limpia sola al finalizar o vaciar.
+  const saleKey = `pos_sale_v1_${store.id}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(saleKey);
+      if (raw) {
+        const s = JSON.parse(raw) as { cart?: CartItem[]; customer?: Customer | null; coupons?: AppliedCoupon[] };
+        if (s.cart?.length) {
+          setCart(s.cart);
+          if (s.customer) setCustomer(s.customer);
+          if (s.coupons?.length) setCoupons(s.coupons);
+          toast.message("Recuperamos la venta en curso.");
+        }
+      }
+    } catch { /* localStorage no disponible: seguimos igual */ }
+    setReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    try {
+      if (mode === "vender" && cart.length > 0) localStorage.setItem(saleKey, JSON.stringify({ cart, customer, coupons }));
+      else localStorage.removeItem(saleKey);
+    } catch { /* ignorar */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, cart, customer, coupons, mode]);
 
   const priceListId = wholesale ? (customer?.priceListId ?? null) : retailPriceListId;
   const creditAvailable = customer && customer.balance < 0 ? -customer.balance : 0;
@@ -364,9 +395,14 @@ function Terminal({
   const [payments, setPayments] = useState<Payment[]>([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
 
   const subtotal = cart.reduce((a, i) => a + i.quantity * i.unitPrice, 0);
-  const couponBelowMin = !wholesale && !!coupon && coupon.minAmount != null && subtotal < coupon.minAmount;
-  const rawDiscount = !wholesale && coupon && !couponBelowMin
-    ? (coupon.type === "percent" ? Math.round((subtotal * coupon.value) / 100) : coupon.value) : 0;
+  // Varios cupones: cada uno descuenta su parte del subtotal; se suman y se topean.
+  const couponEval = coupons.map((c) => {
+    const belowMin = c.minAmount != null && subtotal < c.minAmount;
+    const raw = belowMin ? 0 : (c.type === "percent" ? Math.round((subtotal * c.value) / 100) : c.value);
+    return { c, belowMin, raw };
+  });
+  const anyCouponBelowMin = !wholesale && couponEval.some((e) => e.belowMin);
+  const rawDiscount = !wholesale ? couponEval.reduce((a, e) => a + e.raw, 0) : 0;
   const discount = Math.min(rawDiscount, subtotal);
   const total = Math.max(0, subtotal - discount);
   const paid = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
@@ -421,13 +457,17 @@ function Terminal({
     const code = couponCode.trim();
     if (!code) return;
     if (subtotal <= 0) return toast.error("Agregá productos antes del cupón.");
+    if (coupons.some((c) => c.code.toUpperCase() === code.toUpperCase())) return toast.error("Ese cupón ya está aplicado.");
     start(async () => {
       const r = await validarCupon(code, subtotal);
       if (!r.ok) { toast.error(r.error); return; }
-      setCoupon({ id: r.couponId, code: code.toUpperCase(), type: r.discountType, value: r.discountValue, minAmount: r.minAmount });
+      if (coupons.some((c) => c.id === r.couponId)) { toast.error("Ese cupón ya está aplicado."); return; }
+      setCoupons((prev) => [...prev, { id: r.couponId, code: code.toUpperCase(), type: r.discountType, value: r.discountValue, minAmount: r.minAmount }]);
+      setCouponCode("");
       toast.success(`Cupón aplicado: −${formatMoney(r.discount)}`);
     });
   }
+  function quitarCupon(id: string) { setCoupons((prev) => prev.filter((c) => c.id !== id)); }
 
   // Aplica el saldo a favor del cliente para cubrir lo que falta (hasta el disponible).
   function aplicarSaldoAFavor() {
@@ -467,7 +507,7 @@ function Terminal({
   function confirmar() {
     if (cart.length === 0) return toast.error("El carrito está vacío.");
     if (!customer) return toast.error("Identificá al cliente antes de cobrar.");
-    if (couponBelowMin) return toast.error("El carrito ya no alcanza el mínimo del cupón.");
+    if (anyCouponBelowMin) return toast.error("Un cupón no alcanza su mínimo. Quitalo o agregá productos.");
     if (remaining > 0) return toast.error(`Faltan cobrar ${formatMoney(remaining)}`);
     if (!wholesale && remaining < 0) return toast.error(`Cobro excedido en ${formatMoney(overpay)}`);
     finalizar();
@@ -482,7 +522,7 @@ function Terminal({
         cashSessionId: store.sessionId!,
         customerId: customer!.id,
         priceListId,
-        couponId: !wholesale ? coupon?.id ?? null : null,
+        couponIds: !wholesale ? coupons.map((c) => c.id) : [],
         customerData: null,
         items: cart.map((i) => ({ variantId: i.variantId, productName: i.name, variantLabel: i.label, quantity: i.quantity, unitPrice: i.unitPrice })),
         payments: payments.filter((p) => p.methodId && Number(p.amount) > 0).map((p) => ({ paymentMethodId: p.methodId, amount: Number(p.amount), surcharge: 0 })),
@@ -491,7 +531,7 @@ function Terminal({
       toast.success(`Venta #${res.number} registrada${overpay > 0 ? ` · $${overpay.toLocaleString("es-AR")} a favor` : ""}`);
       if (res.id && res.number != null) setLastSale({ id: res.id, number: res.number });
       setCart([]); setPayments([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
-      setCoupon(null); setCouponCode(""); setQuery(""); setResults([]);
+      setCoupons([]); setCouponCode(""); setQuery(""); setResults([]);
       setCustomer(null);
       router.refresh(); // actualiza el arqueo de caja del POS con la venta recién hecha
     });
@@ -615,7 +655,7 @@ function Terminal({
               <ShoppingCart className="h-4 w-4 text-muted" />
               <span className="text-sm font-semibold text-ink">Pedido</span>
               {cart.length > 0 && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent">{cart.length}</span>}
-              {cart.length > 0 && <button onClick={() => setCart([])} className="ml-auto text-xs font-medium text-muted hover:text-danger">Vaciar</button>}
+              {cart.length > 0 && <button onClick={() => { setCart([]); setCoupons([]); }} className="ml-auto text-xs font-medium text-muted hover:text-danger">Vaciar</button>}
             </div>
             {cart.length === 0 ? (
               <div className="flex flex-col items-center px-4 py-12 text-center">
@@ -650,26 +690,35 @@ function Terminal({
               <span className="tabular-nums text-ink">{formatMoney(subtotal)}</span>
             </div>
 
-            {!wholesale && (coupon ? (
-              <div className="mt-2.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-ok-bg px-2 py-1 font-medium text-ok">
-                    <Ticket className="h-3.5 w-3.5" /> {coupon.code}
-                    <button onClick={() => { setCoupon(null); setCouponCode(""); }} className="text-ok/60 hover:text-danger"><X className="h-3.5 w-3.5" /></button>
-                  </span>
-                  <span className="tabular-nums font-medium text-ok">−{formatMoney(discount)}</span>
+            {!wholesale && (
+              <div className="mt-2.5 space-y-2">
+                {couponEval.map((e) => (
+                  <div key={e.c.id}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-ok-bg px-2 py-1 font-medium text-ok">
+                        <Ticket className="h-3.5 w-3.5" /> {e.c.code}
+                        <button onClick={() => quitarCupon(e.c.id)} className="text-ok/60 hover:text-danger"><X className="h-3.5 w-3.5" /></button>
+                      </span>
+                      <span className="tabular-nums font-medium text-ok">−{formatMoney(e.raw)}</span>
+                    </div>
+                    {e.belowMin && <p className="mt-1 text-xs text-warn">No alcanza el mínimo del cupón ({formatMoney(e.c.minAmount ?? 0)}).</p>}
+                  </div>
+                ))}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Ticket className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+                    <input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") aplicarCupon(); }} placeholder={coupons.length ? "Agregar otro cupón" : "Cupón de descuento"} className={`${input} py-2 pl-9 text-sm`} />
+                  </div>
+                  <button onClick={aplicarCupon} disabled={pending || !couponCode.trim()} className="shrink-0 rounded-xl border border-line-strong px-3.5 py-2 text-xs font-medium text-ink hover:bg-canvas disabled:opacity-50">Aplicar</button>
                 </div>
-                {couponBelowMin && <p className="mt-1 text-xs text-warn">El carrito no alcanza el mínimo del cupón ({formatMoney(coupon.minAmount ?? 0)}).</p>}
+                {coupons.length > 1 && (
+                  <div className="flex items-center justify-between border-t border-line pt-2 text-sm">
+                    <span className="text-muted">Descuento total</span>
+                    <span className="tabular-nums font-medium text-ok">−{formatMoney(discount)}</span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="mt-2.5 flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Ticket className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
-                  <input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") aplicarCupon(); }} placeholder="Cupón de descuento" className={`${input} py-2 pl-9 text-sm`} />
-                </div>
-                <button onClick={aplicarCupon} disabled={pending || !couponCode.trim()} className="shrink-0 rounded-xl border border-line-strong px-3.5 py-2 text-xs font-medium text-ink hover:bg-canvas disabled:opacity-50">Aplicar</button>
-              </div>
-            ))}
+            )}
 
             <div className="mt-4 flex items-baseline justify-between border-t border-line pt-4">
               <span className="text-sm font-medium text-muted">Total</span>

@@ -17,7 +17,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, status, channel, fulfillment_status, store_id, created_at, subtotal, discount, total, coupon_id, coupons(code), tn_order_number, customer_name, customer_doc, customer_phone, customer_email, customer_address, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
+    .select("id, number, status, channel, fulfillment_status, store_id, created_at, subtotal, discount, total, coupon_id, coupons(code), sale_coupons(coupons(code)), tn_order_number, customer_name, customer_doc, customer_phone, customer_email, customer_address, stores(name), customers(name), price_lists(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, returned_qty), sale_payments(amount, surcharge, payment_methods(name))")
     .eq("id", id)
     .single();
 
@@ -35,7 +35,12 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
 
   const items = (sale.sale_items ?? []) as { product_name: string; variant_label: string | null; quantity: number; unit_price: number; line_total: number; returned_qty: number }[];
   const payments = (sale.sale_payments ?? []) as { amount: number; surcharge: number; payment_methods: unknown }[];
-  const couponCode = (Array.isArray(sale.coupons) ? sale.coupons[0]?.code : (sale.coupons as { code: string } | null)?.code) ?? null;
+  // Cupones aplicados: los de sale_coupons (varios) o, si es una venta vieja, el único coupon_id.
+  const scCodes = ((sale.sale_coupons ?? []) as { coupons: unknown }[])
+    .map((sc) => (Array.isArray(sc.coupons) ? sc.coupons[0]?.code : (sc.coupons as { code: string } | null)?.code))
+    .filter(Boolean) as string[];
+  const legacyCode = (Array.isArray(sale.coupons) ? sale.coupons[0]?.code : (sale.coupons as { code: string } | null)?.code) ?? null;
+  const couponCodes = scCodes.length ? scCodes : (legacyCode ? [legacyCode] : []);
 
   // Cambios asociados: esta venta como origen (se cambiaron prendas) o como resultado de un cambio.
   const [{ data: exFrom }, { data: exTo }] = await Promise.all([
@@ -155,7 +160,7 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
         </div>
         <div className="rounded-xl border border-line bg-card p-5">
           <div className="flex justify-between py-1 text-sm"><span className="text-muted">Subtotal</span><span className="tabular-nums text-ink">{formatMoney(Number(sale.subtotal))}</span></div>
-          {Number(sale.discount) > 0 && <div className="flex justify-between gap-3 py-1 text-sm"><span className="text-muted">Descuento{couponCode ? <> · <span className="font-medium text-ink">cupón {couponCode}</span></> : ""}</span><span className="shrink-0 tabular-nums text-ink">− {formatMoney(Number(sale.discount))}</span></div>}
+          {Number(sale.discount) > 0 && <div className="flex justify-between gap-3 py-1 text-sm"><span className="text-muted">Descuento{couponCodes.length ? <> · <span className="font-medium text-ink">{couponCodes.length > 1 ? "cupones" : "cupón"} {couponCodes.join(", ")}</span></> : ""}</span><span className="shrink-0 tabular-nums text-ink">− {formatMoney(Number(sale.discount))}</span></div>}
           <div className="mt-2 flex justify-between border-t border-line pt-2"><span className="font-medium text-ink">Total</span><span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(Number(sale.total))}</span></div>
         </div>
       </div>

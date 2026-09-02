@@ -64,6 +64,31 @@ export async function portalFacets(opts: {
 
 export type CatalogItem = { id: string; name: string; price: number; compareAt: number | null; publicPrice: number | null; stock: number; featured: boolean; image: string | null; sizes: string[] };
 
+/** Item completo para el catálogo del cliente (incluye categorías para filtrar en el navegador). */
+export type CatalogFullItem = CatalogItem & { mainCategoryId: string | null; categoryId: string | null; seasonId: string | null };
+
+/** TODO el catálogo con stock (una sola consulta) para filtrar/buscar/ordenar en el cliente. */
+export async function catalogAll(opts: { org: string; list: string; warehouse: string }): Promise<CatalogFullItem[]> {
+  const admin = createAdminClient();
+  const { data } = await admin.rpc("portal_catalog_all", { p_org: opts.org, p_list: opts.list, p_warehouse: opts.warehouse });
+  const rows = (data ?? []) as Array<{
+    id: string; name: string; price: number; promo: number | null; public_price: number | null;
+    image_path: string | null; stock: number; featured: boolean;
+    main_category_id: string | null; category_id: string | null; season_id: string | null; sizes: string[] | null;
+  }>;
+  return rows.map((r) => {
+    const { price, compareAt } = efectivo(Number(r.price), r.promo != null ? Number(r.promo) : null);
+    return {
+      id: r.id, name: r.name, price, compareAt,
+      publicPrice: r.public_price != null ? Number(r.public_price) : null,
+      image: r.image_path ? `${BUCKET_URL}/${r.image_path}` : null,
+      stock: Number(r.stock), featured: r.featured,
+      mainCategoryId: r.main_category_id, categoryId: r.category_id, seasonId: r.season_id,
+      sizes: r.sizes ?? [],
+    };
+  });
+}
+
 /** Precio efectivo: si hay promo activa (no nula y menor al de lista), ese es el
  *  precio; `compareAt` = precio de lista para mostrarlo tachado. */
 function efectivo(base: number, promo: number | null): { price: number; compareAt: number | null } {
