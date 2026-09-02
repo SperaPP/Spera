@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, PackageOpen, SlidersHorizontal, Search, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PackageOpen, SlidersHorizontal, Search, X, Tag, ArrowUpDown } from "lucide-react";
 import type { CatalogFullItem } from "@/lib/portal-catalog";
 import { PortalProductCard } from "@/components/portal-product-card";
 
 type Opt = { id: string; name: string };
-const PAGE_SIZE = 24;
+const STEP = 24; // cuántos productos se suman por tanda (scroll infinito)
 const SORTS: Record<string, string> = { name: "Nombre", price_asc: "Precio ↑", price_desc: "Precio ↓" };
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
@@ -24,37 +24,54 @@ export function PortalCatalogClient({
   const [cat, setCat] = useState<string | null>(initial.cat ?? null);
   const [season, setSeason] = useState<string | null>(initial.season ?? null);
   const [q, setQ] = useState(initial.q ?? "");
+  const [onlyOffers, setOnlyOffers] = useState(false);
   const [sort, setSort] = useState<string>("name");
-  const [page, setPage] = useState(1);
+  const [visible, setVisible] = useState(STEP);
 
-  // Al cambiar filtros/búsqueda/orden, vuelvo a la primera página.
-  useEffect(() => { setPage(1); }, [main, cat, season, q, sort]);
+  // Al cambiar cualquier filtro/orden, vuelvo a la primera tanda.
+  useEffect(() => { setVisible(STEP); }, [main, cat, season, q, sort, onlyOffers]);
 
   const qn = norm(q.trim());
   const matchesQ = useMemo(() => (p: CatalogFullItem) => !qn || norm(p.name).includes(qn), [qn]);
 
-  // Conteos por dimensión (respetando el contexto de las otras, como las facetas del server).
   const count = (arr: CatalogFullItem[], key: (p: CatalogFullItem) => string | null) => {
     const m = new Map<string, number>();
     for (const p of arr) { const k = key(p); if (k) m.set(k, (m.get(k) ?? 0) + 1); }
     return m;
   };
-  const mainsCount = useMemo(() => count(products.filter((p) => (!season || p.seasonId === season) && matchesQ(p)), (p) => p.mainCategoryId), [products, season, matchesQ]);
-  const catsCount = useMemo(() => count(products.filter((p) => (!main || p.mainCategoryId === main) && (!season || p.seasonId === season) && matchesQ(p)), (p) => p.categoryId), [products, main, season, matchesQ]);
-  const seasonsCount = useMemo(() => count(products.filter((p) => (!main || p.mainCategoryId === main) && matchesQ(p)), (p) => p.seasonId), [products, main, matchesQ]);
+  // Conteos por dimensión respetando el contexto de las otras (como las facetas).
+  const ctx = (p: CatalogFullItem) => matchesQ(p) && (!onlyOffers || p.compareAt != null);
+  const mainsCount = useMemo(() => count(products.filter((p) => (!season || p.seasonId === season) && ctx(p)), (p) => p.mainCategoryId), [products, season, matchesQ, onlyOffers]);
+  const catsCount = useMemo(() => count(products.filter((p) => (!main || p.mainCategoryId === main) && (!season || p.seasonId === season) && ctx(p)), (p) => p.categoryId), [products, main, season, matchesQ, onlyOffers]);
+  const seasonsCount = useMemo(() => count(products.filter((p) => (!main || p.mainCategoryId === main) && ctx(p)), (p) => p.seasonId), [products, main, matchesQ, onlyOffers]);
+  const offersCount = useMemo(() => products.filter((p) => (!main || p.mainCategoryId === main) && (!cat || p.categoryId === cat) && (!season || p.seasonId === season) && matchesQ(p) && p.compareAt != null).length, [products, main, cat, season, matchesQ]);
 
   const filtered = useMemo(() => {
     const list = products.filter((p) =>
       (!main || p.mainCategoryId === main) &&
       (!cat || p.categoryId === cat) &&
       (!season || p.seasonId === season) &&
+      (!onlyOffers || p.compareAt != null) &&
       matchesQ(p));
     list.sort((a, b) => sort === "price_asc" ? a.price - b.price : sort === "price_desc" ? b.price - a.price : a.name.localeCompare(b.name, "es"));
     return list;
-  }, [products, main, cat, season, matchesQ, sort]);
+  }, [products, main, cat, season, onlyOffers, matchesQ, sort]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const shown = filtered.slice(0, visible);
+  const hasMore = visible < filtered.length;
+
+  // Scroll infinito: cuando el "sentinel" entra en pantalla, cargo otra tanda.
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!hasMore) return;
+    const el = sentinel.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) setVisible((v) => v + STEP);
+    }, { rootMargin: "600px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, filtered.length]);
 
   const mainName = mains.find((m) => m.id === main)?.name;
   const catName = cats.find((c) => c.id === cat)?.name;
@@ -78,9 +95,11 @@ export function PortalCatalogClient({
   if (main && mainName) chips.push({ label: mainName, clear: () => { setMain(null); setCat(null); } });
   if (cat && catName) chips.push({ label: catName, clear: () => setCat(null) });
   if (season && seasonName) chips.push({ label: seasonName, clear: () => setSeason(null) });
+  if (onlyOffers) chips.push({ label: "En oferta", clear: () => setOnlyOffers(false) });
 
   return (
     <div className="space-y-5">
+      {/* Buscador (grande, arriba de todo) */}
       <div className="relative">
         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-faint" />
         <input
@@ -103,6 +122,26 @@ export function PortalCatalogClient({
         </div>
 
         <div className="space-y-4">
+          {/* Barra de acciones: oferta + orden + conteo */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setOnlyOffers((v) => !v)}
+              disabled={offersCount === 0 && !onlyOffers}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${onlyOffers ? "bg-danger text-white" : "border border-line-strong text-ink hover:bg-canvas"}`}
+            >
+              <Tag className="h-3.5 w-3.5" /> En oferta{offersCount > 0 && <span className={`tabular-nums ${onlyOffers ? "text-white/80" : "text-faint"}`}>{offersCount}</span>}
+            </button>
+
+            <div className="ml-auto flex items-center gap-2">
+              <ArrowUpDown className="h-4 w-4 text-faint" />
+              <div className="flex items-center gap-1 rounded-lg border border-line-strong p-0.5 text-xs">
+                {Object.entries(SORTS).map(([k, label]) => (
+                  <button key={k} onClick={() => setSort(k)} className={`rounded-md px-2.5 py-1 font-medium transition-colors ${sort === k ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {chips.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               {chips.map((c) => (
@@ -113,16 +152,9 @@ export function PortalCatalogClient({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted">{filtered.length.toLocaleString("es-AR")} producto(s){q.trim() && <> para &quot;<span className="font-medium text-ink">{q.trim()}</span>&quot;</>}</p>
-            <div className="flex items-center gap-1 rounded-lg border border-line-strong p-0.5 text-xs">
-              {Object.entries(SORTS).map(([k, label]) => (
-                <button key={k} onClick={() => setSort(k)} className={`rounded-md px-2.5 py-1 font-medium transition-colors ${sort === k ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>{label}</button>
-              ))}
-            </div>
-          </div>
+          <p className="text-sm text-muted">{filtered.length.toLocaleString("es-AR")} producto(s){q.trim() && <> para &quot;<span className="font-medium text-ink">{q.trim()}</span>&quot;</>}</p>
 
-          {pageItems.length === 0 ? (
+          {shown.length === 0 ? (
             <div className="flex flex-col items-center rounded-2xl border border-dashed border-line-strong bg-card py-16 text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft text-accent"><PackageOpen className="h-6 w-6" /></span>
               <p className="mt-3 font-medium text-ink">Sin productos</p>
@@ -131,14 +163,14 @@ export function PortalCatalogClient({
           ) : (
             <>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                {pageItems.map((p) => <PortalProductCard key={p.id} p={p} />)}
+                {shown.map((p) => <PortalProductCard key={p.id} p={p} />)}
               </div>
 
-              {pageCount > 1 && (
-                <div className="flex items-center justify-center gap-3 pt-2">
-                  <button onClick={() => setPage((n) => Math.max(1, n - 1))} disabled={page <= 1} className="flex items-center gap-1 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-40"><ChevronLeft className="h-4 w-4" /> Anterior</button>
-                  <span className="text-sm text-muted">Página {page} de {pageCount}</span>
-                  <button onClick={() => setPage((n) => Math.min(pageCount, n + 1))} disabled={page >= pageCount} className="flex items-center gap-1 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-40">Siguiente <ChevronRight className="h-4 w-4" /></button>
+              {hasMore && (
+                <div ref={sentinel} className="flex justify-center pt-4">
+                  <button onClick={() => setVisible((v) => v + STEP)} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+                    Cargar más ({(filtered.length - visible).toLocaleString("es-AR")} restantes)
+                  </button>
                 </div>
               )}
             </>
