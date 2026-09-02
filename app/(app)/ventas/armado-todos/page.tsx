@@ -17,7 +17,7 @@ export default async function ArmadoTodosPage({ searchParams }: { searchParams: 
 
   // Disponibles = sin imprimir y no anuladas, según los filtros de la lista.
   let req = sb.from("sales")
-    .select("id, number, created_at, customers(name), stores(name), organizations(name)")
+    .select("id, number, created_at, subtotal, discount, total, customers(name), stores(name), organizations(name)")
     .is("armado_printed_at", null)
     .neq("status", "anulada")
     .order("created_at", { ascending: true })
@@ -49,13 +49,14 @@ export default async function ArmadoTodosPage({ searchParams }: { searchParams: 
   const itemsBySale = new Map<string, ArmadoItem[]>();
   if (ids.length) {
     const { data: items } = await sb.from("sale_items")
-      .select("sale_id, product_name, variant_label, quantity, product_variants(sku, loc_fila, loc_estante, loc_cubiculo)")
+      .select("sale_id, product_name, variant_label, quantity, unit_price, line_total, product_variants(sku, loc_fila, loc_estante, loc_cubiculo)")
       .in("sale_id", ids);
-    for (const it of (items ?? []) as Array<{ sale_id: string; product_name: string; variant_label: string | null; quantity: number; product_variants: unknown }>) {
+    for (const it of (items ?? []) as Array<{ sale_id: string; product_name: string; variant_label: string | null; quantity: number; unit_price: number; line_total: number; product_variants: unknown }>) {
       const v = rel<{ sku: string | null; loc_fila: number | null; loc_estante: number | null; loc_cubiculo: number | null }>(it.product_variants);
       const arr = itemsBySale.get(it.sale_id) ?? [];
       arr.push({
         productName: it.product_name, variantLabel: it.variant_label, sku: v?.sku ?? null, quantity: it.quantity,
+        unitPrice: Number(it.unit_price), lineTotal: Number(it.line_total),
         fila: v?.loc_fila ?? null, estante: v?.loc_estante ?? null, cubiculo: v?.loc_cubiculo ?? null,
       });
       itemsBySale.set(it.sale_id, arr);
@@ -72,6 +73,9 @@ export default async function ArmadoTodosPage({ searchParams }: { searchParams: 
     orgName: rel<{ name: string }>(s.organizations)?.name ?? "Bodysculpt",
     storeName: rel<{ name: string }>(s.stores)?.name ?? null,
     customerName: rel<{ name: string }>(s.customers)?.name ?? null,
+    subtotal: Number(s.subtotal),
+    discount: Number(s.discount),
+    total: Number(s.total),
     items: itemsBySale.get(s.id) ?? [],
   }));
 

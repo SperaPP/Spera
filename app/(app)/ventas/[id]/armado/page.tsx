@@ -12,7 +12,7 @@ export default async function ArmadoPage({ params }: { params: Promise<{ id: str
 
   const { data: sale } = await sb
     .from("sales")
-    .select("id, number, store_id, created_at, customers(name), stores(name), organizations(name), sale_items(product_name, variant_label, quantity, product_variants(sku, loc_fila, loc_estante, loc_cubiculo))")
+    .select("id, number, store_id, created_at, subtotal, discount, total, customers(name), stores(name), organizations(name), sale_items(product_name, variant_label, quantity, unit_price, line_total, product_variants(sku, loc_fila, loc_estante, loc_cubiculo))")
     .eq("id", id)
     .single();
   if (!sale) notFound();
@@ -20,7 +20,7 @@ export default async function ArmadoPage({ params }: { params: Promise<{ id: str
   if (scopeStore && sale.store_id !== scopeStore) notFound();
 
   const items: ArmadoItem[] = ((sale.sale_items ?? []) as Array<{
-    product_name: string; variant_label: string | null; quantity: number; product_variants: unknown;
+    product_name: string; variant_label: string | null; quantity: number; unit_price: number; line_total: number; product_variants: unknown;
   }>).map((it) => {
     const variant = rel<{ sku: string | null; loc_fila: number | null; loc_estante: number | null; loc_cubiculo: number | null }>(it.product_variants);
     return {
@@ -28,6 +28,8 @@ export default async function ArmadoPage({ params }: { params: Promise<{ id: str
       variantLabel: it.variant_label,
       sku: variant?.sku ?? null,
       quantity: it.quantity,
+      unitPrice: Number(it.unit_price),
+      lineTotal: Number(it.line_total),
       fila: variant?.loc_fila ?? null,
       estante: variant?.loc_estante ?? null,
       cubiculo: variant?.loc_cubiculo ?? null,
@@ -47,6 +49,9 @@ export default async function ArmadoPage({ params }: { params: Promise<{ id: str
     orgName: rel<{ name: string }>(sale.organizations)?.name ?? "Bodysculpt",
     storeName: rel<{ name: string }>(sale.stores)?.name ?? null,
     customerName: rel<{ name: string }>(sale.customers)?.name ?? null,
+    subtotal: Number(sale.subtotal),
+    discount: Number(sale.discount),
+    total: Number(sale.total),
     items,
   };
 

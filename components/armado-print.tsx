@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
 
 export type ArmadoItem = {
   productName: string;
   variantLabel: string | null;
   sku: string | null;
   quantity: number;
+  unitPrice: number;
+  lineTotal: number;
   fila: number | null;
   estante: number | null;
   cubiculo: number | null;
@@ -21,6 +23,9 @@ export type ArmadoSale = {
   orgName: string;
   storeName: string | null;
   customerName: string | null;
+  subtotal: number;
+  discount: number;
+  total: number;
   items: ArmadoItem[];
 };
 
@@ -85,12 +90,14 @@ export function ArmadoSheet({ sale }: { sale: ArmadoSale }) {
         <table className="mt-5 w-full border-collapse text-sm">
           <thead>
             <tr className="border-b-2 border-black text-left">
-              <th className="w-10 py-2 pr-2 text-center font-semibold">✓</th>
-              <th className="w-28 py-2 pr-2 font-semibold">Ubicación<div className="text-[10px] font-normal text-black/50">Fila · Est · Cub</div></th>
+              <th className="w-8 py-2 pr-2 text-center font-semibold">✓</th>
+              <th className="w-24 py-2 pr-2 font-semibold">Ubicación<div className="text-[10px] font-normal text-black/50">Fila · Est · Cub</div></th>
               <th className="py-2 pr-2 font-semibold">Producto</th>
-              <th className="w-32 py-2 pr-2 font-semibold">Variante</th>
-              <th className="w-28 py-2 pr-2 font-semibold">SKU</th>
-              <th className="w-14 py-2 text-center font-semibold">Cant.</th>
+              <th className="w-28 py-2 pr-2 font-semibold">Variante</th>
+              <th className="w-24 py-2 pr-2 font-semibold">SKU</th>
+              <th className="w-12 py-2 text-center font-semibold">Cant.</th>
+              <th className="w-24 py-2 pr-2 text-right font-semibold">Precio</th>
+              <th className="w-24 py-2 text-right font-semibold">Importe</th>
             </tr>
           </thead>
           <tbody>
@@ -102,9 +109,32 @@ export function ArmadoSheet({ sale }: { sale: ArmadoSale }) {
                 <td className="py-2.5 pr-2">{it.variantLabel ?? "—"}</td>
                 <td className="py-2.5 pr-2 font-mono text-xs text-black/70">{it.sku ?? "—"}</td>
                 <td className="py-2.5 text-center text-lg font-bold tabular-nums">{it.quantity}</td>
+                <td className="py-2.5 pr-2 text-right tabular-nums">{formatMoney(it.unitPrice)}</td>
+                <td className="py-2.5 text-right font-medium tabular-nums">{formatMoney(it.lineTotal)}</td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            {sale.discount > 0 && (
+              <tr>
+                <td colSpan={6} />
+                <td className="py-1.5 pr-2 text-right text-black/60">Subtotal</td>
+                <td className="py-1.5 text-right tabular-nums text-black/60">{formatMoney(sale.subtotal)}</td>
+              </tr>
+            )}
+            {sale.discount > 0 && (
+              <tr>
+                <td colSpan={6} />
+                <td className="py-1.5 pr-2 text-right text-black/60">Descuento</td>
+                <td className="py-1.5 text-right tabular-nums text-black/60">− {formatMoney(sale.discount)}</td>
+              </tr>
+            )}
+            <tr className="border-t-2 border-black">
+              <td colSpan={6} />
+              <td className="py-2 pr-2 text-right text-base font-bold">Total</td>
+              <td className="py-2 text-right text-base font-bold tabular-nums">{formatMoney(sale.total)}</td>
+            </tr>
+          </tfoot>
         </table>
 
         <div className="mt-6 flex justify-between text-xs text-black/50">
