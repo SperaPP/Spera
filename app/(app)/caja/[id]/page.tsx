@@ -109,14 +109,24 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
 
       {s.status === "abierta" && canAdmin && <CerrarCajaAdmin sessionId={s.id} isTitular={s.role !== "apoyo"} />}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Tile label="Fondo" value={formatMoney(opening)} />
-        <Tile label="Vendido (neto)" value={formatMoney(sold)} />
-        <Tile label="Efectivo esperado" value={formatMoney(expectedCash)} accent />
-        <Tile label="Declarado" value={declared == null ? "—" : formatMoney(declared)} />
-        <Tile label="Diferencia" value={diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatMoney(diff)}`} tone={diff == null ? undefined : diff === 0 ? "ok" : "danger"} />
-      </div>
-      {apoyoCash > 0 && (
+      {s.role === "apoyo" ? (
+        <>
+          <div className="mb-3 grid grid-cols-2 gap-3">
+            <Tile label="Vendido (neto)" value={formatMoney(sold)} />
+            <Tile label="Efectivo cobrado" value={formatMoney(cash)} accent />
+          </div>
+          <p className="mb-5 rounded-xl border border-line bg-canvas px-4 py-3 text-sm text-muted">Caja de apoyo: <span className="font-medium text-ink">rinde a la caja titular</span> — sin arqueo propio. El efectivo cobrado se consolida en el arqueo del titular.</p>
+        </>
+      ) : (
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <Tile label="Fondo" value={formatMoney(opening)} />
+          <Tile label="Vendido (neto)" value={formatMoney(sold)} />
+          <Tile label="Efectivo esperado" value={formatMoney(expectedCash)} accent />
+          <Tile label="Declarado" value={declared == null ? "—" : formatMoney(declared)} />
+          <Tile label="Diferencia" value={diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatMoney(diff)}`} tone={diff == null ? undefined : diff === 0 ? "ok" : "danger"} />
+        </div>
+      )}
+      {s.role !== "apoyo" && apoyoCash > 0 && (
         <p className="mb-5 -mt-2 text-xs text-muted">El efectivo esperado incluye {formatMoney(apoyoCash)} rendido por las cajas de apoyo de este turno.</p>
       )}
       {expenses > 0 && (

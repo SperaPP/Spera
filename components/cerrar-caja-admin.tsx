@@ -18,10 +18,11 @@ export function CerrarCajaAdmin({ sessionId, isTitular }: { sessionId: string; i
   const [pending, start] = useTransition();
 
   function submit() {
-    const d = Number(declared);
+    // Apoyo: cierra sin arqueo (rinde a la caja titular). Titular: arqueo normal.
+    const d = isTitular ? Number(declared) : 0;
     const k = isTitular ? Number(kept) : 0;
-    const e = Math.max(0, Number(expenses) || 0);
-    if (!isFinite(d) || d < 0) return toast.error("Ingresá el efectivo contado.");
+    const e = isTitular ? Math.max(0, Number(expenses) || 0) : 0;
+    if (isTitular && (!isFinite(d) || d < 0)) return toast.error("Ingresá el efectivo contado.");
     if (isTitular && (!isFinite(k) || k < 0)) return toast.error("Ingresá cuánto queda en caja chica.");
     start(async () => {
       const r = await cerrarCajaAdmin(sessionId, d, k, e, notes);
@@ -45,22 +46,27 @@ export function CerrarCajaAdmin({ sessionId, isTitular }: { sessionId: string; i
   return (
     <div className="mb-5 rounded-xl border border-line bg-card p-5">
       <h2 className="mb-3 text-sm font-medium text-ink">Cierre administrativo</h2>
+      {!isTitular && (
+        <p className="mb-3 rounded-lg border border-line bg-canvas px-3 py-2 text-xs text-muted">Caja de apoyo: <span className="font-medium text-ink">rinde a la caja titular</span>, se cierra sin arqueo. Solo poné el motivo.</p>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-muted">Efectivo contado</label>
-          <input type="number" min={0} value={declared} onChange={(e) => setDeclared(e.target.value)} className={input} placeholder="0" />
-        </div>
         {isTitular && (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Queda en caja chica</label>
-            <input type="number" min={0} value={kept} onChange={(e) => setKept(e.target.value)} className={input} placeholder="0" />
-          </div>
+          <>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted">Efectivo contado</label>
+              <input type="number" min={0} value={declared} onChange={(e) => setDeclared(e.target.value)} className={input} placeholder="0" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted">Queda en caja chica</label>
+              <input type="number" min={0} value={kept} onChange={(e) => setKept(e.target.value)} className={input} placeholder="0" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-medium text-muted">Gastos en efectivo (opcional)</label>
+              <input type="number" min={0} value={expenses} onChange={(e) => setExpenses(e.target.value)} className={input} placeholder="0" />
+              <p className="mt-1 text-xs text-muted">Plata del cajón usada para gastos del local. Se descuenta del esperado.</p>
+            </div>
+          </>
         )}
-        <div className={isTitular ? "sm:col-span-2" : ""}>
-          <label className="mb-1 block text-xs font-medium text-muted">Gastos en efectivo (opcional)</label>
-          <input type="number" min={0} value={expenses} onChange={(e) => setExpenses(e.target.value)} className={input} placeholder="0" />
-          <p className="mt-1 text-xs text-muted">Plata del cajón usada para gastos del local. Se descuenta del esperado.</p>
-        </div>
         <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-medium text-muted">Motivo (opcional)</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={input} placeholder="Ej: el cajero faltó" />

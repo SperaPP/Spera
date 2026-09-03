@@ -18,7 +18,7 @@ export default async function CierresPage() {
   const { storeId: scopeStore } = await getStoreScope();
   let sessReq = sb
     .from("cash_sessions")
-    .select("id, opening_amount, declared_amount, cash_expenses, expected_cash, cash_difference, opened_at, closed_at, stores(name)")
+    .select("id, role, opening_amount, declared_amount, cash_expenses, expected_cash, cash_difference, opened_at, closed_at, stores(name)")
     .in("status", ["cerrada", "entregada"])
     .order("closed_at", { ascending: false })
     .limit(30);
@@ -74,7 +74,7 @@ export default async function CierresPage() {
     const expected = s.expected_cash != null ? Number(s.expected_cash) : opening + cash - expenses;
     const declared = s.declared_amount == null ? null : Number(s.declared_amount);
     return {
-      id: s.id, store: relName(s.stores) ?? "—", closedAt: s.closed_at as string,
+      id: s.id, store: relName(s.stores) ?? "—", closedAt: s.closed_at as string, apoyo: s.role === "apoyo",
       opening, sold: (soldBySession.get(s.id) ?? 0) - (cambioBySession.get(s.id) ?? 0), expected, declared, expenses,
       diff: s.cash_difference != null ? Number(s.cash_difference) : (declared == null ? null : declared - expected),
     };
@@ -108,17 +108,23 @@ export default async function CierresPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-line last:border-0 hover:bg-canvas">
-                  <td className="px-4 py-3 font-medium text-ink">{r.store}</td>
+                  <td className="px-4 py-3 font-medium text-ink">{r.store}{r.apoyo && <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-muted">Apoyo</span>}</td>
                   <td className="px-4 py-3 text-muted">{formatDateTime(r.closedAt)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-muted">{formatMoney(r.opening)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-muted">{r.apoyo ? "—" : formatMoney(r.opening)}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(r.sold)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-muted">{r.expenses > 0 ? formatMoney(r.expenses) : "—"}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(r.expected)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink">{r.declared == null ? "—" : formatMoney(r.declared)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {r.diff == null ? <span className="text-muted">—</span> :
-                      <span className={r.diff === 0 ? "text-ok" : "text-danger"}>{r.diff > 0 ? "+" : ""}{formatMoney(r.diff)}</span>}
-                  </td>
+                  {r.apoyo ? (
+                    <td colSpan={4} className="px-4 py-3 text-right text-xs text-muted">Rinde a la caja titular</td>
+                  ) : (
+                    <>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted">{r.expenses > 0 ? formatMoney(r.expenses) : "—"}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">{formatMoney(r.expected)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">{r.declared == null ? "—" : formatMoney(r.declared)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {r.diff == null ? <span className="text-muted">—</span> :
+                          <span className={r.diff === 0 ? "text-ok" : "text-danger"}>{r.diff > 0 ? "+" : ""}{formatMoney(r.diff)}</span>}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

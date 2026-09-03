@@ -214,7 +214,7 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
       </div>
 
       {apoyo && (
-        <p className="mb-3 text-xs text-muted">Sos caja de apoyo: contá tu efectivo y entregáselo a la caja titular. El reparto a caja chica/fuerte lo hace la titular al cerrar.</p>
+        <p className="mb-3 text-xs text-muted">Sos caja de apoyo: tu efectivo se rinde automáticamente a la caja titular. Al cerrar solo confirmás; no hace falta contar el cajón.</p>
       )}
       {blockedByApoyos && (
         <div className="mb-3 flex items-start gap-2 rounded-xl border border-warn/30 bg-warn-bg px-3 py-2 text-sm text-ink">
@@ -223,24 +223,17 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
         </div>
       )}
 
-      <div className={`grid grid-cols-2 gap-3 ${apoyo ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
+      <div className={`grid grid-cols-2 gap-3 ${apoyo ? "" : "sm:grid-cols-4"}`}>
         {!apoyo && <Tile label="Fondo (caja chica)" value={formatMoney(store.openingAmount)} />}
         <Tile label="Vendido" value={formatMoney(sum?.sold ?? 0)} />
         <Tile label="Efectivo cobrado" value={formatMoney(sum?.cash ?? 0)} />
-        <Tile label="Efectivo esperado" value={formatMoney(sum?.expectedCash ?? 0)} accent />
+        {!apoyo && <Tile label="Efectivo esperado" value={formatMoney(sum?.expectedCash ?? 0)} accent />}
       </div>
 
       {apoyo ? (
-        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink">Efectivo contado</label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted">$</span>
-              <input type="number" min={0} className={input} value={declared} onChange={(e) => setDeclared(e.target.value)} placeholder="0" />
-            </div>
-            {diff !== null && <p className={`mt-1.5 text-xs ${diff === 0 ? "text-ok" : "text-warn"}`}>{diff === 0 ? "Cuadra exacto" : `Diferencia con lo esperado: ${formatMoney(diff)}`}</p>}
-          </div>
-          <GastosInput expenses={expenses} setExpenses={setExpenses} expectedAdj={expectedAdj} show={expensesN > 0} />
+        <div className="mt-4 flex items-start gap-2 rounded-xl border border-line bg-canvas px-4 py-3 text-sm text-ink">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
+          <span>Tu efectivo se rinde automáticamente a la <span className="font-medium">caja titular</span>. No hace falta contar el cajón: el arqueo del local lo hace el titular al cerrar su caja.</span>
         </div>
       ) : (
         <>
@@ -279,9 +272,9 @@ function CerrarCajaPanel({ store, onDone }: { store: PosStore; onDone: () => voi
       <div className="mt-4 flex justify-end gap-3">
         <button onClick={onDone} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas">Cancelar</button>
         <button
-          disabled={pending || declared === "" || (!apoyo && (keptTooBig || blockedByApoyos))}
+          disabled={pending || (!apoyo && (declared === "" || keptTooBig || blockedByApoyos))}
           onClick={() => start(async () => {
-            const r = await cerrarCaja(store.sessionId!, declaredN, apoyo ? 0 : keptN, expensesN, notes);
+            const r = await cerrarCaja(store.sessionId!, apoyo ? 0 : declaredN, apoyo ? 0 : keptN, apoyo ? 0 : expensesN, notes);
             if (r.error) { toast.error(r.error); return; }
             toast.success(apoyo ? "Caja de apoyo cerrada." : `Caja cerrada. ${formatMoney(toSafe)} a caja fuerte.`); router.refresh();
           })}
