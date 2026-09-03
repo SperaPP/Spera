@@ -67,6 +67,34 @@ export async function cerrarCajaAdmin(
   return { ok: true };
 }
 
+/** Corrección de un cierre ya hecho (solo admin): recalcula esperado/diferencia
+ *  y reajusta caja chica/fuerte para que cuadre. */
+export async function corregirCierre(
+  sessionId: string,
+  declaredAmount: number,
+  keptAmount: number,
+  expenses: number,
+  notes: string
+): Promise<ActionState> {
+  const denied = await requireCan("caja_admin", true);
+  if (denied) return denied;
+
+  const sb = await createClient();
+  const { error } = await sb.rpc("correct_cash_session", {
+    p_session_id: sessionId,
+    p_declared: Math.max(0, declaredAmount || 0),
+    p_kept: Math.max(0, keptAmount || 0),
+    p_expenses: Math.max(0, expenses || 0),
+    p_notes: notes || null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/caja");
+  revalidatePath(`/caja/${sessionId}`);
+  revalidatePath("/caja/cierres");
+  return { ok: true };
+}
+
 // ── Administración de caja ─────────────────────────────────────
 export async function ajustarCaja(input: { storeId: string; target: "chica" | "fuerte"; delta: number; reason: string }): Promise<ActionState> {
   const denied = await requireCan("caja_admin", true);

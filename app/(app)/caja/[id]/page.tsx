@@ -6,6 +6,7 @@ import { getStoreScope, getPermissions } from "@/lib/auth";
 import { canEdit } from "@/lib/permissions";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { CerrarCajaAdmin } from "@/components/cerrar-caja-admin";
+import { CorregirCierreButton } from "@/components/corregir-cierre-button";
 
 function rel<T>(r: unknown): T | null { return (Array.isArray(r) ? r[0] : r) as T | null; }
 
@@ -108,6 +109,22 @@ export default async function PeriodoPage({ params }: { params: Promise<{ id: st
       </div>
 
       {s.status === "abierta" && canAdmin && <CerrarCajaAdmin sessionId={s.id} isTitular={s.role !== "apoyo"} />}
+      {s.status !== "abierta" && canAdmin && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-card px-4 py-3 text-sm">
+          <span className="text-muted">¿Quedó mal el cierre? Como administración podés corregirlo para que cuadre.</span>
+          <div className="ml-auto">
+            <CorregirCierreButton
+              sessionId={s.id}
+              isTitular={s.role !== "apoyo"}
+              declared={declared ?? 0}
+              kept={Number(s.kept_amount ?? 0)}
+              expenses={expenses}
+              notes={s.notes ?? ""}
+              expectedBase={expectedCash + expenses}
+            />
+          </div>
+        </div>
+      )}
 
       {s.role === "apoyo" ? (
         <>
