@@ -7,7 +7,7 @@ import { cargarMatrizStock } from "@/app/(app)/stock/actions";
 
 type Warehouse = { id: string; name: string };
 type Row = { id: string; name: string; perWh: Record<string, number>; perWhRes?: Record<string, number>; total: number };
-type Matrix = { variants: { id: string; label: string; sku: string | null }[]; stockMap: Record<string, number> };
+type Matrix = { variants: { id: string; label: string; sku: string | null }[]; stockMap: Record<string, number>; reservedMap: Record<string, number> };
 
 export function StockTable({ rows, warehouses, canEdit }: { rows: Row[]; warehouses: Warehouse[]; canEdit: boolean }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -71,7 +71,7 @@ export function StockTable({ rows, warehouses, canEdit }: { rows: Row[]; warehou
                       ) : (
                         <>
                           <p className="mb-2 px-1 text-xs text-muted">{canEdit ? "Editá la existencia por variante y depósito. Se registra como ajuste." : "Solo lectura (no tenés permiso de edición de stock)."}</p>
-                          <StockMatrix productId={p.id} variants={cache[p.id].variants} warehouses={warehouses} stockMap={cache[p.id].stockMap} readOnly={!canEdit} />
+                          <StockMatrix productId={p.id} variants={cache[p.id].variants} warehouses={warehouses} stockMap={cache[p.id].stockMap} reservedMap={cache[p.id].reservedMap} readOnly={!canEdit} />
                         </>
                       )}
                     </td>

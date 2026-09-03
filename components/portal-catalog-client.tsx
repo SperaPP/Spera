@@ -7,7 +7,8 @@ import { PortalProductCard } from "@/components/portal-product-card";
 
 type Opt = { id: string; name: string };
 const STEP = 24;
-const SORTS: Record<string, string> = { name: "Nombre", price_asc: "Precio ↑", price_desc: "Precio ↓" };
+// "Nuevos" = mayor a menor SKU (lo último cargado aparece primero). Es el orden por defecto.
+const SORTS: Record<string, string> = { sku_desc: "Nuevos", name: "Nombre", price_asc: "Precio ↑", price_desc: "Precio ↓" };
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 
 export function PortalCatalogClient({
@@ -24,7 +25,7 @@ export function PortalCatalogClient({
   const [season, setSeason] = useState<string | null>(initial.season ?? null);
   const [q, setQ] = useState(initial.q ?? "");
   const [onlyOffers, setOnlyOffers] = useState(false);
-  const [sort, setSort] = useState<string>("name");
+  const [sort, setSort] = useState<string>("sku_desc");
   const [visible, setVisible] = useState(STEP);
 
   useEffect(() => { setVisible(STEP); }, [main, cat, season, q, sort, onlyOffers]);
@@ -53,7 +54,11 @@ export function PortalCatalogClient({
 
   const filtered = useMemo(() => {
     const list = base();
-    list.sort((a, b) => sort === "price_asc" ? a.price - b.price : sort === "price_desc" ? b.price - a.price : a.name.localeCompare(b.name, "es"));
+    list.sort((a, b) =>
+      sort === "price_asc" ? a.price - b.price
+      : sort === "price_desc" ? b.price - a.price
+      : sort === "name" ? a.name.localeCompare(b.name, "es")
+      : (b.sku ?? -1) - (a.sku ?? -1)); // sku_desc: más nuevo primero
     return list;
   }, [base, sort]);
 

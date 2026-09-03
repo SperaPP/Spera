@@ -32,6 +32,7 @@ export async function ajustarStock(
 export async function cargarMatrizStock(productId: string): Promise<{
   variants: { id: string; label: string; sku: string | null }[];
   stockMap: Record<string, number>;
+  reservedMap: Record<string, number>;
 }> {
   const sb = await createClient();
   const { data: product } = await sb
@@ -43,10 +44,15 @@ export async function cargarMatrizStock(productId: string): Promise<{
     .map((v) => ({ id: v.id, label: [v.size, v.color].filter(Boolean).join(" / ") || "Única", sku: v.sku }));
 
   const stockMap: Record<string, number> = {};
+  const reservedMap: Record<string, number> = {};
   const variantIds = variants.map((v) => v.id);
   if (variantIds.length) {
-    const { data: st } = await sb.from("stock").select("variant_id, warehouse_id, quantity").in("variant_id", variantIds);
-    for (const s of st ?? []) stockMap[`${s.variant_id}|${s.warehouse_id}`] = Number(s.quantity);
+    const { data: st } = await sb.from("stock").select("variant_id, warehouse_id, quantity, reserved").in("variant_id", variantIds);
+    for (const s of st ?? []) {
+      const k = `${s.variant_id}|${s.warehouse_id}`;
+      stockMap[k] = Number(s.quantity);
+      reservedMap[k] = Number(s.reserved ?? 0);
+    }
   }
-  return { variants, stockMap };
+  return { variants, stockMap, reservedMap };
 }
