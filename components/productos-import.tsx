@@ -6,8 +6,10 @@ import * as XLSX from "xlsx";
 import { Download, Upload, Boxes, MapPin, PackagePlus, AlertTriangle, CheckCircle2 } from "lucide-react";
 import {
   exportarStock, importarStock, exportarUbicaciones, importarUbicaciones,
-  previewProductos, importarProductos, type ImportRow, type ImportPreview,
+  previewProductos, importarProductos, exportarProductos, type ImportRow, type ImportPreview,
 } from "@/app/(app)/productos/import-actions";
+
+const EXPORT_COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "tipo", "iva", "activo", "tiene_foto", "destacado", "estado", "talle", "color", "sku", "codigo_barras", "variante_activa", "fila", "estante", "cubiculo", "precio_mayorista", "precio_publico", "stock_total"] as const;
 
 type Warehouse = { id: string; name: string };
 
@@ -28,6 +30,18 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
   const [progress, setProgress] = useState<string | null>(null);
 
   const whName = warehouses.find((w) => w.id === whId)?.name ?? "deposito";
+
+  // ── Export completo de productos ─────────────────────────────
+  function expProductos() {
+    start(async () => {
+      const r = await exportarProductos();
+      if (r.error || !r.rows) { toast.error(r.error ?? "No se pudo exportar"); return; }
+      const ws = XLSX.utils.json_to_sheet(r.rows, { header: [...EXPORT_COLS] });
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Productos");
+      XLSX.writeFile(wb, "productos.xlsx");
+      toast.success(`Exportadas ${r.rows.length} variantes de ${new Set(r.rows.map((x) => x.producto)).size} productos.`);
+    });
+  }
 
   // ── Alta de productos ────────────────────────────────────────
   function plantillaProductos() {
@@ -154,15 +168,16 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
     <div className="space-y-5">
       {/* Alta de productos */}
       <div className="rounded-xl border border-line bg-card p-5">
-        <div className="mb-1 flex items-center gap-2"><PackagePlus className="h-4 w-4 text-muted" /><h2 className="font-medium text-ink">Alta de productos</h2></div>
-        <p className="mb-3 text-sm text-muted">Una fila por variante; se agrupan por <span className="font-medium text-ink">producto</span> (mismo nombre). Los talles, colores, categorías y temporadas que no existan se crean solos. El stock inicial va al depósito elegido.</p>
+        <div className="mb-1 flex items-center gap-2"><PackagePlus className="h-4 w-4 text-muted" /><h2 className="font-medium text-ink">Productos</h2></div>
+        <p className="mb-3 text-sm text-muted"><span className="font-medium text-ink">Exportar productos</span>: baja todos los productos y variantes con todos los datos (categoría, tela, temporada, IVA, activo, si tiene foto, destacado, precios, ubicación, stock). <span className="font-medium text-ink">Alta</span>: una fila por variante (se agrupan por nombre de producto); talles, colores, categorías y temporadas nuevas se crean solas; el stock inicial va al depósito elegido.</p>
         <div className="flex flex-wrap items-center gap-2">
           <select value={whId} onChange={(e) => setWhId(e.target.value)} className="rounded-lg border border-line-strong bg-card px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent">
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
+          <button onClick={expProductos} disabled={pending} className={btn}><Download className="h-4 w-4" /> Exportar productos (todos los datos)</button>
           <button onClick={plantillaProductos} disabled={pending} className={btn}><Download className="h-4 w-4" /> Descargar plantilla</button>
           <input ref={prodInput} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) elegirProductos(f); e.target.value = ""; }} />
-          <button onClick={() => prodInput.current?.click()} disabled={pending || !whId} className={btnPrimary}><Upload className="h-4 w-4" /> Elegir Excel</button>
+          <button onClick={() => prodInput.current?.click()} disabled={pending || !whId} className={btnPrimary}><Upload className="h-4 w-4" /> Elegir Excel (alta)</button>
         </div>
 
         {prodPrev && (

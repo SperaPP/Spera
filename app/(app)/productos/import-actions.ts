@@ -110,6 +110,102 @@ export async function importarUbicaciones(raw: unknown): Promise<ActionState & {
   return { ok: true, count };
 }
 
+// ── EXPORT COMPLETO DE PRODUCTOS ───────────────────────────────
+const VARIATION_LABEL: Record<string, string> = { none: "Sin variantes", talle: "Talle", color: "Color", talle_color: "Talle y color", size_color: "Talle y color" };
+const yesno = (b: boolean | null | undefined) => (b ? "Sí" : "No");
+
+export type ProductoExportRow = {
+  producto: string; descripcion: string; categoria_principal: string; categoria: string;
+  temporada: string; tela: string; tipo: string; iva: number | "";
+  activo: string; tiene_foto: string; destacado: string; estado: string;
+  talle: string; color: string; sku: string; codigo_barras: string; variante_activa: string;
+  fila: number | ""; estante: number | ""; cubiculo: number | "";
+  precio_mayorista: number | ""; precio_publico: number | ""; stock_total: number;
+};
+
+/** Exporta TODOS los productos y variantes con todos sus datos (una fila por variante). */
+export async function exportarProductos(): Promise<{ error?: string; rows?: ProductoExportRow[] }> {
+  const denied = await requireCan("productos", true);
+  if (denied) return { error: denied.error };
+  const sb = await createClient();
+
+  // Productos con sus catálogos relacionados.
+  type Prod = {
+    id: string; name: string; description: string | null; active: boolean; has_image: boolean;
+    featured: boolean; tax_rate: number; variation_type: string; lifecycle: string;
+    categories: unknown; main_categories: unknown; seasons: unknown; fabric_types: unknown;
+  };
+  const prods = new Map<string, Prod>();
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from("products")
+      .select("id, name, description, active, has_image, featured, tax_rate, variation_type, lifecycle, categories(name), main_categories(name), seasons(name), fabric_types(name)")
+      .order("name").range(from, from + 999);
+    if (!data || data.length === 0) break;
+    for (const p of data as Prod[]) prods.set(p.id, p);
+    if (data.length < 1000) break;
+  }
+
+  // Precios (Mayorista / Publico) por producto.
+  const { data: lists } = await sb.from("price_lists").select("id, name").in("name", ["Mayorista", "Publico"]);
+  const mayId = (lists ?? []).find((l) => l.name === "Mayorista")?.id ?? null;
+  const pubId = (lists ?? []).find((l) => l.name === "Publico")?.id ?? null;
+  const priceMay = new Map<string, number>(), pricePub = new Map<string, number>();
+  for (const [listId, target] of [[mayId, priceMay], [pubId, pricePub]] as const) {
+    if (!listId) continue;
+    for (let from = 0; ; from += 1000) {
+      const { data } = await sb.from("price_list_items").select("product_id, price").eq("price_list_id", listId).is("variant_id", null).range(from, from + 999);
+      if (!data || data.length === 0) break;
+      for (const r of data) (target as Map<string, number>).set(r.product_id, Number(r.price));
+      if (data.length < 1000) break;
+    }
+  }
+
+  // Variantes.
+  type Var = { id: string; product_id: string; size: string | null; color: string | null; sku: string | null; barcode: string | null; active: boolean; loc_fila: number | null; loc_estante: number | null; loc_cubiculo: number | null };
+  const vars: Var[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from("product_variants")
+      .select("id, product_id, size, color, sku, barcode, active, loc_fila, loc_estante, loc_cubiculo")
+      .range(from, from + 999);
+    if (!data || data.length === 0) break;
+    vars.push(...(data as Var[]));
+    if (data.length < 1000) break;
+  }
+
+  // Stock total por variante (suma de todos los depósitos).
+  const stockTotal = new Map<string, number>();
+  const varIds = vars.map((v) => v.id);
+  for (let i = 0; i < varIds.length; i += 1000) {
+    const { data } = await sb.from("stock").select("variant_id, quantity").in("variant_id", varIds.slice(i, i + 1000));
+    for (const s of data ?? []) stockTotal.set(s.variant_id, (stockTotal.get(s.variant_id) ?? 0) + Number(s.quantity));
+  }
+
+  const rows: ProductoExportRow[] = [];
+  for (const v of vars) {
+    const p = prods.get(v.product_id);
+    if (!p) continue;
+    rows.push({
+      producto: p.name, descripcion: p.description ?? "",
+      categoria_principal: rel<{ name: string }>(p.main_categories)?.name ?? "",
+      categoria: rel<{ name: string }>(p.categories)?.name ?? "",
+      temporada: rel<{ name: string }>(p.seasons)?.name ?? "",
+      tela: rel<{ name: string }>(p.fabric_types)?.name ?? "",
+      tipo: VARIATION_LABEL[p.variation_type] ?? p.variation_type,
+      iva: p.tax_rate ?? "",
+      activo: yesno(p.active), tiene_foto: yesno(p.has_image), destacado: yesno(p.featured),
+      estado: p.lifecycle === "discontinuo" ? "Discontinuo" : "Actual",
+      talle: v.size ?? "", color: v.color ?? "", sku: v.sku ?? "", codigo_barras: v.barcode ?? "",
+      variante_activa: yesno(v.active),
+      fila: v.loc_fila ?? "", estante: v.loc_estante ?? "", cubiculo: v.loc_cubiculo ?? "",
+      precio_mayorista: priceMay.get(v.product_id) ?? "", precio_publico: pricePub.get(v.product_id) ?? "",
+      stock_total: stockTotal.get(v.id) ?? 0,
+    });
+  }
+  // Ordenado por producto y luego variante para que sea legible.
+  rows.sort((a, b) => a.producto.localeCompare(b.producto, "es") || `${a.talle} ${a.color}`.localeCompare(`${b.talle} ${b.color}`, "es"));
+  return { rows };
+}
+
 // ── ALTA DE PRODUCTOS ──────────────────────────────────────────
 export type ImportRow = {
   producto: string; descripcion: string;
