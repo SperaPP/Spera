@@ -10,7 +10,7 @@ import {
   previewActualizacion, actualizarProductos, type ImportRow, type ImportPreview, type UpdateRow,
 } from "@/app/(app)/productos/import-actions";
 
-const EXPORT_COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "tipo", "iva", "activo", "tiene_foto", "destacado", "estado", "talle", "color", "sku", "codigo_barras", "variante_activa", "fila", "estante", "cubiculo", "precio_mayorista", "precio_publico", "stock_total"] as const;
+const EXPORT_COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "tipo", "iva", "activo", "tiene_foto", "destacado", "estado", "talle", "color", "sku", "codigo_barras", "variante_activa", "fila", "estante", "cubiculo", "precio_mayorista", "precio_publico", "stock"] as const;
 
 type Warehouse = { id: string; name: string };
 
@@ -36,13 +36,14 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
 
   // ── Export completo de productos ─────────────────────────────
   function expProductos() {
+    if (!whId) { toast.error("Elegí el depósito."); return; }
     start(async () => {
-      const r = await exportarProductos();
+      const r = await exportarProductos(whId);
       if (r.error || !r.rows) { toast.error(r.error ?? "No se pudo exportar"); return; }
       const ws = XLSX.utils.json_to_sheet(r.rows, { header: [...EXPORT_COLS] });
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Productos");
-      XLSX.writeFile(wb, "productos.xlsx");
-      toast.success(`Exportadas ${r.rows.length} variantes de ${new Set(r.rows.map((x) => x.producto)).size} productos.`);
+      XLSX.writeFile(wb, `productos-${whName.toLowerCase().replace(/\s+/g, "-")}.xlsx`);
+      toast.success(`Exportadas ${r.rows.length} variantes (stock de ${whName}).`);
     });
   }
 
@@ -73,7 +74,7 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
       let totV = 0;
       for (let i = 0; i < rows.length; i += BATCH) {
         setProgress(`Actualizando ${i + 1}–${Math.min(i + BATCH, rows.length)} de ${rows.length}…`);
-        const r = await actualizarProductos(rows.slice(i, i + BATCH));
+        const r = await actualizarProductos(rows.slice(i, i + BATCH), whId);
         if (r.error) { setProgress(null); toast.error(`Se cortó: ${r.error}`); return; }
         totV += r.actualizados ?? 0;
       }
@@ -251,9 +252,12 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
       {/* Actualización masiva */}
       <div className="rounded-xl border border-line bg-card p-5">
         <div className="mb-1 flex items-center gap-2"><RefreshCw className="h-4 w-4 text-muted" /><h2 className="font-medium text-ink">Actualizar productos (masivo)</h2></div>
-        <p className="mb-3 text-sm text-muted">Exportá <span className="font-medium text-ink">todos los datos</span>, editá lo que necesites en el Excel y subilo acá. Se actualiza cada producto/variante matcheando por <span className="font-medium text-ink">SKU</span>. <span className="font-medium text-ink">Celda vacía = no cambia</span> ese dato. No toca la foto (se sube a mano) ni el stock (usá la sección de abajo).</p>
+        <p className="mb-3 text-sm text-muted">Elegí el <span className="font-medium text-ink">depósito</span>, exportá <span className="font-medium text-ink">todos los datos</span> (la columna <span className="font-medium text-ink">stock</span> es la de ese depósito), editá en el Excel y subilo. Se actualiza cada producto/variante matcheando por <span className="font-medium text-ink">SKU</span>, incluido el <span className="font-medium text-ink">stock del depósito elegido</span>. <span className="font-medium text-ink">Celda vacía = no cambia</span>. No toca la foto (se sube a mano).</p>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={expProductos} disabled={pending} className={btn}><Download className="h-4 w-4" /> Exportar para editar</button>
+          <select value={whId} onChange={(e) => setWhId(e.target.value)} className="rounded-lg border border-line-strong bg-card px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent">
+            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+          <button onClick={expProductos} disabled={pending || !whId} className={btn}><Download className="h-4 w-4" /> Exportar para editar</button>
           <input ref={updInput} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) elegirActualizacion(f); e.target.value = ""; }} />
           <button onClick={() => updInput.current?.click()} disabled={pending} className={btnPrimary}><Upload className="h-4 w-4" /> Subir Excel editado</button>
         </div>

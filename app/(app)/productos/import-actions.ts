@@ -120,13 +120,15 @@ export type ProductoExportRow = {
   activo: string; tiene_foto: string; destacado: string; estado: string;
   talle: string; color: string; sku: string; codigo_barras: string; variante_activa: string;
   fila: number | ""; estante: number | ""; cubiculo: number | "";
-  precio_mayorista: number | ""; precio_publico: number | ""; stock_total: number;
+  precio_mayorista: number | ""; precio_publico: number | ""; stock: number;
 };
 
-/** Exporta TODOS los productos y variantes con todos sus datos (una fila por variante). */
-export async function exportarProductos(): Promise<{ error?: string; rows?: ProductoExportRow[] }> {
+/** Exporta TODOS los productos y variantes con todos sus datos (una fila por variante).
+ *  La columna `stock` es la existencia en el depósito elegido (para editar y reimportar). */
+export async function exportarProductos(warehouseId: string): Promise<{ error?: string; rows?: ProductoExportRow[] }> {
   const denied = await requireCan("productos", true);
   if (denied) return { error: denied.error };
+  if (!warehouseId) return { error: "Elegí el depósito." };
   const sb = await createClient();
 
   // Productos con sus catálogos relacionados.
@@ -172,12 +174,12 @@ export async function exportarProductos(): Promise<{ error?: string; rows?: Prod
     if (data.length < 1000) break;
   }
 
-  // Stock total por variante (suma de todos los depósitos).
-  const stockTotal = new Map<string, number>();
+  // Stock por variante EN EL DEPÓSITO ELEGIDO.
+  const stockByVar = new Map<string, number>();
   const varIds = vars.map((v) => v.id);
   for (let i = 0; i < varIds.length; i += 1000) {
-    const { data } = await sb.from("stock").select("variant_id, quantity").in("variant_id", varIds.slice(i, i + 1000));
-    for (const s of data ?? []) stockTotal.set(s.variant_id, (stockTotal.get(s.variant_id) ?? 0) + Number(s.quantity));
+    const { data } = await sb.from("stock").select("variant_id, quantity").eq("warehouse_id", warehouseId).in("variant_id", varIds.slice(i, i + 1000));
+    for (const s of data ?? []) stockByVar.set(s.variant_id, Number(s.quantity));
   }
 
   const rows: ProductoExportRow[] = [];
@@ -198,7 +200,7 @@ export async function exportarProductos(): Promise<{ error?: string; rows?: Prod
       variante_activa: yesno(v.active),
       fila: v.loc_fila ?? "", estante: v.loc_estante ?? "", cubiculo: v.loc_cubiculo ?? "",
       precio_mayorista: priceMay.get(v.product_id) ?? "", precio_publico: pricePub.get(v.product_id) ?? "",
-      stock_total: stockTotal.get(v.id) ?? 0,
+      stock: stockByVar.get(v.id) ?? 0,
     });
   }
   // Ordenado por producto y luego variante para que sea legible.
@@ -223,12 +225,13 @@ export async function previewActualizacion(skus: string[]): Promise<{ error?: st
   return { enBase, noEnBase: uniq.length - enBase };
 }
 
-/** Actualiza productos/variantes existentes (matchea por SKU). Celda vacía = no cambia. */
-export async function actualizarProductos(rows: UpdateRow[]): Promise<ActionState & { actualizados?: number; sinMatch?: number }> {
+/** Actualiza productos/variantes existentes (matchea por SKU). Celda vacía = no cambia.
+ *  Si se pasa warehouseId, la columna `stock` actualiza la existencia en ese depósito. */
+export async function actualizarProductos(rows: UpdateRow[], warehouseId?: string | null): Promise<ActionState & { actualizados?: number; sinMatch?: number }> {
   const denied = await requireCan("productos", true);
   if (denied) return denied;
   const sb = await createClient();
-  const { data, error } = await sb.rpc("update_products", { p_rows: rows });
+  const { data, error } = await sb.rpc("update_products", { p_rows: rows, p_warehouse: warehouseId ?? null });
   if (error) return { error: error.message };
   const res = (data ?? {}) as { actualizados?: number; sin_match?: number };
   return { ok: true, actualizados: res.actualizados, sinMatch: res.sin_match };
