@@ -189,6 +189,22 @@ export async function analizarDuplicados(): Promise<{ error?: string; groups?: D
   return { groups };
 }
 
+/** Unifica cuentas duplicadas en la principal (solo admin). Mueve todo y elimina las duplicadas. */
+export async function unificarClientes(targetId: string, sourceIds: string[]): Promise<ActionState & { unificadas?: number; conflictosPortal?: number }> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+  const sources = sourceIds.filter((s) => s && s !== targetId);
+  if (!targetId || sources.length === 0) return { error: "Elegí la cuenta principal y al menos una duplicada." };
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("merge_customers", { p_target: targetId, p_sources: sources });
+  if (error) return { error: error.message };
+  const res = (data ?? {}) as { unificadas?: number; conflictos_portal?: number };
+  revalidatePath("/clientes");
+  revalidatePath("/clientes/duplicados");
+  revalidatePath(`/clientes/${targetId}`);
+  return { ok: true, unificadas: res.unificadas, conflictosPortal: res.conflictos_portal };
+}
+
 /** Ajuste manual del saldo de cuenta corriente (reservado a administración). */
 export async function ajustarSaldoCliente(customerId: string, delta: number, reason: string): Promise<ActionState> {
   const denied = await requireAdmin();
