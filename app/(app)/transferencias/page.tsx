@@ -22,7 +22,7 @@ export default async function TransferenciasPage() {
   const whId = await getScopeWarehouseId();
   let req = sb
     .from("stock_transfers")
-    .select("id, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
+    .select("id, number, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
     .order("created_at", { ascending: false })
     .limit(100);
   if (whId) req = req.or(`from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`);
@@ -59,6 +59,7 @@ export default async function TransferenciasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
+                <th className="px-4 py-3 font-medium">#</th>
                 <th className="px-4 py-3 font-medium">Fecha</th>
                 <th className="px-4 py-3 font-medium">Movimiento</th>
                 <th className="px-4 py-3 text-right font-medium">Ítems</th>
@@ -71,6 +72,7 @@ export default async function TransferenciasPage() {
                 const st = STATUS[t.status] ?? { label: t.status, cls: "bg-canvas text-muted" };
                 return (
                   <tr key={t.id} className="border-b border-line last:border-0 hover:bg-canvas">
+                    <td className="px-4 py-3 font-medium tabular-nums text-ink">{t.number ?? "—"}</td>
                     <td className="px-4 py-3 text-muted">{formatDateTime(t.created_at)}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-2 text-ink">

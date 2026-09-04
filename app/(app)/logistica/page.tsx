@@ -53,7 +53,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
   if (isTransfers) {
     let treq = sb
       .from("stock_transfers")
-      .select("id, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
+      .select("id, number, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
       .order("created_at", { ascending: false }).limit(100);
     if (whId) treq = treq.or(`from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`);
     const { data } = await treq;
@@ -109,7 +109,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
                       <td className="px-4 py-3 text-muted">{formatDateTime(t.created_at as string)}</td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-2 text-ink">
-                          <span className="rounded-md bg-canvas px-1.5 py-0.5 text-xs font-medium text-muted">Transferencia</span>
+                          <span className="rounded-md bg-canvas px-1.5 py-0.5 text-xs font-medium text-muted">Transf. #{(t.number as number | null) ?? "—"}</span>
                           {relName(t.from_warehouse)} <ArrowRight className="h-3.5 w-3.5 text-faint" /> {relName(t.to_warehouse)}
                         </span>
                       </td>

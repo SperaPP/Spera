@@ -11,7 +11,7 @@ export default async function ImprimirTransferenciaPage({ params }: { params: Pr
 
   const { data: t } = await sb
     .from("stock_transfers")
-    .select("id, notes, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), organizations(name), stock_transfer_items(quantity, product_variants(sku, size, color, loc_fila, loc_estante, loc_cubiculo, products(name)))")
+    .select("id, number, notes, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), organizations(name), stock_transfer_items(quantity, product_variants(sku, size, color, loc_fila, loc_estante, loc_cubiculo, products(name)))")
     .eq("id", id)
     .single();
   if (!t) notFound();
@@ -39,6 +39,7 @@ export default async function ImprimirTransferenciaPage({ params }: { params: Pr
       <TransferenciaPrint
         t={{
           id: t.id,
+          number: (t.number as number | null) ?? null,
           createdAt: t.created_at,
           orgName: rel<{ name: string }>(t.organizations)?.name ?? "",
           from: rel<{ name: string }>(t.from_warehouse)?.name ?? null,

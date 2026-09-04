@@ -17,7 +17,7 @@ export default async function TransferenciaDetallePage({ params }: { params: Pro
 
   const [{ data: t }, { data: isAdmin }] = await Promise.all([
     sb.from("stock_transfers")
-      .select("id, status, notes, created_at, sent_at, received_at, from_warehouse_id, to_warehouse_id, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
+      .select("id, number, status, notes, created_at, sent_at, received_at, from_warehouse_id, to_warehouse_id, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(quantity, product_variants(sku, barcode, size, color, products(name)))")
       .eq("id", id)
       .single(),
     sb.rpc("is_admin"),
@@ -50,9 +50,12 @@ export default async function TransferenciaDetallePage({ params }: { params: Pro
 
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-ink">
-            {relName(t.from_warehouse) ?? "—"} <ArrowRight className="h-5 w-5 text-faint" /> {relName(t.to_warehouse) ?? "—"}
-          </h1>
+          <div>
+            {t.number != null && <div className="text-xs font-semibold uppercase tracking-wide text-muted">Transferencia #{t.number}</div>}
+            <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-ink">
+              {relName(t.from_warehouse) ?? "—"} <ArrowRight className="h-5 w-5 text-faint" /> {relName(t.to_warehouse) ?? "—"}
+            </h1>
+          </div>
           <div className="flex shrink-0 items-center gap-2">
             {canEdit && (
               <Link href={`/transferencias/${t.id}/editar`} className="flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">

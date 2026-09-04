@@ -17,6 +17,7 @@ export type TransferItem = {
 
 export type TransferData = {
   id: string;
+  number: number | null;
   createdAt: string;
   orgName: string;
   from: string | null;
@@ -52,7 +53,10 @@ export function TransferenciaPrint({ t }: { t: TransferData }) {
             <div className="text-lg font-bold uppercase tracking-wide">{t.orgName}</div>
             <div className="text-sm">Orden de transferencia · Depósito</div>
           </div>
-          <div className="text-right text-xs">{formatDateTime(t.createdAt)}</div>
+          <div className="text-right">
+            {t.number != null && <div className="text-2xl font-bold">Transferencia #{t.number}</div>}
+            <div className="text-xs">{formatDateTime(t.createdAt)}</div>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-x-8 gap-y-1 text-sm">
