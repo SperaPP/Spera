@@ -128,6 +128,67 @@ export async function cambiarPasswordCliente(customerId: string, newPassword: st
   return { ok: true };
 }
 
+// ── Duplicados de clientes ─────────────────────────────────────
+export type DupAccount = {
+  id: string; name: string; docType: string | null; docNumber: string | null;
+  email: string | null; phone: string | null; balance: number;
+  portalStatus: string | null; hasPortal: boolean; ventas: number; cobranzas: number; createdAt: string; active: boolean;
+};
+export type DupGroup = { key: string; accounts: DupAccount[] };
+
+/** Persona detrás del documento: un CUIT (11 díg.) y su DNI (8 díg. del medio) son la misma. */
+function personKey(digits: string | null): string | null {
+  if (!digits) return null;
+  if (digits.length === 11) return digits.slice(2, 10);
+  return digits;
+}
+
+/** Detecta clientes duplicados (mismo documento / DNI↔CUIT) con su actividad. Solo admin. */
+export async function analizarDuplicados(): Promise<{ error?: string; groups?: DupGroup[] }> {
+  const denied = await requireAdmin();
+  if (denied) return { error: denied.error };
+  const sb = await createClient();
+
+  type C = { id: string; name: string; doc_type: string | null; doc_number: string | null; doc_digits: string | null; email: string | null; phone: string | null; balance: number; portal_status: string | null; auth_user_id: string | null; created_at: string; active: boolean };
+  const all: C[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from("customers").select("id, name, doc_type, doc_number, doc_digits, email, phone, balance, portal_status, auth_user_id, created_at, active").range(from, from + 999);
+    if (!data || data.length === 0) break;
+    all.push(...(data as C[]));
+    if (data.length < 1000) break;
+  }
+
+  const byKey = new Map<string, C[]>();
+  for (const c of all) { const k = personKey(c.doc_digits); if (!k) continue; const arr = byKey.get(k) ?? []; arr.push(c); byKey.set(k, arr); }
+  const dupGroups = [...byKey.entries()].filter(([, arr]) => arr.length > 1);
+  if (dupGroups.length === 0) return { groups: [] };
+
+  const dupIds = dupGroups.flatMap(([, arr]) => arr.map((c) => c.id));
+  const ventas = new Map<string, number>(), cobranzas = new Map<string, number>();
+  for (let i = 0; i < dupIds.length; i += 300) {
+    const chunk = dupIds.slice(i, i + 300);
+    const [{ data: sv }, { data: rc }] = await Promise.all([
+      sb.from("sales").select("customer_id").in("customer_id", chunk),
+      sb.from("receipts").select("customer_id").in("customer_id", chunk),
+    ]);
+    for (const s of sv ?? []) if (s.customer_id) ventas.set(s.customer_id, (ventas.get(s.customer_id) ?? 0) + 1);
+    for (const r of rc ?? []) if (r.customer_id) cobranzas.set(r.customer_id, (cobranzas.get(r.customer_id) ?? 0) + 1);
+  }
+
+  const groups: DupGroup[] = dupGroups.map(([key, arr]) => ({
+    key,
+    accounts: arr.map((c) => ({
+      id: c.id, name: c.name, docType: c.doc_type, docNumber: c.doc_number,
+      email: c.email, phone: c.phone, balance: Number(c.balance),
+      portalStatus: c.portal_status, hasPortal: c.auth_user_id != null,
+      ventas: ventas.get(c.id) ?? 0, cobranzas: cobranzas.get(c.id) ?? 0,
+      createdAt: c.created_at, active: c.active,
+    })).sort((a, b) => (b.ventas + b.cobranzas) - (a.ventas + a.cobranzas) || a.createdAt.localeCompare(b.createdAt)),
+  })).sort((a, b) => b.accounts.length - a.accounts.length);
+
+  return { groups };
+}
+
 /** Ajuste manual del saldo de cuenta corriente (reservado a administración). */
 export async function ajustarSaldoCliente(customerId: string, delta: number, reason: string): Promise<ActionState> {
   const denied = await requireAdmin();

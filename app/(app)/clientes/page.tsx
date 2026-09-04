@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, GitMerge } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
 import { SolicitudesPortal } from "@/components/solicitudes-portal";
@@ -18,10 +18,11 @@ function relName(r: unknown): string | null {
 
 export default async function ClientesPage() {
   const sb = await createClient();
-  const [{ data: customers }, { data: pend }, { data: tipos }] = await Promise.all([
+  const [{ data: customers }, { data: pend }, { data: tipos }, { data: isAdmin }] = await Promise.all([
     sb.from("customers").select("id, name, fiscal_condition, balance, active, portal_status, customer_types(name)").order("name").limit(200),
     sb.from("customers").select("id, name, doc_type, doc_number, email, phone").eq("portal_status", "pendiente").order("created_at", { ascending: true }),
     sb.from("customer_types").select("id, name").order("name"),
+    sb.rpc("is_admin"),
   ]);
 
   // La lista principal no muestra las solicitudes pendientes (van en su sección).
@@ -37,13 +38,20 @@ export default async function ClientesPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Clientes</h1>
           <p className="mt-1 text-sm text-muted">Clientes, tipo y cuenta corriente.</p>
         </div>
-        <Link
-          href="/clientes/nuevo"
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo cliente
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {isAdmin === true && (
+            <Link href="/clientes/duplicados" className="flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+              <GitMerge className="h-4 w-4" /> Duplicados
+            </Link>
+          )}
+          <Link
+            href="/clientes/nuevo"
+            className="flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo cliente
+          </Link>
+        </div>
       </div>
 
       <SolicitudesPortal pending={pendientes} tipos={tipos ?? []} />
