@@ -27,7 +27,7 @@ export async function mainCategoryTiles(org: string): Promise<{ id: string; name
   const { data: mains } = await admin.from("main_categories").select("id, name").eq("organization_id", org).order("position").order("name");
   const out: { id: string; name: string; image: string | null }[] = [];
   for (const m of mains ?? []) {
-    const { data: p } = await admin.from("products").select("id").eq("organization_id", org).eq("main_category_id", m.id).eq("active", true).eq("has_image", true).limit(1).maybeSingle();
+    const { data: p } = await admin.from("products").select("id").eq("organization_id", org).eq("main_category_id", m.id).eq("active", true).eq("portal_visible", true).eq("has_image", true).limit(1).maybeSingle();
     let image: string | null = null;
     if (p) {
       const { data: im } = await admin.from("product_images").select("path").eq("product_id", p.id).order("is_primary", { ascending: false }).limit(1).maybeSingle();
@@ -198,9 +198,9 @@ export type PortalProduct = {
 export async function portalProduct(productId: string, org: string, list: string, warehouse: string): Promise<PortalProduct | null> {
   const admin = createAdminClient();
   const { data: p } = await admin.from("products")
-    .select("id, name, description, organization_id, active, variation_type, product_variants(id, size, color, active)")
+    .select("id, name, description, organization_id, active, portal_visible, variation_type, product_variants(id, size, color, active)")
     .eq("id", productId).maybeSingle();
-  if (!p || p.organization_id !== org || !p.active) return null;
+  if (!p || p.organization_id !== org || !p.active || p.portal_visible === false) return null;
 
   const { data: pl } = await admin.from("price_list_items")
     .select("price, promo_price").eq("product_id", productId).is("variant_id", null).eq("price_list_id", list).maybeSingle();

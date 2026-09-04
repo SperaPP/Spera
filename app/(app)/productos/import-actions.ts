@@ -120,7 +120,7 @@ const yesno = (b: boolean | null | undefined) => (b ? "Sí" : "No");
 export type ProductoExportRow = {
   producto: string; descripcion: string; categoria_principal: string; categoria: string;
   temporada: string; tela: string; tipo: string; iva: number | "";
-  activo: string; tiene_foto: string; destacado: string; estado: string;
+  activo: string; tiene_foto: string; destacado: string; portal: string; estado: string;
   talle: string; color: string; sku: string; codigo_barras: string; variante_activa: string;
   fila: number | ""; estante: number | ""; cubiculo: number | "";
   precio_mayorista: number | ""; precio_publico: number | ""; stock: number;
@@ -137,13 +137,13 @@ export async function exportarProductos(warehouseId: string): Promise<{ error?: 
   // Productos con sus catálogos relacionados.
   type Prod = {
     id: string; name: string; description: string | null; active: boolean; has_image: boolean;
-    featured: boolean; tax_rate: number; variation_type: string; lifecycle: string;
+    featured: boolean; portal_visible: boolean; tax_rate: number; variation_type: string; lifecycle: string;
     categories: unknown; main_categories: unknown; seasons: unknown; fabric_types: unknown;
   };
   const prods = new Map<string, Prod>();
   for (let from = 0; ; from += 1000) {
     const { data } = await sb.from("products")
-      .select("id, name, description, active, has_image, featured, tax_rate, variation_type, lifecycle, categories(name), main_categories(name), seasons(name), fabric_types(name)")
+      .select("id, name, description, active, has_image, featured, portal_visible, tax_rate, variation_type, lifecycle, categories(name), main_categories(name), seasons(name), fabric_types(name)")
       .order("name").range(from, from + 999);
     if (!data || data.length === 0) break;
     for (const p of data as Prod[]) prods.set(p.id, p);
@@ -201,6 +201,7 @@ export async function exportarProductos(warehouseId: string): Promise<{ error?: 
       tipo: VARIATION_LABEL[p.variation_type] ?? p.variation_type,
       iva: p.tax_rate ?? "",
       activo: yesno(p.active), tiene_foto: yesno(p.has_image), destacado: yesno(p.featured),
+      portal: yesno(p.portal_visible),
       estado: p.lifecycle === "discontinuo" ? "Discontinuo" : "Actual",
       talle: v.size ?? "", color: v.color ?? "", sku: v.sku ?? "", codigo_barras: v.barcode ?? "",
       variante_activa: yesno(v.active),

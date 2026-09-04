@@ -91,6 +91,7 @@ const editSchema = z.object({
   fabricTypeId: z.string().uuid().nullable(),
   taxRate: z.number().min(0).max(100),
   active: z.boolean(),
+  portalVisible: z.boolean(),
   lifecycle: z.enum(["actual", "discontinuo"]),
 });
 
@@ -114,6 +115,7 @@ export async function editarProducto(input: EditarProductoInput): Promise<Action
     fabric_type_id: d.fabricTypeId,
     tax_rate: d.taxRate,
     active: d.active,
+    portal_visible: d.portalVisible,
     lifecycle: d.lifecycle,
   };
   // Si se discontinúa, se apaga la sincronización con Tiendanube automáticamente.
@@ -159,6 +161,17 @@ export async function setDestacado(productId: string, value: boolean): Promise<A
   if (denied) return denied;
   const sb = await createClient();
   const { error } = await sb.from("products").update({ featured: value }).eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath(`/productos/${productId}`);
+  return { ok: true };
+}
+
+/** Publica/despublica un producto en el portal mayorista (sin afectar POS ni Tiendanube). */
+export async function setPortalVisible(productId: string, value: boolean): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { error } = await sb.from("products").update({ portal_visible: value }).eq("id", productId);
   if (error) return { error: error.message };
   revalidatePath(`/productos/${productId}`);
   return { ok: true };

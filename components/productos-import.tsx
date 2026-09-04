@@ -10,7 +10,7 @@ import {
   previewActualizacion, actualizarProductos, type ImportRow, type ImportPreview, type UpdateRow,
 } from "@/app/(app)/productos/import-actions";
 
-const EXPORT_COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "tipo", "iva", "activo", "tiene_foto", "destacado", "estado", "talle", "color", "sku", "codigo_barras", "variante_activa", "fila", "estante", "cubiculo", "precio_mayorista", "precio_publico", "stock"] as const;
+const EXPORT_COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "tipo", "iva", "activo", "tiene_foto", "destacado", "portal", "estado", "talle", "color", "sku", "codigo_barras", "variante_activa", "fila", "estante", "cubiculo", "precio_mayorista", "precio_publico", "stock"] as const;
 
 type Warehouse = { id: string; name: string };
 
@@ -210,7 +210,7 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
       {/* Alta de productos */}
       <div className="rounded-xl border border-line bg-card p-5">
         <div className="mb-1 flex items-center gap-2"><PackagePlus className="h-4 w-4 text-muted" /><h2 className="font-medium text-ink">Productos</h2></div>
-        <p className="mb-3 text-sm text-muted"><span className="font-medium text-ink">Exportar productos</span>: baja todos los productos y variantes con todos los datos (categoría, tela, temporada, IVA, activo, si tiene foto, destacado, precios, ubicación, stock). <span className="font-medium text-ink">Alta</span>: una fila por variante (se agrupan por nombre de producto); talles, colores, categorías y temporadas nuevas se crean solas; el stock inicial va al depósito elegido.</p>
+        <p className="mb-3 text-sm text-muted"><span className="font-medium text-ink">Exportar productos</span>: baja todos los productos y variantes con todos los datos (categoría, tela, temporada, IVA, activo, si tiene foto, destacado, publicado en portal, precios, ubicación, stock). <span className="font-medium text-ink">Alta</span>: una fila por variante (se agrupan por nombre de producto); talles, colores, categorías y temporadas nuevas se crean solas; el stock inicial va al depósito elegido.</p>
         <div className="flex flex-wrap items-center gap-2">
           <select value={whId} onChange={(e) => setWhId(e.target.value)} className="rounded-lg border border-line-strong bg-card px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent">
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -252,7 +252,7 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
       {/* Actualización masiva */}
       <div className="rounded-xl border border-line bg-card p-5">
         <div className="mb-1 flex items-center gap-2"><RefreshCw className="h-4 w-4 text-muted" /><h2 className="font-medium text-ink">Actualizar productos (masivo)</h2></div>
-        <p className="mb-3 text-sm text-muted">Elegí el <span className="font-medium text-ink">depósito</span>, exportá <span className="font-medium text-ink">todos los datos</span> (la columna <span className="font-medium text-ink">stock</span> es la de ese depósito), editá en el Excel y subilo. Se actualiza cada producto/variante matcheando por <span className="font-medium text-ink">SKU</span>, incluido el <span className="font-medium text-ink">stock del depósito elegido</span>. <span className="font-medium text-ink">Celda vacía = no cambia</span>. No toca la foto (se sube a mano).</p>
+        <p className="mb-3 text-sm text-muted">Elegí el <span className="font-medium text-ink">depósito</span>, exportá <span className="font-medium text-ink">todos los datos</span> (la columna <span className="font-medium text-ink">stock</span> es la de ese depósito), editá en el Excel y subilo. Se actualiza cada producto/variante matcheando por <span className="font-medium text-ink">SKU</span>, incluido el <span className="font-medium text-ink">stock del depósito elegido</span> y la publicación en el portal (columna <span className="font-medium text-ink">portal</span>, Sí/No). <span className="font-medium text-ink">Celda vacía = no cambia</span>. No toca la foto (se sube a mano).</p>
         <div className="flex flex-wrap items-center gap-2">
           <select value={whId} onChange={(e) => setWhId(e.target.value)} className="rounded-lg border border-line-strong bg-card px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent">
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}

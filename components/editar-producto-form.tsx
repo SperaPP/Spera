@@ -7,7 +7,7 @@ import { editarProducto } from "@/app/(app)/productos/actions";
 
 type Ref = { id: string; name: string };
 type Lifecycle = "actual" | "discontinuo";
-type Product = { id: string; name: string; description: string; categoryId: string; mainCategoryId: string; seasonId: string; fabricTypeId: string; taxRate: number; active: boolean; lifecycle: Lifecycle };
+type Product = { id: string; name: string; description: string; categoryId: string; mainCategoryId: string; seasonId: string; fabricTypeId: string; taxRate: number; active: boolean; portalVisible: boolean; lifecycle: Lifecycle };
 
 const input =
   "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
@@ -24,6 +24,7 @@ export function EditarProductoForm({ product, categories, mainCategories, season
   const [fabricTypeId, setFabricTypeId] = useState(product.fabricTypeId);
   const [taxRate, setTaxRate] = useState(String(product.taxRate));
   const [active, setActive] = useState(product.active);
+  const [portalVisible, setPortalVisible] = useState(product.portalVisible);
   const [lifecycle, setLifecycle] = useState<Lifecycle>(product.lifecycle);
 
   function submit() {
@@ -33,7 +34,7 @@ export function EditarProductoForm({ product, categories, mainCategories, season
         id: product.id, name: name.trim(), description: description.trim() || undefined,
         categoryId: categoryId || null, mainCategoryId: mainCategoryId || null, seasonId: seasonId || null,
         fabricTypeId: fabricTypeId || null,
-        taxRate: Number(taxRate) || 21, active, lifecycle,
+        taxRate: Number(taxRate) || 21, active, portalVisible, lifecycle,
       });
       if (r.error) { toast.error(r.error); return; }
       toast.success("Producto actualizado.");
@@ -96,6 +97,12 @@ export function EditarProductoForm({ product, categories, mainCategories, season
             <label className="flex items-center gap-2 text-sm text-ink">
               <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-[color:var(--color-accent)]" />
               Producto activo
+            </label>
+          </div>
+          <div className="flex items-end">
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={portalVisible} onChange={(e) => setPortalVisible(e.target.checked)} className="h-4 w-4 accent-[color:var(--color-accent)]" />
+              Publicar en portal mayorista
             </label>
           </div>
           <div className="sm:col-span-2">
