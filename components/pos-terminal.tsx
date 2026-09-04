@@ -6,7 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Search, ScanLine, Trash2, Plus, Minus, ShoppingCart, Wallet, Unlock, Lock, ImageOff, Ticket, X, UserCheck, UserPlus, IdCard, Receipt, Gift, RefreshCw } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/format";
-import { listarProductosPOS, buscarPorCodigo, crearVenta, validarCupon, buscarClientePorDoc, buscarClientesSimilares, crearClienteRapido, clienteConsumidorFinal } from "@/app/(app)/pos/actions";
+import { listarProductosPOS, buscarPorCodigo, crearVenta, validarCupon, buscarClientesPOS, crearClienteRapido, clienteConsumidorFinal } from "@/app/(app)/pos/actions";
 
 type GridProduct = Awaited<ReturnType<typeof listarProductosPOS>>[number];
 import { abrirCaja, cerrarCaja } from "@/app/(app)/caja/actions";
@@ -15,7 +15,7 @@ import type { PosStore } from "@/app/(app)/pos/page";
 
 type Method = { id: string; name: string; kind: string };
 type Profile = { customerTypeId: string; name: string; priceListId: string | null };
-type Customer = NonNullable<Awaited<ReturnType<typeof buscarClientePorDoc>>>;
+type Customer = Awaited<ReturnType<typeof buscarClientesPOS>>[number];
 type CartItem = { variantId: string; name: string; label: string | null; quantity: number; unitPrice: number; compareAt: number | null; image: string | null; stock: number };
 type AppliedCoupon = { id: string; code: string; type: "percent" | "amount"; value: number; minAmount: number | null };
 type Payment = { methodId: string; amount: string };
@@ -799,30 +799,39 @@ function Terminal({
 
 // ── Identificación del cliente (mostrador y mayorista) ─────────
 function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente mayorista", onWalkIn }: { customer: Customer | null; setCustomer: (c: Customer | null) => void; profiles: Profile[]; title?: string; onWalkIn?: () => void }) {
-  const [doc, setDoc] = useState("");
+  const [q, setQ] = useState("");
   const [searched, setSearched] = useState(false);
-  const [similar, setSimilar] = useState<Customer[]>([]);
+  const [matches, setMatches] = useState<Customer[]>([]);
   const [pending, start] = useTransition();
-  const [nf, setNf] = useState({ name: "", profileTypeId: profiles[0]?.customerTypeId ?? "", docType: "DNI", email: "", phone: "" });
+  const [nf, setNf] = useState({ name: "", docNumber: "", profileTypeId: profiles[0]?.customerTypeId ?? "", docType: "DNI", email: "", phone: "" });
+
+  const reset = () => { setQ(""); setSearched(false); setMatches([]); };
+  // Prefill del alta según lo que se buscó: si parece documento va al DNI, si no, al nombre.
+  function nuevoDesdeBusqueda() {
+    const s = q.trim();
+    const digits = s.replace(/\D/g, "");
+    const esDoc = digits.length >= 6 && /^[\d.\-\s/]+$/.test(s);
+    setMatches([]); setSearched(true);
+    setNf((p) => ({ ...p, name: esDoc ? "" : s, docNumber: esDoc ? s : "" }));
+  }
 
   function buscar() {
-    const d = doc.trim();
-    if (!d) return;
+    const s = q.trim();
+    if (!s) return;
     start(async () => {
-      const c = await buscarClientePorDoc(d);
-      setSearched(true); setSimilar([]);
-      if (c) { setCustomer(c); toast.success(`Cliente: ${c.name}`); return; }
-      // Sin match exacto: ¿hay alguno parecido (DNI↔CUIT)? Preguntar antes de crear.
-      const sim = await buscarClientesSimilares(d);
-      if (sim.length) setSimilar(sim);
-      else { setNf((p) => ({ ...p, name: "" })); toast.message("Cliente nuevo: completá los datos."); }
+      const res = await buscarClientesPOS(s);
+      setSearched(true);
+      if (res.length === 1) { setCustomer(res[0]); toast.success(`Cliente: ${res[0].name}`); return; }
+      setMatches(res);
+      if (res.length === 0) { nuevoDesdeBusqueda(); toast.message("Sin resultados. Cargá el cliente nuevo."); }
     });
   }
   function crear() {
     if (!nf.name.trim()) return toast.error("Ingresá el nombre.");
+    if (!nf.docNumber.trim()) return toast.error("Ingresá el DNI/CUIT.");
     if (!nf.profileTypeId) return toast.error("Elegí un perfil.");
     start(async () => {
-      const r = await crearClienteRapido({ docType: nf.docType, docNumber: doc.trim(), name: nf.name, customerTypeId: nf.profileTypeId, email: nf.email, phone: nf.phone });
+      const r = await crearClienteRapido({ docType: nf.docType, docNumber: nf.docNumber.trim(), name: nf.name, customerTypeId: nf.profileTypeId, email: nf.email, phone: nf.phone });
       if (!r.ok) { toast.error(r.error); return; }
       setCustomer(r.customer); toast.success("Cliente creado.");
     });
@@ -835,7 +844,7 @@ function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente ma
         <div className="flex items-center gap-2">
           <UserCheck className="h-4 w-4 text-accent" />
           <span className="text-sm font-medium text-ink">{customer.name}</span>
-          <button onClick={() => { setCustomer(null); setDoc(""); setSearched(false); setSimilar([]); }} className="ml-auto text-xs text-accent hover:underline">Cambiar</button>
+          <button onClick={() => { setCustomer(null); reset(); }} className="ml-auto text-xs text-accent hover:underline">Cambiar</button>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
           <span>{customer.docType ?? "Doc"} {customer.docNumber}</span>
@@ -853,11 +862,10 @@ function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente ma
       <div className="mb-2 flex items-center gap-2">
         <IdCard className="h-4 w-4 text-muted" />
         <span className="text-sm font-medium text-ink">{title}</span>
-        <span className="ml-auto text-xs text-warn">DNI/CUIT obligatorio</span>
       </div>
       <div className="flex items-center gap-2">
-        <input value={doc} onChange={(e) => { setDoc(e.target.value); setSearched(false); setSimilar([]); }} onKeyDown={(e) => { if (e.key === "Enter") buscar(); }} placeholder="DNI o CUIT" className={input} />
-        <button onClick={buscar} disabled={pending || !doc.trim()} className="shrink-0 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-50">Buscar</button>
+        <input value={q} onChange={(e) => { setQ(e.target.value); setSearched(false); setMatches([]); }} onKeyDown={(e) => { if (e.key === "Enter") buscar(); }} placeholder="DNI, CUIT, nombre o email" className={input} />
+        <button onClick={buscar} disabled={pending || !q.trim()} className="shrink-0 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-50">Buscar</button>
       </div>
       {onWalkIn && (
         <button onClick={onWalkIn} className="mt-2 w-full rounded-lg border border-dashed border-line-strong px-3 py-2 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent">
@@ -865,36 +873,40 @@ function ClienteMayorista({ customer, setCustomer, profiles, title = "Cliente ma
         </button>
       )}
 
-      {similar.length > 0 && (
+      {matches.length > 0 && (
         <div className="mt-3 space-y-2 border-t border-line pt-3">
-          <div className="text-xs font-medium text-warn">Encontramos un cliente con un documento parecido. ¿Es este, o es otro?</div>
-          {similar.map((s) => (
-            <button key={s.id} onClick={() => { setCustomer(s); setSimilar([]); toast.success(`Cliente: ${s.name}`); }} className="flex w-full items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-left transition-colors hover:border-accent hover:bg-accent-soft">
+          <div className="text-xs font-medium text-muted">Elegí el cliente:</div>
+          {matches.map((s) => (
+            <button key={s.id} onClick={() => { setCustomer(s); setMatches([]); toast.success(`Cliente: ${s.name}`); }} className="flex w-full items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-left transition-colors hover:border-accent hover:bg-accent-soft">
               <UserCheck className="h-4 w-4 shrink-0 text-accent" />
-              <span className="min-w-0 flex-1"><span className="text-sm font-medium text-ink">{s.name}</span><span className="ml-2 text-xs text-muted">{s.docType} {s.docNumber}</span></span>
-              <span className="shrink-0 text-xs font-medium text-accent">Es este</span>
+              <span className="min-w-0 flex-1">
+                <span className="text-sm font-medium text-ink">{s.name}</span>
+                <span className="ml-2 text-xs text-muted">{s.docType} {s.docNumber}{s.email ? ` · ${s.email}` : ""}</span>
+              </span>
+              <span className="shrink-0 text-xs font-medium text-accent">Elegir</span>
             </button>
           ))}
-          <button onClick={() => { setSimilar([]); setSearched(true); setNf((p) => ({ ...p, name: "" })); }} className="text-xs font-medium text-muted hover:text-ink">No, es otro cliente → crear nuevo</button>
+          <button onClick={nuevoDesdeBusqueda} className="text-xs font-medium text-muted hover:text-ink">No está en la lista → crear nuevo</button>
         </div>
       )}
 
-      {searched && similar.length === 0 && (
+      {searched && matches.length === 0 && (
         <div className="mt-3 space-y-2 border-t border-line pt-3">
           <div className="flex items-center gap-1.5 text-xs text-muted"><UserPlus className="h-3.5 w-3.5" /> Cliente nuevo</div>
           <input value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} placeholder="Nombre / Razón social" className={input} />
           <div className="flex gap-2">
-            <select value={nf.docType} onChange={(e) => setNf({ ...nf, docType: e.target.value })} className={`${input} ${profiles.length > 1 ? "w-24" : "flex-1"}`}>
+            <select value={nf.docType} onChange={(e) => setNf({ ...nf, docType: e.target.value })} className={`${input} w-24`}>
               <option value="DNI">DNI</option>
               <option value="CUIT">CUIT</option>
               <option value="CUIL">CUIL</option>
             </select>
-            {profiles.length > 1 && (
-              <select value={nf.profileTypeId} onChange={(e) => setNf({ ...nf, profileTypeId: e.target.value })} className={`${input} flex-1`}>
-                {profiles.map((p) => <option key={p.customerTypeId} value={p.customerTypeId}>{p.name}</option>)}
-              </select>
-            )}
+            <input value={nf.docNumber} onChange={(e) => setNf({ ...nf, docNumber: e.target.value })} placeholder="Número de documento" className={`${input} flex-1`} />
           </div>
+          {profiles.length > 1 && (
+            <select value={nf.profileTypeId} onChange={(e) => setNf({ ...nf, profileTypeId: e.target.value })} className={input}>
+              {profiles.map((p) => <option key={p.customerTypeId} value={p.customerTypeId}>{p.name}</option>)}
+            </select>
+          )}
           <div className="flex gap-2">
             <input value={nf.email} onChange={(e) => setNf({ ...nf, email: e.target.value })} placeholder="Email (opc.)" className={input} />
             <input value={nf.phone} onChange={(e) => setNf({ ...nf, phone: e.target.value })} placeholder="Tel. (opc.)" className={input} />

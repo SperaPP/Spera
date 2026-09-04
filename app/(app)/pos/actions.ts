@@ -224,6 +224,25 @@ export async function buscarClientesSimilares(doc: string): Promise<ShapedCustom
   return [...out.values()];
 }
 
+/** Busca clientes por DNI/CUIT, nombre o email (para el POS). Devuelve candidatos. */
+export async function buscarClientesPOS(query: string): Promise<ShapedCustomer[]> {
+  const q = (query ?? "").trim();
+  if (q.length < 2) return [];
+  const sb = await createClient();
+  const norm = q.replace(/\D/g, "");
+  const out = new Map<string, ShapedCustomer>();
+
+  const reqs = [];
+  // Por documento (dígitos): exacto o contenido (DNI ⊂ CUIT y viceversa).
+  if (norm.length >= 6) reqs.push(sb.from("customers").select(CUSTOMER_SEL).eq("active", true).like("doc_digits", `%${norm}%`).limit(8));
+  // Por nombre y por email (consultas separadas: valores como parámetro, sin inyección).
+  reqs.push(sb.from("customers").select(CUSTOMER_SEL).eq("active", true).ilike("name", `%${q}%`).limit(8));
+  reqs.push(sb.from("customers").select(CUSTOMER_SEL).eq("active", true).ilike("email", `%${q}%`).limit(8));
+
+  for (const r of await Promise.all(reqs)) for (const c of r.data ?? []) out.set(c.id, shapeCustomer(c));
+  return [...out.values()].slice(0, 12);
+}
+
 /** Crea un cliente mayorista rápido desde el POS y lo devuelve listo para usar. */
 export async function crearClienteRapido(input: {
   docType: string; docNumber: string; name: string; customerTypeId: string; email?: string; phone?: string;
