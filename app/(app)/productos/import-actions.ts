@@ -206,6 +206,34 @@ export async function exportarProductos(): Promise<{ error?: string; rows?: Prod
   return { rows };
 }
 
+// ── ACTUALIZACIÓN MASIVA (matchea por SKU) ─────────────────────
+export type UpdateRow = Record<string, string>;
+
+/** Vista previa: cuántos SKU del archivo existen (se actualizan) y cuántos no. */
+export async function previewActualizacion(skus: string[]): Promise<{ error?: string; enBase?: number; noEnBase?: number }> {
+  const denied = await requireCan("productos", true);
+  if (denied) return { error: denied.error };
+  const sb = await createClient();
+  const uniq = [...new Set(skus.map((s) => (s ?? "").trim()).filter(Boolean))];
+  let enBase = 0;
+  for (let i = 0; i < uniq.length; i += 500) {
+    const { data } = await sb.from("product_variants").select("sku").in("sku", uniq.slice(i, i + 500));
+    enBase += (data ?? []).length;
+  }
+  return { enBase, noEnBase: uniq.length - enBase };
+}
+
+/** Actualiza productos/variantes existentes (matchea por SKU). Celda vacía = no cambia. */
+export async function actualizarProductos(rows: UpdateRow[]): Promise<ActionState & { actualizados?: number; sinMatch?: number }> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("update_products", { p_rows: rows });
+  if (error) return { error: error.message };
+  const res = (data ?? {}) as { actualizados?: number; sin_match?: number };
+  return { ok: true, actualizados: res.actualizados, sinMatch: res.sin_match };
+}
+
 // ── ALTA DE PRODUCTOS ──────────────────────────────────────────
 export type ImportRow = {
   producto: string; descripcion: string;

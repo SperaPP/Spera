@@ -3,10 +3,11 @@
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { Download, Upload, Boxes, MapPin, PackagePlus, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Download, Upload, Boxes, MapPin, PackagePlus, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import {
   exportarStock, importarStock, exportarUbicaciones, importarUbicaciones,
-  previewProductos, importarProductos, exportarProductos, type ImportRow, type ImportPreview,
+  previewProductos, importarProductos, exportarProductos,
+  previewActualizacion, actualizarProductos, type ImportRow, type ImportPreview, type UpdateRow,
 } from "@/app/(app)/productos/import-actions";
 
 const EXPORT_COLS = ["producto", "descripcion", "categoria_principal", "categoria", "temporada", "tela", "tipo", "iva", "activo", "tiene_foto", "destacado", "estado", "talle", "color", "sku", "codigo_barras", "variante_activa", "fila", "estante", "cubiculo", "precio_mayorista", "precio_publico", "stock_total"] as const;
@@ -24,9 +25,11 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
   const prodInput = useRef<HTMLInputElement>(null);
   const stockInput = useRef<HTMLInputElement>(null);
   const ubicInput = useRef<HTMLInputElement>(null);
+  const updInput = useRef<HTMLInputElement>(null);
 
   const [prodRows, setProdRows] = useState<ImportRow[] | null>(null);
   const [prodPrev, setProdPrev] = useState<ImportPreview | null>(null);
+  const [updPrev, setUpdPrev] = useState<{ rows: UpdateRow[]; enBase: number; noEnBase: number } | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
 
   const whName = warehouses.find((w) => w.id === whId)?.name ?? "deposito";
@@ -40,6 +43,43 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Productos");
       XLSX.writeFile(wb, "productos.xlsx");
       toast.success(`Exportadas ${r.rows.length} variantes de ${new Set(r.rows.map((x) => x.producto)).size} productos.`);
+    });
+  }
+
+  // ── Actualización masiva ─────────────────────────────────────
+  function elegirActualizacion(file: File) {
+    start(async () => {
+      let rows: UpdateRow[];
+      try {
+        const wb = XLSX.read(await file.arrayBuffer());
+        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]]);
+        rows = json.map((raw) => {
+          const m: Record<string, string> = {};
+          for (const k of Object.keys(raw)) { const nk = norm(k); m[ALIAS[nk] ?? nk] = raw[k] == null ? "" : String(raw[k]).trim(); }
+          return m;
+        }).filter((r) => r.sku);
+      } catch { toast.error("No se pudo leer el archivo."); return; }
+      if (rows.length === 0) { toast.error("El archivo no tiene filas con SKU."); return; }
+      const r = await previewActualizacion(rows.map((x) => x.sku));
+      if (r.error) { toast.error(r.error); return; }
+      setUpdPrev({ rows, enBase: r.enBase ?? 0, noEnBase: r.noEnBase ?? 0 });
+    });
+  }
+  function confirmarActualizacion() {
+    if (!updPrev) return;
+    start(async () => {
+      const rows = updPrev.rows;
+      const BATCH = 300;
+      let totV = 0;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        setProgress(`Actualizando ${i + 1}–${Math.min(i + BATCH, rows.length)} de ${rows.length}…`);
+        const r = await actualizarProductos(rows.slice(i, i + BATCH));
+        if (r.error) { setProgress(null); toast.error(`Se cortó: ${r.error}`); return; }
+        totV += r.actualizados ?? 0;
+      }
+      setProgress(null);
+      toast.success(`Actualizadas ${totV} variantes.`);
+      setUpdPrev(null);
     });
   }
 
@@ -203,6 +243,28 @@ export function ProductosImport({ warehouses }: { warehouses: Warehouse[] }) {
               {progress && <span className="text-xs font-medium text-accent">{progress}</span>}
               {!progress && bloqueado && prodPrev.variantes > 0 && <span className="text-xs text-danger">Resolvé los SKU repetidos antes de importar.</span>}
               {!progress && prodPrev.variantes > 500 && !bloqueado && <span className="text-xs text-muted">Se importa por lotes; puede tardar un rato.</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Actualización masiva */}
+      <div className="rounded-xl border border-line bg-card p-5">
+        <div className="mb-1 flex items-center gap-2"><RefreshCw className="h-4 w-4 text-muted" /><h2 className="font-medium text-ink">Actualizar productos (masivo)</h2></div>
+        <p className="mb-3 text-sm text-muted">Exportá <span className="font-medium text-ink">todos los datos</span>, editá lo que necesites en el Excel y subilo acá. Se actualiza cada producto/variante matcheando por <span className="font-medium text-ink">SKU</span>. <span className="font-medium text-ink">Celda vacía = no cambia</span> ese dato. No toca la foto (se sube a mano) ni el stock (usá la sección de abajo).</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={expProductos} disabled={pending} className={btn}><Download className="h-4 w-4" /> Exportar para editar</button>
+          <input ref={updInput} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) elegirActualizacion(f); e.target.value = ""; }} />
+          <button onClick={() => updInput.current?.click()} disabled={pending} className={btnPrimary}><Upload className="h-4 w-4" /> Subir Excel editado</button>
+        </div>
+
+        {updPrev && (
+          <div className="mt-4 rounded-lg border border-line bg-canvas p-4">
+            <p className="text-sm text-muted">Se van a actualizar <span className="font-semibold text-ink">{updPrev.enBase.toLocaleString("es-AR")}</span> variantes (matchean por SKU).{updPrev.noEnBase > 0 && <> <span className="text-warn">{updPrev.noEnBase.toLocaleString("es-AR")} SKU del archivo no existen y se ignoran.</span></>}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <button onClick={confirmarActualizacion} disabled={pending || updPrev.enBase === 0} className={btnPrimary}><CheckCircle2 className="h-4 w-4" /> {pending ? "Actualizando…" : "Confirmar actualización"}</button>
+              <button onClick={() => setUpdPrev(null)} disabled={pending} className={btn}>Cancelar</button>
+              {progress && <span className="text-xs font-medium text-accent">{progress}</span>}
             </div>
           </div>
         )}
