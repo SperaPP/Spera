@@ -34,11 +34,14 @@ export async function exportarStock(warehouseId: string): Promise<{ error?: stri
   const sb = await createClient();
   const vars = await allVariants(sb);
 
+  // Se trae TODO el stock del depósito paginado (no con .in por variante: con
+  // catálogos grandes la URL se pasa del límite y volvía vacío → stock 0).
   const stockMap = new Map<string, number>();
-  const ids = vars.map((v) => v.id);
-  for (let i = 0; i < ids.length; i += 1000) {
-    const { data } = await sb.from("stock").select("variant_id, quantity").eq("warehouse_id", warehouseId).in("variant_id", ids.slice(i, i + 1000));
-    for (const s of data ?? []) stockMap.set(s.variant_id, Number(s.quantity));
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from("stock").select("variant_id, quantity").eq("warehouse_id", warehouseId).range(from, from + 999);
+    if (!data || data.length === 0) break;
+    for (const s of data) stockMap.set(s.variant_id, Number(s.quantity));
+    if (data.length < 1000) break;
   }
   return { rows: vars.filter((v) => v.sku).map((v) => ({ sku: v.sku!, producto: v.producto, variante: v.variante, cantidad: stockMap.get(v.id) ?? 0 })) };
 }
@@ -174,12 +177,15 @@ export async function exportarProductos(warehouseId: string): Promise<{ error?: 
     if (data.length < 1000) break;
   }
 
-  // Stock por variante EN EL DEPÓSITO ELEGIDO.
+  // Stock por variante EN EL DEPÓSITO ELEGIDO. Se trae TODO el stock del depósito
+  // paginado (no con .in por variante: con catálogos grandes la URL se pasa del
+  // límite y volvía vacío → stock 0).
   const stockByVar = new Map<string, number>();
-  const varIds = vars.map((v) => v.id);
-  for (let i = 0; i < varIds.length; i += 1000) {
-    const { data } = await sb.from("stock").select("variant_id, quantity").eq("warehouse_id", warehouseId).in("variant_id", varIds.slice(i, i + 1000));
-    for (const s of data ?? []) stockByVar.set(s.variant_id, Number(s.quantity));
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from("stock").select("variant_id, quantity").eq("warehouse_id", warehouseId).range(from, from + 999);
+    if (!data || data.length === 0) break;
+    for (const s of data) stockByVar.set(s.variant_id, Number(s.quantity));
+    if (data.length < 1000) break;
   }
 
   const rows: ProductoExportRow[] = [];
