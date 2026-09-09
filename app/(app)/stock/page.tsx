@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Boxes, ClipboardCheck } from "lucide-react";
+import { Boxes, ClipboardCheck, PackagePlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getPermissions, getStoreScope } from "@/lib/auth";
 import { canView, canEdit } from "@/lib/permissions";
@@ -87,9 +87,14 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
           <p className="mt-1 text-sm text-muted">Existencias por depósito. Si hay stock <span className="font-medium text-warn">reservado</span> (comprometido en pedidos o transferencias sin cerrar), se muestra cuánto queda <span className="font-medium text-ink">disponible</span> para vender. Clic en un producto para ajustar.</p>
         </div>
         {canControl && (
-          <Link href="/stock/control" className="flex shrink-0 items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
-            <ClipboardCheck className="h-4 w-4" /> Control de stock
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link href="/stock/inicial" className="flex items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+              <PackagePlus className="h-4 w-4" /> Stock inicial
+            </Link>
+            <Link href="/stock/control" className="flex items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+              <ClipboardCheck className="h-4 w-4" /> Control de stock
+            </Link>
+          </div>
         )}
       </div>
 
