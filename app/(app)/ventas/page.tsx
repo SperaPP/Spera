@@ -37,18 +37,29 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
     controlado: { label: "Controlado", cls: "bg-accent-soft text-accent" },
     pendiente: { label: "En preparación", cls: "bg-warn-bg text-warn" },
   };
-  let req = sb.from("sales").select(sel).order("created_at", { ascending: false }).limit(100);
-
-  let custIds: string[] | null = null;
+  // Búsqueda: por N° de venta, por cliente, o por PRENDA (nombre de producto en el
+  // pedido). Para la prenda, un inner-join a sale_items trae los pedidos recientes
+  // que la contienen. Se combina todo con un OR sobre las ventas.
+  const NO_MATCH = "00000000-0000-0000-0000-000000000000";
   const isNum = /^\d+$/.test(query);
+  let orClause: string | null = null;
   if (query) {
-    const { data: custs } = await sb.from("customers").select("id").ilike("name", `%${query}%`).limit(50);
-    custIds = (custs ?? []).map((c) => c.id);
-    if (isNum && custIds.length) req = req.or(`number.eq.${Number(query)},customer_id.in.(${custIds.join(",")})`);
-    else if (isNum) req = req.eq("number", Number(query));
-    else if (custIds.length) req = req.in("customer_id", custIds);
-    else req = req.eq("id", "00000000-0000-0000-0000-000000000000");
+    const [{ data: custs }, { data: prodSales }] = await Promise.all([
+      sb.from("customers").select("id").ilike("name", `%${query}%`).limit(50),
+      sb.from("sales").select("id, sale_items!inner(product_name)")
+        .ilike("sale_items.product_name", `%${query}%`).order("created_at", { ascending: false }).limit(150),
+    ]);
+    const custIds = (custs ?? []).map((c) => c.id);
+    const saleIds = [...new Set((prodSales ?? []).map((s) => s.id as string))];
+    const parts: string[] = [];
+    if (isNum) parts.push(`number.eq.${Number(query)}`);
+    if (custIds.length) parts.push(`customer_id.in.(${custIds.join(",")})`);
+    if (saleIds.length) parts.push(`id.in.(${saleIds.join(",")})`);
+    orClause = parts.length ? parts.join(",") : null;
   }
+
+  let req = sb.from("sales").select(sel).order("created_at", { ascending: false }).limit(100);
+  if (query) req = orClause ? req.or(orClause) : req.eq("id", NO_MATCH);
 
   // Filtros
   if (scopeStore) req = req.eq("store_id", scopeStore);
@@ -66,12 +77,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   // Disponibles para "Imprimir todos": sin imprimir y no anuladas, según filtros (menos "impreso").
   let availReq = sb.from("sales").select("id", { count: "exact", head: true }).is("armado_printed_at", null).neq("status", "anulada");
   if (scopeStore) availReq = availReq.eq("store_id", scopeStore);
-  if (query) {
-    if (isNum && custIds!.length) availReq = availReq.or(`number.eq.${Number(query)},customer_id.in.(${custIds!.join(",")})`);
-    else if (isNum) availReq = availReq.eq("number", Number(query));
-    else if (custIds!.length) availReq = availReq.in("customer_id", custIds!);
-    else availReq = availReq.eq("id", "00000000-0000-0000-0000-000000000000");
-  }
+  if (query) availReq = orClause ? availReq.or(orClause) : availReq.eq("id", NO_MATCH);
   if (store) availReq = availReq.eq("store_id", store);
   if (desde) availReq = availReq.gte("created_at", `${desde}T00:00:00${AR_OFFSET}`);
   if (hasta) availReq = availReq.lte("created_at", `${hasta}T23:59:59${AR_OFFSET}`);
@@ -102,7 +108,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
       </div>
 
       <div className="mb-3">
-        <ProductSearch basePath="/ventas" placeholder="Buscar por N° de venta o cliente…" />
+        <ProductSearch basePath="/ventas" placeholder="Buscar por N° de venta, cliente o prenda…" />
       </div>
       <div className="mb-4">
         <VentasFilters stores={stores ?? []} />
