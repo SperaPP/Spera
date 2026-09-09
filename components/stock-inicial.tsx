@@ -101,10 +101,12 @@ export function StockInicial({ warehouses, categories, canApply }: { warehouses:
   const allVariants = scope.flatMap((p) => p.variants);
   const toAdd = allVariants.filter((v) => (added[v.variantId] ?? 0) > 0);
   const totalUnits = allVariants.reduce((s, v) => s + (added[v.variantId] ?? 0), 0);
+  const whName = warehouses.find((w) => w.id === whId)?.name ?? "—";
 
   function aplicar() {
     if (toAdd.length === 0) return toast.error("No escaneaste ninguna unidad para sumar.");
-    if (!confirm(`Vas a SUMAR ${totalUnits} unidad(es) al stock actual de ${toAdd.length} variante(s). Esta acción se acumula sobre lo existente. ¿Confirmar?`)) return;
+    // El depósito va bien grande: acá es donde es fácil equivocarse de sucursal.
+    if (!confirm(`⚠️  REVISÁ EL DEPÓSITO\n\nVas a SUMAR ${totalUnits} unidad(es) (${toAdd.length} variantes) a:\n\n➡   ${whName.toUpperCase()}\n\nSe acumula sobre lo que ya haya en ese depósito y no se puede deshacer con un botón. ¿Es la sucursal correcta?`)) return;
     start(async () => {
       const r = await aplicarStockInicial({ warehouseId: whId, counts: allVariants.map((v) => ({ variantId: v.variantId, quantity: added[v.variantId] ?? 0 })) });
       if (r.error) { toast.error(r.error); return; }
@@ -117,7 +119,6 @@ export function StockInicial({ warehouses, categories, canApply }: { warehouses:
 
   function imprimir() {
     if (scope.length === 0 && unknownEntries.length === 0) return toast.error("No hay nada para imprimir.");
-    const whName = warehouses.find((w) => w.id === whId)?.name ?? "—";
     const fecha = new Date().toLocaleString("es-AR");
     const rows = scope.flatMap((p) => p.variants.map((v) => {
       const a = added[v.variantId] ?? 0;
@@ -235,6 +236,7 @@ export function StockInicial({ warehouses, categories, canApply }: { warehouses:
           )}
 
           <div className={`${card} flex flex-wrap items-center gap-3`}>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-accent-soft px-2.5 py-1 text-sm font-semibold text-accent"><PackagePlus className="h-4 w-4" /> {whName}</span>
             <div className="text-sm">
               <span className="text-muted">Productos: </span><span className="font-medium text-ink">{scope.length}</span>
               <span className="ml-4 text-muted">Unidades a sumar: </span><span className={`font-medium ${totalUnits ? "text-ok" : "text-muted"}`}>{totalUnits}</span>
