@@ -42,12 +42,11 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
     }
     const idList = [...ids].slice(0, PAGE_SIZE);
     if (idList.length) {
-      const { data } = await sb.from("products").select("id, name").in("id", idList).order("sku_order", { ascending: false, nullsFirst: false });
+      const { data } = await sb.from("products").select("id, name").in("id", idList).order("name");
       rows = (data ?? []) as Row[];
     }
   } else {
-    // Orden: SKU numérico más alto primero (los más nuevos arriba).
-    const { data } = await sb.from("products").select("id, name").order("sku_order", { ascending: false, nullsFirst: false }).limit(PAGE_SIZE);
+    const { data } = await sb.from("products").select("id, name").order("created_at", { ascending: false }).limit(PAGE_SIZE);
     rows = (data ?? []) as Row[];
   }
 
