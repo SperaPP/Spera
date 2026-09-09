@@ -68,9 +68,10 @@ export default async function ProductosPage({
     else if (estado === "inactivo") req = req.eq("active", false);
     if (ciclo === "actual") req = req.eq("lifecycle", "actual");
     else if (ciclo === "discontinuo") req = req.eq("lifecycle", "discontinuo");
+    // Orden: SKU numérico más alto primero (los más nuevos arriba).
     const { data } = query
-      ? await req.order("name").limit(PAGE_SIZE)
-      : await req.order("created_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+      ? await req.order("sku_order", { ascending: false, nullsFirst: false }).order("name").limit(PAGE_SIZE)
+      : await req.order("sku_order", { ascending: false, nullsFirst: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     rows = (data ?? []) as Row[];
   }
 
