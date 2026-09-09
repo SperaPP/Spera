@@ -3,6 +3,7 @@ import { Plus, ArrowLeftRight, ArrowRight, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getScopeWarehouseId } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
+import { ProductSearch } from "@/components/product-search";
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -16,16 +17,39 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   cancelada: { label: "Cancelada", cls: "bg-danger-bg text-danger" },
 };
 
-export default async function TransferenciasPage() {
+export default async function TransferenciasPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams;
+  const query = (q ?? "").trim();
   const sb = await createClient();
   // Acotado por sucursal: solo transferencias donde participa su depósito (origen o destino).
   const whId = await getScopeWarehouseId();
+
+  // Búsqueda por N° de transferencia o por PRENDA (nombre de producto en un ítem).
+  // Para la prenda, un inner-join anidado trae las transferencias que la contienen.
+  const NO_MATCH = "00000000-0000-0000-0000-000000000000";
+  const isNum = /^\d+$/.test(query);
+  let orClause: string | null = null;
+  if (query) {
+    const { data: hits } = await sb
+      .from("stock_transfers")
+      .select("id, stock_transfer_items!inner(product_variants!inner(products!inner(name)))")
+      .ilike("stock_transfer_items.product_variants.products.name", `%${query}%`)
+      .order("created_at", { ascending: false })
+      .limit(150);
+    const ids = [...new Set((hits ?? []).map((t) => t.id as string))];
+    const parts: string[] = [];
+    if (isNum) parts.push(`number.eq.${Number(query)}`);
+    if (ids.length) parts.push(`id.in.(${ids.join(",")})`);
+    orClause = parts.length ? parts.join(",") : null;
+  }
+
   let req = sb
     .from("stock_transfers")
     .select("id, number, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
     .order("created_at", { ascending: false })
     .limit(100);
   if (whId) req = req.or(`from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`);
+  if (query) req = orClause ? req.or(orClause) : req.eq("id", NO_MATCH);
   const { data } = await req;
 
   const rows = data ?? [];
@@ -46,13 +70,17 @@ export default async function TransferenciasPage() {
         </Link>
       </div>
 
+      <div className="mb-4">
+        <ProductSearch basePath="/transferencias" placeholder="Buscar por N° o prenda…" />
+      </div>
+
       {rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line-strong bg-card py-16 text-center">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent">
             <ArrowLeftRight className="h-5 w-5" />
           </span>
-          <p className="mt-3 font-medium text-ink">No hay transferencias</p>
-          <p className="mt-1 text-sm text-muted">Creá una para mover stock entre depósitos.</p>
+          <p className="mt-3 font-medium text-ink">{query ? `Sin resultados para "${query}"` : "No hay transferencias"}</p>
+          <p className="mt-1 text-sm text-muted">{query ? "Probá con otro nombre de prenda o número." : "Creá una para mover stock entre depósitos."}</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-card">
