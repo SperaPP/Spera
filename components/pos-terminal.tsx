@@ -394,8 +394,8 @@ function Terminal({
     const raw = belowMin ? 0 : (c.type === "percent" ? Math.round((subtotal * c.value) / 100) : c.value);
     return { c, belowMin, raw };
   });
-  const anyCouponBelowMin = !wholesale && couponEval.some((e) => e.belowMin);
-  const rawDiscount = !wholesale ? couponEval.reduce((a, e) => a + e.raw, 0) : 0;
+  const anyCouponBelowMin = couponEval.some((e) => e.belowMin);
+  const rawDiscount = couponEval.reduce((a, e) => a + e.raw, 0);
   const discount = Math.min(rawDiscount, subtotal);
   const total = Math.max(0, subtotal - discount);
   const paid = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
@@ -515,7 +515,7 @@ function Terminal({
         cashSessionId: store.sessionId!,
         customerId: customer!.id,
         priceListId,
-        couponIds: !wholesale ? coupons.map((c) => c.id) : [],
+        couponIds: coupons.map((c) => c.id),
         customerData: null,
         items: cart.map((i) => ({ variantId: i.variantId, productName: i.name, variantLabel: i.label, quantity: i.quantity, unitPrice: i.unitPrice })),
         payments: payments.filter((p) => p.methodId && Number(p.amount) > 0).map((p) => ({ paymentMethodId: p.methodId, amount: Number(p.amount), surcharge: 0 })),
@@ -683,7 +683,7 @@ function Terminal({
               <span className="tabular-nums text-ink">{formatMoney(subtotal)}</span>
             </div>
 
-            {!wholesale && (
+            {(
               <div className="mt-2.5 space-y-2">
                 {couponEval.map((e) => (
                   <div key={e.c.id}>

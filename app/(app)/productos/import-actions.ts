@@ -123,7 +123,8 @@ export type ProductoExportRow = {
   activo: string; tiene_foto: string; destacado: string; portal: string; estado: string;
   talle: string; color: string; sku: string; codigo_barras: string; variante_activa: string;
   fila: number | ""; estante: number | ""; cubiculo: number | "";
-  precio_mayorista: number | ""; precio_publico: number | ""; stock: number;
+  precio_mayorista: number | ""; precio_publico: number | "";
+  promo_mayorista: number | ""; promo_publico: number | ""; stock: number;
 };
 
 /** Exporta TODOS los productos y variantes con todos sus datos (una fila por variante).
@@ -155,12 +156,16 @@ export async function exportarProductos(warehouseId: string): Promise<{ error?: 
   const mayId = (lists ?? []).find((l) => l.name === "Mayorista")?.id ?? null;
   const pubId = (lists ?? []).find((l) => l.name === "Publico")?.id ?? null;
   const priceMay = new Map<string, number>(), pricePub = new Map<string, number>();
-  for (const [listId, target] of [[mayId, priceMay], [pubId, pricePub]] as const) {
+  const promoMay = new Map<string, number>(), promoPub = new Map<string, number>();
+  for (const [listId, pTarget, prTarget] of [[mayId, priceMay, promoMay], [pubId, pricePub, promoPub]] as const) {
     if (!listId) continue;
     for (let from = 0; ; from += 1000) {
-      const { data } = await sb.from("price_list_items").select("product_id, price").eq("price_list_id", listId).is("variant_id", null).range(from, from + 999);
+      const { data } = await sb.from("price_list_items").select("product_id, price, promo_price").eq("price_list_id", listId).is("variant_id", null).range(from, from + 999);
       if (!data || data.length === 0) break;
-      for (const r of data) (target as Map<string, number>).set(r.product_id, Number(r.price));
+      for (const r of data) {
+        (pTarget as Map<string, number>).set(r.product_id, Number(r.price));
+        if (r.promo_price != null) (prTarget as Map<string, number>).set(r.product_id, Number(r.promo_price));
+      }
       if (data.length < 1000) break;
     }
   }
@@ -207,6 +212,7 @@ export async function exportarProductos(warehouseId: string): Promise<{ error?: 
       variante_activa: yesno(v.active),
       fila: v.loc_fila ?? "", estante: v.loc_estante ?? "", cubiculo: v.loc_cubiculo ?? "",
       precio_mayorista: priceMay.get(v.product_id) ?? "", precio_publico: pricePub.get(v.product_id) ?? "",
+      promo_mayorista: promoMay.get(v.product_id) ?? "", promo_publico: promoPub.get(v.product_id) ?? "",
       stock: stockByVar.get(v.id) ?? 0,
     });
   }
