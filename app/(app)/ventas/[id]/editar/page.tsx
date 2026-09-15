@@ -21,15 +21,17 @@ export default async function EditarPedidoPage({ params }: { params: Promise<{ i
   const store = rel<{ name: string; warehouse_id: string | null }>(sale.stores);
   const warehouseId = store?.warehouse_id ?? null;
 
-  const { count: allocCount } = await sb.from("receipt_allocations").select("*", { count: "exact", head: true }).eq("sale_id", id);
+  // Pagos reales en caja (medio ≠ cuenta corriente): bloquean la edición. Una cobranza
+  // de cuenta corriente NO bloquea (el saldo se reajusta y la cobranza se conserva).
+  const { data: pays } = await sb.from("sale_payments").select("amount, payment_methods(kind)").eq("sale_id", id);
+  const hasRealPay = (pays ?? []).some((p) => Number(p.amount) > 0 && rel<{ kind: string }>(p.payment_methods)?.kind !== "cuenta_corriente");
 
   const reason =
     isAdmin !== true ? "Solo un administrador puede editar pedidos."
     : sale.status !== "completada" ? "Este pedido no está activo."
-    : sale.fulfillment_status !== "pendiente" ? "Solo se puede editar un pedido pendiente (todavía sin controlar)."
+    : sale.fulfillment_status === "despachado" || sale.fulfillment_status === "entregado" ? "No se puede editar un pedido ya despachado o entregado."
     : sale.channel === "cambio" || sale.channel === "tiendanube" ? "Este pedido no se puede editar (cambio o TiendaNube)."
-    : Number(sale.paid_amount) !== 0 ? "El pedido ya tiene pagos cobrados; revertí la cobranza antes de editar."
-    : (allocCount ?? 0) > 0 ? "El pedido ya tiene una cobranza imputada; revertila antes de editar."
+    : hasRealPay ? "El pedido tiene pagos en caja (efectivo/tarjeta); revertí esos pagos antes de editar."
     : null;
 
   if (reason) {
