@@ -4,6 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getScopeWarehouseId } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 50;
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -17,9 +20,10 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   cancelada: { label: "Cancelada", cls: "bg-danger-bg text-danger" },
 };
 
-export default async function TransferenciasPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
+export default async function TransferenciasPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
+  const { q, page: pageParam } = await searchParams;
   const query = (q ?? "").trim();
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
   // Acotado por sucursal: solo transferencias donde participa su depósito (origen o destino).
   const whId = await getScopeWarehouseId();
@@ -43,16 +47,22 @@ export default async function TransferenciasPage({ searchParams }: { searchParam
     orClause = parts.length ? parts.join(",") : null;
   }
 
+  const scopeOr = whId ? `from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}` : null;
   let req = sb
     .from("stock_transfers")
     .select("id, number, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
     .order("created_at", { ascending: false })
-    .limit(100);
-  if (whId) req = req.or(`from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`);
-  if (query) req = orClause ? req.or(orClause) : req.eq("id", NO_MATCH);
-  const { data } = await req;
+    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+  let cnt = sb.from("stock_transfers").select("id", { count: "exact", head: true });
+  if (scopeOr) { req = req.or(scopeOr); cnt = cnt.or(scopeOr); }
+  if (query) {
+    if (orClause) { req = req.or(orClause); cnt = cnt.or(orClause); }
+    else { req = req.eq("id", NO_MATCH); cnt = cnt.eq("id", NO_MATCH); }
+  }
+  const [{ data }, { count: total }] = await Promise.all([req, cnt]);
 
   const rows = data ?? [];
+  const pageCount = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
 
   return (
     <div>
@@ -127,6 +137,8 @@ export default async function TransferenciasPage({ searchParams }: { searchParam
           </table>
         </div>
       )}
+
+      <Pagination page={page} pageCount={pageCount} total={total ?? 0} pageSize={PAGE_SIZE} basePath="/transferencias" params={{ q: query || undefined }} />
     </div>
   );
 }

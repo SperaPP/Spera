@@ -6,20 +6,23 @@ import { ProductSearch } from "@/components/product-search";
 import { FacturarButton } from "@/components/facturar-button";
 import { ImprimirArmadoButton } from "@/components/imprimir-armado-button";
 import { VentasFilters } from "@/components/ventas-filters";
+import { Pagination } from "@/components/pagination";
 import { getStoreScope } from "@/lib/auth";
 
 const AR_OFFSET = "-03:00";
+const PAGE_SIZE = 50;
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
   return (o as { name: string } | null)?.name ?? null;
 }
 
-type VentasParams = { q?: string; store?: string; desde?: string; hasta?: string; impreso?: string; estado?: string };
+type VentasParams = { q?: string; store?: string; desde?: string; hasta?: string; impreso?: string; estado?: string; page?: string };
 
 export default async function VentasPage({ searchParams }: { searchParams: Promise<VentasParams> }) {
-  const { q, store, desde, hasta, impreso, estado } = await searchParams;
+  const { q, store, desde, hasta, impreso, estado, page: pageParam } = await searchParams;
   const query = (q ?? "").trim();
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
 
   const [{ data: isAdmin }, { data: storesAll }, { storeId: scopeStore }] = await Promise.all([
@@ -58,21 +61,24 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
     orClause = parts.length ? parts.join(",") : null;
   }
 
-  let req = sb.from("sales").select(sel).order("created_at", { ascending: false }).limit(100);
-  if (query) req = orClause ? req.or(orClause) : req.eq("id", NO_MATCH);
+  let req = sb.from("sales").select(sel).order("created_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+  // Conteo con los MISMOS filtros que la lista (para la paginación).
+  let cntReq = sb.from("sales").select("id", { count: "exact", head: true });
+  if (query) { req = orClause ? req.or(orClause) : req.eq("id", NO_MATCH); cntReq = orClause ? cntReq.or(orClause) : cntReq.eq("id", NO_MATCH); }
 
-  // Filtros
-  if (scopeStore) req = req.eq("store_id", scopeStore);
-  if (store) req = req.eq("store_id", store);
-  if (desde) req = req.gte("created_at", `${desde}T00:00:00${AR_OFFSET}`);
-  if (hasta) req = req.lte("created_at", `${hasta}T23:59:59${AR_OFFSET}`);
-  if (impreso === "si") req = req.not("armado_printed_at", "is", null);
-  else if (impreso === "no") req = req.is("armado_printed_at", null);
-  if (estado === "anulada") req = req.eq("status", "anulada");
-  else if (estado === "completado") req = req.neq("status", "anulada").in("fulfillment_status", ["entregado", "despachado"]);
-  else if (estado === "pendiente" || estado === "controlado") req = req.neq("status", "anulada").eq("fulfillment_status", estado);
+  // Filtros (aplicados a la lista y al conteo por igual)
+  if (scopeStore) { req = req.eq("store_id", scopeStore); cntReq = cntReq.eq("store_id", scopeStore); }
+  if (store) { req = req.eq("store_id", store); cntReq = cntReq.eq("store_id", store); }
+  if (desde) { req = req.gte("created_at", `${desde}T00:00:00${AR_OFFSET}`); cntReq = cntReq.gte("created_at", `${desde}T00:00:00${AR_OFFSET}`); }
+  if (hasta) { req = req.lte("created_at", `${hasta}T23:59:59${AR_OFFSET}`); cntReq = cntReq.lte("created_at", `${hasta}T23:59:59${AR_OFFSET}`); }
+  if (impreso === "si") { req = req.not("armado_printed_at", "is", null); cntReq = cntReq.not("armado_printed_at", "is", null); }
+  else if (impreso === "no") { req = req.is("armado_printed_at", null); cntReq = cntReq.is("armado_printed_at", null); }
+  if (estado === "anulada") { req = req.eq("status", "anulada"); cntReq = cntReq.eq("status", "anulada"); }
+  else if (estado === "completado") { req = req.neq("status", "anulada").in("fulfillment_status", ["entregado", "despachado"]); cntReq = cntReq.neq("status", "anulada").in("fulfillment_status", ["entregado", "despachado"]); }
+  else if (estado === "pendiente" || estado === "controlado") { req = req.neq("status", "anulada").eq("fulfillment_status", estado); cntReq = cntReq.neq("status", "anulada").eq("fulfillment_status", estado); }
 
-  const { data: rows } = await req;
+  const [{ data: rows }, { count: total }] = await Promise.all([req, cntReq]);
+  const pageCount = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
 
   // Disponibles para "Imprimir todos": sin imprimir y no anuladas, según filtros (menos "impreso").
   let availReq = sb.from("sales").select("id", { count: "exact", head: true }).is("armado_printed_at", null).neq("status", "anulada");
@@ -181,6 +187,9 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
           </table>
         </div>
       )}
+
+      <Pagination page={page} pageCount={pageCount} total={total ?? 0} pageSize={PAGE_SIZE} basePath="/ventas"
+        params={{ q: query || undefined, store, desde, hasta, impreso, estado }} />
     </div>
   );
 }

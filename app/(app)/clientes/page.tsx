@@ -3,6 +3,9 @@ import { Plus, Users, GitMerge } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
 import { SolicitudesPortal } from "@/components/solicitudes-portal";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 100;
 
 const FISCAL_LABEL: Record<string, string> = {
   consumidor_final: "Consumidor Final",
@@ -16,17 +19,24 @@ function relName(r: unknown): string | null {
   return (o as { name: string } | null)?.name ?? null;
 }
 
-export default async function ClientesPage() {
+export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
-  const [{ data: customers }, { data: pend }, { data: tipos }, { data: isAdmin }] = await Promise.all([
-    sb.from("customers").select("id, name, fiscal_condition, balance, active, portal_status, customer_types(name)").order("name").limit(200),
+  // La lista principal excluye las solicitudes pendientes (van en su sección),
+  // pero incluye a los clientes sin portal (portal_status null).
+  const notPending = "portal_status.is.null,portal_status.neq.pendiente";
+  const [{ data: customers }, { count: total }, { data: pend }, { data: tipos }, { data: isAdmin }] = await Promise.all([
+    sb.from("customers").select("id, name, fiscal_condition, balance, active, portal_status, customer_types(name)")
+      .or(notPending).order("name").range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
+    sb.from("customers").select("id", { count: "exact", head: true }).or(notPending),
     sb.from("customers").select("id, name, doc_type, doc_number, email, phone").eq("portal_status", "pendiente").order("created_at", { ascending: true }),
     sb.from("customer_types").select("id, name").order("name"),
     sb.rpc("is_admin"),
   ]);
 
-  // La lista principal no muestra las solicitudes pendientes (van en su sección).
-  const rows = (customers ?? []).filter((c) => c.portal_status !== "pendiente");
+  const rows = customers ?? [];
+  const pageCount = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
   const pendientes = (pend ?? []).map((p) => ({
     id: p.id, name: p.name, doc: p.doc_number ? `${p.doc_type ?? ""} ${p.doc_number}`.trim() : null, email: p.email, phone: p.phone,
   }));
@@ -97,6 +107,8 @@ export default async function ClientesPage() {
           </table>
         </div>
       )}
+
+      <Pagination page={page} pageCount={pageCount} total={total ?? 0} pageSize={PAGE_SIZE} basePath="/clientes" />
     </div>
   );
 }

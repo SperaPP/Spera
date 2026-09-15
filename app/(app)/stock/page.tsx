@@ -5,12 +5,14 @@ import { getPermissions, getStoreScope } from "@/lib/auth";
 import { canView, canEdit } from "@/lib/permissions";
 import { ProductSearch } from "@/components/product-search";
 import { StockTable } from "@/components/stock-table";
+import { Pagination } from "@/components/pagination";
 
 const PAGE_SIZE = 60;
 
-export default async function StockPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
+export default async function StockPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
+  const { q, page: pageParam } = await searchParams;
   const query = (q ?? "").trim();
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
 
   const { data: warehouses } = await sb.from("warehouses").select("id, name").eq("active", true).order("name");
@@ -27,6 +29,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
 
   type Row = { id: string; name: string };
   let rows: Row[] = [];
+  let total = 0;
 
   if (query) {
     const ids = new Set<string>();
@@ -46,10 +49,15 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       rows = (data ?? []) as Row[];
     }
   } else {
-    // Orden: SKU numérico más alto primero (los más nuevos arriba).
-    const { data } = await sb.from("products").select("id, name").order("sku_order", { ascending: false, nullsFirst: false }).limit(PAGE_SIZE);
+    // Orden: SKU numérico más alto primero (los más nuevos arriba). Paginado.
+    const [{ data }, { count }] = await Promise.all([
+      sb.from("products").select("id, name").order("sku_order", { ascending: false, nullsFirst: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
+      sb.from("products").select("id", { count: "exact", head: true }),
+    ]);
     rows = (data ?? []) as Row[];
+    total = count ?? 0;
   }
+  const pageCount = query ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Stock por (producto, depósito): físico y reservado.
   const byProdWh = new Map<string, Map<string, number>>();
@@ -114,6 +122,8 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       ) : (
         <StockTable rows={tableRows} warehouses={whs} canEdit={canEditStock} />
       )}
+
+      {!query && <Pagination page={page} pageCount={pageCount} total={total} pageSize={PAGE_SIZE} basePath="/stock" />}
     </div>
   );
 }
