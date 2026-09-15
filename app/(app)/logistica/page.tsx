@@ -3,6 +3,9 @@ import { Truck, ScanLine, ChevronRight, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getStoreScope, getScopeWarehouseId } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 50;
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -29,9 +32,10 @@ const TABS = [
   { key: "todos", label: "Todas las ventas" },
 ];
 
-export default async function LogisticaPage({ searchParams }: { searchParams: Promise<{ estado?: string }> }) {
-  const { estado } = await searchParams;
+export default async function LogisticaPage({ searchParams }: { searchParams: Promise<{ estado?: string; page?: string }> }) {
+  const { estado, page: pageParam } = await searchParams;
   const filter = estado && TABS.some((t) => t.key === estado) ? estado : "pendiente";
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
   const isTransfers = filter === "transferencias";
   const { storeId: scopeStore } = await getStoreScope();
@@ -50,24 +54,31 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
 
   let sales: Record<string, unknown>[] = [];
   let transfers: Record<string, unknown>[] = [];
+  let total = 0;
+  const from = (page - 1) * PAGE_SIZE;
   if (isTransfers) {
     let treq = sb
       .from("stock_transfers")
       .select("id, number, status, created_at, from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), stock_transfer_items(count)")
-      .order("created_at", { ascending: false }).limit(100);
-    if (whId) treq = treq.or(`from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`);
-    const { data } = await treq;
+      .order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1);
+    let tcnt = sb.from("stock_transfers").select("id", { count: "exact", head: true });
+    if (whId) { const o = `from_warehouse_id.eq.${whId},to_warehouse_id.eq.${whId}`; treq = treq.or(o); tcnt = tcnt.or(o); }
+    const [{ data }, { count }] = await Promise.all([treq, tcnt]);
     transfers = data ?? [];
+    total = count ?? 0;
   } else {
     let req = sb
       .from("sales")
       .select("id, number, created_at, total, paid_amount, channel, customer_name, tn_order_number, fulfillment_status, stores(name), customers(name), shipping_methods(name)")
-      .eq("status", "completada").order("created_at", { ascending: false }).limit(100);
-    if (scopeStore) req = req.eq("store_id", scopeStore);
-    if (filter !== "todos") req = req.eq("fulfillment_status", filter);
-    const { data } = await req;
+      .eq("status", "completada").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1);
+    let cnt = sb.from("sales").select("id", { count: "exact", head: true }).eq("status", "completada");
+    if (scopeStore) { req = req.eq("store_id", scopeStore); cnt = cnt.eq("store_id", scopeStore); }
+    if (filter !== "todos") { req = req.eq("fulfillment_status", filter); cnt = cnt.eq("fulfillment_status", filter); }
+    const [{ data }, { count }] = await Promise.all([req, cnt]);
     sales = data ?? [];
+    total = count ?? 0;
   }
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div>
@@ -177,6 +188,8 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
           </table>
         </div>
       )}
+
+      <Pagination page={page} pageCount={pageCount} total={total} pageSize={PAGE_SIZE} basePath="/logistica" params={{ estado: filter }} />
 
       <p className="mt-3 flex items-center gap-1.5 text-xs text-muted"><ScanLine className="h-3.5 w-3.5" /> Mostrador y cambios quedan entregados automáticamente. Mayoristas pasan por control y despacho; las transferencias por recepción.</p>
     </div>

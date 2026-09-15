@@ -3,6 +3,9 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 30;
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -13,17 +16,22 @@ function affectsCash(r: unknown): boolean {
   return (o as { affects_cash: boolean } | null)?.affects_cash ?? false;
 }
 
-export default async function CierresPage() {
+export default async function CierresPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
   const { storeId: scopeStore } = await getStoreScope();
+  const fromRow = (page - 1) * PAGE_SIZE;
   let sessReq = sb
     .from("cash_sessions")
     .select("id, role, opening_amount, declared_amount, cash_expenses, expected_cash, cash_difference, opened_at, closed_at, stores(name)")
     .in("status", ["cerrada", "entregada"])
     .order("closed_at", { ascending: false })
-    .limit(30);
-  if (scopeStore) sessReq = sessReq.eq("store_id", scopeStore);
-  const { data: sessions } = await sessReq;
+    .range(fromRow, fromRow + PAGE_SIZE - 1);
+  let sessCnt = sb.from("cash_sessions").select("id", { count: "exact", head: true }).in("status", ["cerrada", "entregada"]);
+  if (scopeStore) { sessReq = sessReq.eq("store_id", scopeStore); sessCnt = sessCnt.eq("store_id", scopeStore); }
+  const [{ data: sessions }, { count: total }] = await Promise.all([sessReq, sessCnt]);
+  const pageCount = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
 
   const ids = (sessions ?? []).map((s) => s.id);
 
@@ -131,6 +139,8 @@ export default async function CierresPage() {
           </table>
         </div>
       )}
+
+      <Pagination page={page} pageCount={pageCount} total={total ?? 0} pageSize={PAGE_SIZE} basePath="/caja/cierres" />
     </div>
   );
 }
