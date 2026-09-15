@@ -10,6 +10,7 @@ import { PrecioEditor } from "@/components/precio-editor";
 import { DestacadoToggle } from "@/components/destacado-toggle";
 import { PortalToggle } from "@/components/portal-toggle";
 import { TnSyncToggle } from "@/components/tn-sync-toggle";
+import { EliminarProducto } from "@/components/eliminar-producto";
 
 const VARIATION_LABEL: Record<string, string> = {
   none: "Sin variantes",
@@ -136,6 +137,7 @@ export default async function ProductoDetallePage({
             <Link href={`/productos/${product.id}/editar`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
               <Pencil className="h-3.5 w-3.5" /> Editar
             </Link>
+            {editable && <EliminarProducto productId={product.id} productName={product.name} />}
           </div>
         </div>
 

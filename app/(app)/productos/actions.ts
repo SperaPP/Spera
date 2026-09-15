@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireCan, type ActionState } from "@/lib/auth";
 import { publishTNProduct, setTNProductPublished } from "@/lib/tiendanube";
 
@@ -324,6 +325,44 @@ export async function borrarVariante(variantId: string, productId: string): Prom
   const { error } = await sb.rpc("delete_variant", { p_variant_id: variantId });
   if (error) return { error: error.message };
   revalidatePath(`/productos/${productId}`);
+  return { ok: true };
+}
+
+/** Edita el SKU de una variante. No puede repetir un SKU existente (índice único
+ *  por organización). Si el código de barras venía derivado del SKU, se sincroniza. */
+export async function editarSku(variantId: string, sku: string, productId: string): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  const clean = (sku ?? "").trim();
+  if (!clean) return { error: "El SKU no puede quedar vacío." };
+  const sb = await createClient();
+  const { data: v } = await sb.from("product_variants").select("sku, barcode").eq("id", variantId).maybeSingle();
+  if (!v) return { error: "Variante no encontrada." };
+  if (v.sku === clean) return { ok: true }; // sin cambios
+  const update: { sku: string; barcode?: string } = { sku: clean };
+  // El barcode se genera igual al SKU; si sigue así (o está vacío) se mantiene en sync.
+  // Si tiene un código de barras propio (EAN cargado a mano), no se toca.
+  if (v.barcode == null || v.barcode === v.sku) update.barcode = clean;
+  const { error } = await sb.from("product_variants").update(update).eq("id", variantId);
+  if (error) return { error: error.code === "23505" ? `El SKU "${clean}" ya está en uso por otra variante. Usá uno que no exista.` : error.message };
+  revalidatePath(`/productos/${productId}`);
+  return { ok: true };
+}
+
+/** Elimina un producto del sistema (variantes, stock, precios, fotos). Solo si nunca
+ *  tuvo ventas ni transferencias (lo valida el RPC). Limpia también las fotos del storage. */
+export async function eliminarProducto(productId: string): Promise<ActionState> {
+  const denied = await requireCan("productos", true);
+  if (denied) return denied;
+  const sb = await createClient();
+  const { data: imgs } = await sb.from("product_images").select("path").eq("product_id", productId);
+  const paths = (imgs ?? []).map((i) => i.path as string).filter(Boolean);
+  const { error } = await sb.rpc("delete_product", { p_product_id: productId });
+  if (error) return { error: error.message };
+  if (paths.length) {
+    try { await createAdminClient().storage.from("product-images").remove(paths); } catch { /* best-effort */ }
+  }
+  revalidatePath("/productos");
   return { ok: true };
 }
 

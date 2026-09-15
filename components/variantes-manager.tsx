@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Printer, Plus, X, Trash2, Check } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { agregarVariante, toggleVariante, borrarVariante, setUbicacionVariante } from "@/app/(app)/productos/actions";
+import { agregarVariante, toggleVariante, borrarVariante, setUbicacionVariante, editarSku } from "@/app/(app)/productos/actions";
 
 type Ref = { id: string; name: string };
 type Variant = {
@@ -59,6 +59,20 @@ export function VariantesManager({
   const [loc, setLoc] = useState<Record<string, Loc>>(() =>
     Object.fromEntries(variants.map((v) => [v.id, { f: locStr(v.locFila), e: locStr(v.locEstante), c: locStr(v.locCubiculo) }]))
   );
+  const [sku, setSku] = useState<Record<string, string>>(() => Object.fromEntries(variants.map((v) => [v.id, v.sku ?? ""])));
+  const skuDirty = (v: Variant) => (sku[v.id] ?? "").trim() !== (v.sku ?? "");
+  function guardarSku(v: Variant) {
+    const val = (sku[v.id] ?? "").trim();
+    if (!val) return toast.error("El SKU no puede quedar vacío.");
+    setBusyId(v.id);
+    startTransition(async () => {
+      const res = await editarSku(v.id, val, productId);
+      setBusyId(null);
+      if (res.error) { toast.error(res.error); return; }
+      toast.success("SKU actualizado.");
+      router.refresh();
+    });
+  }
 
   const usesSize = variationType === "size" || variationType === "size_color";
   const usesColor = variationType === "color" || variationType === "size_color";
@@ -211,7 +225,29 @@ export function VariantesManager({
                       <span className="text-muted">Única</span>
                     )}
                   </td>
-                  <td className="px-5 py-2.5 font-mono text-xs text-ink">{v.sku ?? "—"}</td>
+                  <td className="px-5 py-2.5">
+                    {canEdit ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          value={sku[v.id] ?? ""}
+                          onChange={(e) => setSku((prev) => ({ ...prev, [v.id]: e.target.value }))}
+                          placeholder="—"
+                          className="w-24 rounded-md border border-line-strong bg-card px-2 py-1 font-mono text-xs text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => guardarSku(v)}
+                          disabled={busy || !skuDirty(v) || !(sku[v.id] ?? "").trim()}
+                          title="Guardar SKU"
+                          className="rounded-md border border-line-strong p-1 text-accent transition-colors hover:bg-accent-soft disabled:opacity-30"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-xs text-ink">{v.sku ?? "—"}</span>
+                    )}
+                  </td>
                   <td className="px-5 py-2.5 font-mono text-xs text-muted">{v.barcode ?? "—"}</td>
                   <td className="px-5 py-2.5 text-right tabular-nums text-ink">{v.stock}</td>
                   <td className="px-5 py-2.5">
