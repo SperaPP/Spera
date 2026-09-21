@@ -9,7 +9,7 @@ export default async function EditarProductoPage({ params }: { params: Promise<{
   const sb = await createClient();
 
   const [{ data: product }, { data: categories }, { data: mainCategories }, { data: seasons }, { data: fabricTypes }] = await Promise.all([
-    sb.from("products").select("id, name, description, category_id, main_category_id, season_id, fabric_type_id, tax_rate, active, portal_visible, lifecycle").eq("id", id).single(),
+    sb.from("products").select("id, name, description, category_id, main_category_id, season_id, fabric_type_id, fabric_types(name), tax_rate, active, portal_visible, lifecycle").eq("id", id).single(),
     sb.from("categories").select("id, name").eq("active", true).order("name"),
     sb.from("main_categories").select("id, name").eq("active", true).order("position").order("name"),
     sb.from("seasons").select("id, name").eq("active", true).order("position").order("name"),
@@ -34,7 +34,7 @@ export default async function EditarProductoPage({ params }: { params: Promise<{
           categoryId: product.category_id ?? "",
           mainCategoryId: product.main_category_id ?? "",
           seasonId: product.season_id ?? "",
-          fabricTypeId: product.fabric_type_id ?? "",
+          fabricTypeName: (Array.isArray(product.fabric_types) ? product.fabric_types[0]?.name : (product.fabric_types as { name: string } | null)?.name) ?? "",
           taxRate: Number(product.tax_rate),
           active: product.active,
           portalVisible: product.portal_visible !== false,

@@ -89,7 +89,7 @@ const editSchema = z.object({
   categoryId: z.string().uuid().nullable(),
   mainCategoryId: z.string().uuid().nullable(),
   seasonId: z.string().uuid().nullable(),
-  fabricTypeId: z.string().uuid().nullable(),
+  fabricType: z.string().trim().max(80).nullable(),
   taxRate: z.number().min(0).max(100),
   active: z.boolean(),
   portalVisible: z.boolean(),
@@ -107,13 +107,29 @@ export async function editarProducto(input: EditarProductoInput): Promise<Action
   const d = parsed.data;
 
   const sb = await createClient();
+
+  // Tela: se puede elegir una existente o escribir una nueva (se crea al vuelo).
+  let fabricTypeId: string | null = null;
+  const fabric = d.fabricType?.trim();
+  if (fabric) {
+    const { data: existing } = await sb.from("fabric_types").select("id").ilike("name", fabric).limit(1).maybeSingle();
+    if (existing) fabricTypeId = existing.id;
+    else {
+      const { data: orgId } = await sb.rpc("current_org_id");
+      if (!orgId) return { error: "Sin organización" };
+      const { data: created, error: cErr } = await sb.from("fabric_types").insert({ organization_id: orgId, name: fabric }).select("id").single();
+      if (cErr) return { error: cErr.code === "23505" ? "Ya existe una tela con ese nombre" : cErr.message };
+      fabricTypeId = created.id;
+    }
+  }
+
   const update: Record<string, unknown> = {
     name: d.name,
     description: d.description || null,
     category_id: d.categoryId,
     main_category_id: d.mainCategoryId,
     season_id: d.seasonId,
-    fabric_type_id: d.fabricTypeId,
+    fabric_type_id: fabricTypeId,
     tax_rate: d.taxRate,
     active: d.active,
     portal_visible: d.portalVisible,

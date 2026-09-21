@@ -7,7 +7,7 @@ import { editarProducto } from "@/app/(app)/productos/actions";
 
 type Ref = { id: string; name: string };
 type Lifecycle = "actual" | "discontinuo";
-type Product = { id: string; name: string; description: string; categoryId: string; mainCategoryId: string; seasonId: string; fabricTypeId: string; taxRate: number; active: boolean; portalVisible: boolean; lifecycle: Lifecycle };
+type Product = { id: string; name: string; description: string; categoryId: string; mainCategoryId: string; seasonId: string; fabricTypeName: string; taxRate: number; active: boolean; portalVisible: boolean; lifecycle: Lifecycle };
 
 const input =
   "w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25";
@@ -21,7 +21,7 @@ export function EditarProductoForm({ product, categories, mainCategories, season
   const [categoryId, setCategoryId] = useState(product.categoryId);
   const [mainCategoryId, setMainCategoryId] = useState(product.mainCategoryId);
   const [seasonId, setSeasonId] = useState(product.seasonId);
-  const [fabricTypeId, setFabricTypeId] = useState(product.fabricTypeId);
+  const [fabricType, setFabricType] = useState(product.fabricTypeName);
   const [taxRate, setTaxRate] = useState(String(product.taxRate));
   const [active, setActive] = useState(product.active);
   const [portalVisible, setPortalVisible] = useState(product.portalVisible);
@@ -33,7 +33,7 @@ export function EditarProductoForm({ product, categories, mainCategories, season
       const r = await editarProducto({
         id: product.id, name: name.trim(), description: description.trim() || undefined,
         categoryId: categoryId || null, mainCategoryId: mainCategoryId || null, seasonId: seasonId || null,
-        fabricTypeId: fabricTypeId || null,
+        fabricType: fabricType.trim() || null,
         taxRate: Number(taxRate) || 21, active, portalVisible, lifecycle,
       });
       if (r.error) { toast.error(r.error); return; }
@@ -77,10 +77,9 @@ export function EditarProductoForm({ product, categories, mainCategories, season
           </div>
           <div>
             <label className={label} htmlFor="fabric">Tipo de tela</label>
-            <select id="fabric" className={input} value={fabricTypeId} onChange={(e) => setFabricTypeId(e.target.value)}>
-              <option value="">Sin especificar</option>
-              {fabricTypes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
+            <input id="fabric" list="fabric-dl" className={input} value={fabricType} onChange={(e) => setFabricType(e.target.value)} placeholder="Elegí una o escribí una nueva" />
+            <datalist id="fabric-dl">{fabricTypes.map((f) => <option key={f.id} value={f.name} />)}</datalist>
+            <p className="mt-1 text-xs text-muted">Si no existe, se crea al guardar.</p>
           </div>
           <div>
             <label className={label} htmlFor="tax">IVA (%)</label>
