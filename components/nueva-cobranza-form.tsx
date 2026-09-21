@@ -9,7 +9,7 @@ import { crearCobranza, pedidosPendientes, type PedidoPendiente } from "@/app/(a
 
 type Customer = { id: string; name: string; balance: number };
 type Caja = { storeId: string; name: string; sessionId: string };
-type Method = { id: string; name: string };
+type Method = { id: string; name: string; kind: string };
 type Payment = { methodId: string; amount: string };
 
 const input =
@@ -33,6 +33,26 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
   const collected = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
   const caja = openCajas.find((c) => c.sessionId === cajaId) ?? null;
   const allocTotal = round2(Object.values(alloc).reduce((a, v) => a + (Number(v) || 0), 0));
+
+  // Saldo a favor disponible = lo impago de sus pedidos menos lo que debe en cta cte.
+  const unpaidTotal = round2(pedidos.reduce((a, p) => a + p.remaining, 0));
+  const availableCredit = round2(Math.max(0, unpaidTotal - debt));
+  const creditMethod = paymentMethods.find((m) => m.kind === "saldo_favor") ?? null;
+  const kindById = (id: string) => paymentMethods.find((m) => m.id === id)?.kind ?? "";
+  const creditUsed = round2(payments.reduce((a, p) => a + (kindById(p.methodId) === "saldo_favor" ? (Number(p.amount) || 0) : 0), 0));
+  const creditExceeded = creditUsed > availableCredit + 0.01;
+
+  function usarSaldoAFavor() {
+    if (!creditMethod || availableCredit <= 0) return;
+    setPayments((prev) => {
+      if (prev.some((p) => p.methodId === creditMethod.id)) {
+        return prev.map((p) => p.methodId === creditMethod.id ? { ...p, amount: String(availableCredit) } : p);
+      }
+      const firstEmpty = prev.findIndex((p) => !p.amount);
+      if (firstEmpty >= 0) return prev.map((p, i) => i === firstEmpty ? { methodId: creditMethod.id, amount: String(availableCredit) } : p);
+      return [...prev, { methodId: creditMethod.id, amount: String(availableCredit) }];
+    });
+  }
 
   // Reparto FIFO puro (más viejos primero) de un monto entre los pedidos.
   function fifoAlloc(amount: number, list: PedidoPendiente[]): Record<string, string> {
@@ -67,6 +87,7 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
   function submit() {
     if (!customerId) return toast.error("Elegí un cliente.");
     if (collected <= 0) return toast.error("Ingresá el monto a cobrar.");
+    if (creditExceeded) return toast.error(`El saldo a favor disponible es ${formatMoney(availableCredit)}.`);
     if (allocTotal > collected + 0.01) return toast.error("Estás imputando a pedidos más de lo que cobrás.");
     const allocations = pedidos
       .map((p) => ({ saleId: p.id, amount: Number(alloc[p.id]) || 0 }))
@@ -119,14 +140,21 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
       <div className="rounded-xl border border-line bg-card p-5">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-medium text-ink">Medios de cobro</span>
-          {debt > 0 && (
-            <button
-              onClick={() => setPayments((p) => { const n = [...p]; if (n[0]) n[0] = { ...n[0], amount: String(debt) }; return n; })}
-              className="text-xs text-accent hover:underline"
-            >
-              Cobrar deuda ({formatMoney(debt)})
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {availableCredit > 0 && creditMethod && (
+              <button onClick={usarSaldoAFavor} className="text-xs font-medium text-ok hover:underline">
+                Usar saldo a favor ({formatMoney(availableCredit)})
+              </button>
+            )}
+            {debt > 0 && (
+              <button
+                onClick={() => setPayments((p) => { const n = [...p]; if (n[0]) n[0] = { ...n[0], amount: String(debt) }; return n; })}
+                className="text-xs text-accent hover:underline"
+              >
+                Cobrar deuda ({formatMoney(debt)})
+              </button>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
           {payments.map((p, idx) => (
@@ -154,6 +182,11 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
           <span className="text-sm text-muted">Total a cobrar</span>
           <span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(collected)}</span>
         </div>
+        {creditUsed > 0 && (
+          <p className={`mt-1 text-right text-xs ${creditExceeded ? "text-danger" : "text-muted"}`}>
+            Saldo a favor usado: {formatMoney(creditUsed)}{creditExceeded ? ` — máximo ${formatMoney(availableCredit)}` : ""}
+          </p>
+        )}
       </div>
 
       {/* Imputación a pedidos: qué pedidos paga esta cobranza. */}
@@ -203,7 +236,7 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
 
       <div className="flex items-center justify-end gap-3">
         <button type="button" onClick={() => router.push("/cobranzas")} className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">Cancelar</button>
-        <button type="button" onClick={submit} disabled={pending || collected <= 0 || allocTotal > collected + 0.01} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60">
+        <button type="button" onClick={submit} disabled={pending || collected <= 0 || allocTotal > collected + 0.01 || creditExceeded} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60">
           {pending ? "Registrando…" : "Registrar cobranza"}
         </button>
       </div>

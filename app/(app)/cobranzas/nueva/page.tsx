@@ -9,7 +9,7 @@ export default async function NuevaCobranzaPage() {
     sb.from("customers").select("id, name, balance").eq("active", true).order("name"),
     sb.from("stores").select("id, name").eq("has_cash_register", true).eq("active", true).order("name"),
     sb.from("cash_sessions").select("id, store_id").eq("status", "abierta"),
-    sb.from("payment_methods").select("id, name").eq("active", true).neq("kind", "cuenta_corriente").order("position"),
+    sb.from("payment_methods").select("id, name, kind").eq("active", true).neq("kind", "cuenta_corriente").order("position"),
   ]);
 
   const sessionByStore = new Map((sessions ?? []).map((s) => [s.store_id, s.id]));
