@@ -3,6 +3,7 @@ import { Plus, HandCoins, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { ProductSearch } from "@/components/product-search";
 
 const CHANNEL_LABEL: Record<string, string> = {
   pos: "Venta", portal: "Venta portal", tiendanube: "Venta TN", cambio: "Cambio",
@@ -16,14 +17,15 @@ type Cobro = {
 
 const PAGE_SIZE = 50;
 
-export default async function CobranzasPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  const { page: pageParam } = await searchParams;
+export default async function CobranzasPage({ searchParams }: { searchParams: Promise<{ page?: string; q?: string }> }) {
+  const { page: pageParam, q } = await searchParams;
+  const query = (q ?? "").trim();
   const page = Math.max(1, Number(pageParam) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
   const sb = await createClient();
   const { storeId: scopeStore } = await getStoreScope();
-  const { data } = await sb.rpc("cobros_list", { p_limit: PAGE_SIZE, p_offset: offset, p_store: scopeStore });
+  const { data } = await sb.rpc("cobros_list", { p_limit: PAGE_SIZE, p_offset: offset, p_store: scopeStore, ...(query ? { p_search: query } : {}) });
   const rows = (data ?? []) as Cobro[];
 
   const total = rows[0] ? Number(rows[0].total_count) : 0;
@@ -48,13 +50,17 @@ export default async function CobranzasPage({ searchParams }: { searchParams: Pr
         </Link>
       </div>
 
+      <div className="mb-4">
+        <ProductSearch basePath="/cobranzas" placeholder="Buscar por cliente…" />
+      </div>
+
       {total === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line-strong bg-card py-16 text-center">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent">
             <HandCoins className="h-5 w-5" />
           </span>
-          <p className="mt-3 font-medium text-ink">Todavía no hay ingresos</p>
-          <p className="mt-1 text-sm text-muted">Los cobros de ventas y las cobranzas van a aparecer acá.</p>
+          <p className="mt-3 font-medium text-ink">{query ? `Sin resultados para "${query}"` : "Todavía no hay ingresos"}</p>
+          <p className="mt-1 text-sm text-muted">{query ? "Probá con otro nombre de cliente." : "Los cobros de ventas y las cobranzas van a aparecer acá."}</p>
         </div>
       ) : (
         <>
@@ -100,9 +106,9 @@ export default async function CobranzasPage({ searchParams }: { searchParams: Pr
           <div className="mt-4 flex items-center justify-between gap-3">
             <span className="text-xs text-muted">Mostrando {from}–{to} de {total.toLocaleString("es-AR")}</span>
             <div className="flex items-center gap-2">
-              <PageLink page={page - 1} disabled={page <= 1} dir="prev" />
+              <PageLink page={page - 1} disabled={page <= 1} dir="prev" q={query} />
               <span className="text-sm text-muted">Página {page} de {totalPages}</span>
-              <PageLink page={page + 1} disabled={page >= totalPages} dir="next" />
+              <PageLink page={page + 1} disabled={page >= totalPages} dir="next" q={query} />
             </div>
           </div>
         </>
@@ -111,9 +117,10 @@ export default async function CobranzasPage({ searchParams }: { searchParams: Pr
   );
 }
 
-function PageLink({ page, disabled, dir }: { page: number; disabled: boolean; dir: "prev" | "next" }) {
+function PageLink({ page, disabled, dir, q }: { page: number; disabled: boolean; dir: "prev" | "next"; q?: string }) {
   const cls = "flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong text-muted transition-colors hover:bg-canvas hover:text-ink";
   const Icon = dir === "prev" ? ChevronLeft : ChevronRight;
   if (disabled) return <span className={`${cls} cursor-not-allowed opacity-40`}><Icon className="h-4 w-4" /></span>;
-  return <Link href={`/cobranzas?page=${page}`} className={cls}><Icon className="h-4 w-4" /></Link>;
+  const href = `/cobranzas?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+  return <Link href={href} className={cls}><Icon className="h-4 w-4" /></Link>;
 }

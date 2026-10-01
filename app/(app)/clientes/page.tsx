@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/format";
 import { SolicitudesPortal } from "@/components/solicitudes-portal";
 import { Pagination } from "@/components/pagination";
+import { ProductSearch } from "@/components/product-search";
 
 const PAGE_SIZE = 100;
 
@@ -19,17 +20,20 @@ function relName(r: unknown): string | null {
   return (o as { name: string } | null)?.name ?? null;
 }
 
-export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  const { page: pageParam } = await searchParams;
+export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ page?: string; q?: string }> }) {
+  const { page: pageParam, q } = await searchParams;
+  const query = (q ?? "").trim();
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
   // La lista principal excluye las solicitudes pendientes (van en su sección),
   // pero incluye a los clientes sin portal (portal_status null).
   const notPending = "portal_status.is.null,portal_status.neq.pendiente";
+  let listReq = sb.from("customers").select("id, name, fiscal_condition, balance, active, portal_status, customer_types(name)").or(notPending);
+  let cntReq = sb.from("customers").select("id", { count: "exact", head: true }).or(notPending);
+  if (query) { listReq = listReq.ilike("name", `%${query}%`); cntReq = cntReq.ilike("name", `%${query}%`); }
   const [{ data: customers }, { count: total }, { data: pend }, { data: tipos }, { data: isAdmin }] = await Promise.all([
-    sb.from("customers").select("id, name, fiscal_condition, balance, active, portal_status, customer_types(name)")
-      .or(notPending).order("name").range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
-    sb.from("customers").select("id", { count: "exact", head: true }).or(notPending),
+    listReq.order("name").range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
+    cntReq,
     sb.from("customers").select("id, name, doc_type, doc_number, email, phone").eq("portal_status", "pendiente").order("created_at", { ascending: true }),
     sb.from("customer_types").select("id, name").order("name"),
     sb.rpc("is_admin"),
@@ -66,13 +70,17 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
 
       <SolicitudesPortal pending={pendientes} tipos={tipos ?? []} />
 
+      <div className="mb-4">
+        <ProductSearch basePath="/clientes" placeholder="Buscar cliente por nombre…" />
+      </div>
+
       {rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line-strong bg-card py-16 text-center">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent">
             <Users className="h-5 w-5" />
           </span>
-          <p className="mt-3 font-medium text-ink">Todavía no hay clientes</p>
-          <p className="mt-1 text-sm text-muted">Creá el primero para vender con su lista de precios.</p>
+          <p className="mt-3 font-medium text-ink">{query ? `Sin resultados para "${query}"` : "Todavía no hay clientes"}</p>
+          <p className="mt-1 text-sm text-muted">{query ? "Probá con otro nombre." : "Creá el primero para vender con su lista de precios."}</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-card">
@@ -108,7 +116,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      <Pagination page={page} pageCount={pageCount} total={total ?? 0} pageSize={PAGE_SIZE} basePath="/clientes" />
+      <Pagination page={page} pageCount={pageCount} total={total ?? 0} pageSize={PAGE_SIZE} basePath="/clientes" params={{ q: query || undefined }} />
     </div>
   );
 }
