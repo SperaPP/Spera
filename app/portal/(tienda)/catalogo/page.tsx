@@ -25,15 +25,13 @@ export default async function PortalCatalogo({ searchParams }: { searchParams: P
     temporadasActivas(org),
   ]);
 
-  const mujerId = mains.find((m) => m.name.toLowerCase() === "mujer")?.id ?? null;
-
   return (
     <PortalCatalogClient
       products={products}
       mains={mains}
       cats={cats}
       seasons={seasons}
-      defaultMainId={mujerId}
+      defaultMainId={null}
       initial={{ main, cat, season, q }}
     />
   );
