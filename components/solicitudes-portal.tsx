@@ -13,7 +13,10 @@ const select = "rounded-lg border border-line-strong bg-card px-2 py-1.5 text-sm
 
 export function SolicitudesPortal({ pending, tipos }: { pending: Pending[]; tipos: Tipo[] }) {
   const router = useRouter();
-  const [tipoBy, setTipoBy] = useState<Record<string, string>>(() => Object.fromEntries(pending.map((p) => [p.id, tipos[0]?.id ?? ""])));
+  // El portal es mayorista: el default es el tipo "Mayorista" (su lista de precios),
+  // no el primero de la lista (que puede ser Minorista). Así se asigna sola al aprobar.
+  const defaultTipo = tipos.find((t) => t.name.toLowerCase().includes("mayorista"))?.id ?? tipos[0]?.id ?? "";
+  const [tipoBy, setTipoBy] = useState<Record<string, string>>(() => Object.fromEntries(pending.map((p) => [p.id, defaultTipo])));
   const [busy, setBusy] = useState<string | null>(null);
   const [, start] = useTransition();
 

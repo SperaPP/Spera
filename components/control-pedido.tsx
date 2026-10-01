@@ -34,9 +34,12 @@ export function ControlPedido({
   const [tracking, setTracking] = useState("");
   const [notes, setNotes] = useState("");
 
-  const totalUnits = useMemo(() => items.reduce((a, i) => a + i.qty, 0), [items]);
+  // Solo las prendas con código (SKU/barra) se escanean. Las líneas sin código
+  // (envío de Tiendanube, producto web sin matchear) no se escanean ni traban el control.
+  const scannable = (i: Item) => !!(i.sku || i.barcode);
+  const totalUnits = useMemo(() => items.reduce((a, i) => a + (scannable(i) ? i.qty : 0), 0), [items]);
   const scannedUnits = Object.values(scanned).reduce((a, n) => a + n, 0);
-  const complete = items.every((i) => (scanned[i.id] ?? 0) >= i.qty);
+  const complete = items.every((i) => !scannable(i) || (scanned[i.id] ?? 0) >= i.qty);
 
   function onScan(code: string) {
     const c = code.trim().toLowerCase();
@@ -105,16 +108,17 @@ export function ControlPedido({
 
         <div className="divide-y divide-line rounded-lg border border-line">
           {items.map((i) => {
+            const scan = scannable(i);
             const n = controlado ? i.qty : (scanned[i.id] ?? 0);
-            const ok = n >= i.qty;
+            const ok = scan ? n >= i.qty : true;
             return (
               <div key={i.id} className={`flex items-center gap-3 px-3 py-2.5 ${ok ? "opacity-60" : ""}`}>
                 {ok ? <CheckCircle2 className="h-5 w-5 shrink-0 text-ok" /> : <Circle className="h-5 w-5 shrink-0 text-faint" />}
                 <div className="min-w-0 flex-1">
                   <div className={`truncate text-sm font-medium text-ink ${ok ? "line-through" : ""}`}>{i.name}{i.label ? <span className="ml-2 text-xs text-muted no-underline">{i.label}</span> : null}</div>
-                  {i.sku && <div className="font-mono text-xs text-muted">{i.sku}</div>}
+                  {i.sku ? <div className="font-mono text-xs text-muted">{i.sku}</div> : !scan ? <div className="text-xs text-muted">No se escanea (envío / web)</div> : null}
                 </div>
-                <span className={`shrink-0 text-sm font-semibold tabular-nums ${ok ? "text-ok" : "text-ink"}`}>{n} / {i.qty}</span>
+                <span className={`shrink-0 text-sm font-semibold tabular-nums ${ok ? "text-ok" : "text-ink"}`}>{scan ? `${n} / ${i.qty}` : "—"}</span>
               </div>
             );
           })}
