@@ -82,10 +82,10 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
   const tableRows = rows.map((p) => {
     const m = byProdWh.get(p.id), mr = byProdWhRes.get(p.id);
     const perWh: Record<string, number> = {};
-    const perWhRes: Record<string, number> = {};
     let total = 0;
-    for (const w of whs) { const qy = m?.get(w.id) ?? 0; perWh[w.id] = qy; perWhRes[w.id] = mr?.get(w.id) ?? 0; total += qy; }
-    return { id: p.id, name: p.name, perWh, perWhRes, total };
+    // Un solo número = disponible (físico − reservado). La reserva sigue por dentro.
+    for (const w of whs) { const disp = (m?.get(w.id) ?? 0) - (mr?.get(w.id) ?? 0); perWh[w.id] = disp; total += disp; }
+    return { id: p.id, name: p.name, perWh, total };
   });
 
   return (
@@ -93,7 +93,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Stock</h1>
-          <p className="mt-1 text-sm text-muted">Existencias por depósito. Si hay stock <span className="font-medium text-warn">reservado</span> (comprometido en pedidos o transferencias sin cerrar), se muestra cuánto queda <span className="font-medium text-ink">disponible</span> para vender. Clic en un producto para ajustar.</p>
+          <p className="mt-1 text-sm text-muted">Stock disponible por depósito (lo que se puede vender). Clic en un producto para ajustar por variante.</p>
         </div>
         {canControl && (
           <div className="flex shrink-0 items-center gap-2">

@@ -43,7 +43,7 @@ export default async function StockDetallePage({ params }: { params: Promise<{ i
         Volver a stock
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight text-ink">{product.name}</h1>
-      <p className="mt-1 mb-6 text-sm text-muted">Editás el stock <strong>físico</strong> de cada variante por depósito (se registra como ajuste). Si hay unidades reservadas por pedidos sin despachar, se muestran debajo.</p>
+      <p className="mt-1 mb-6 text-sm text-muted">Editás el stock <strong>disponible</strong> de cada variante por depósito (se registra como ajuste).</p>
 
       <StockMatrix
         productId={product.id}

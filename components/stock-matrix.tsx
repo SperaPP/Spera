@@ -24,8 +24,12 @@ export function StockMatrix({
   reservedMap?: Record<string, number>;
   readOnly?: boolean;
 }) {
+  // Se muestra/edita el DISPONIBLE (físico − reservado). La reserva sigue por dentro.
   const init: Record<string, number> = {};
-  for (const v of variants) for (const w of warehouses) init[key(v.id, w.id)] = stockMap[key(v.id, w.id)] ?? 0;
+  for (const v of variants) for (const w of warehouses) {
+    const k = key(v.id, w.id);
+    init[k] = (stockMap[k] ?? 0) - (reservedMap[k] ?? 0);
+  }
 
   const [saved, setSaved] = useState<Record<string, number>>(init);
   const [draft, setDraft] = useState<Record<string, string>>(() => {
@@ -44,8 +48,10 @@ export function StockMatrix({
       return;
     }
     if (n === saved[k]) return;
+    // El usuario edita el disponible; el físico guardado = disponible + lo reservado.
+    const nuevoFisico = n + (reservedMap[k] ?? 0);
     start(async () => {
-      const r = await ajustarStock(warehouseId, variantId, n, productId);
+      const r = await ajustarStock(warehouseId, variantId, nuevoFisico, productId);
       if (r.error) {
         toast.error(r.error);
         setDraft((d) => ({ ...d, [k]: String(saved[k]) }));
@@ -80,7 +86,6 @@ export function StockMatrix({
               </td>
               {warehouses.map((w) => {
                 const k = key(v.id, w.id);
-                const res = reservedMap[k] ?? 0;
                 return (
                   <td key={w.id} className="px-3 py-2.5 text-center">
                     <input
@@ -93,11 +98,6 @@ export function StockMatrix({
                       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                       className="w-20 rounded-lg border border-line-strong bg-card px-2 py-1.5 text-center text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-60"
                     />
-                    {res > 0 && (
-                      <div className="mt-1 text-[11px] text-warn" title="Reservado por pedidos sin despachar">
-                        {res} reserv. · {(parseInt(draft[k], 10) || 0) - res} disp.
-                      </div>
-                    )}
                   </td>
                 );
               })}

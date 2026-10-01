@@ -48,8 +48,8 @@ export default async function ProductoDetallePage({
 
   const [{ data: stock }, { data: prices }, { data: images }, { data: sizes }, { data: colors }, { data: warehouses }, perms] = await Promise.all([
     variantIds.length
-      ? sb.from("stock").select("variant_id, quantity").in("variant_id", variantIds)
-      : Promise.resolve({ data: [] as { variant_id: string; quantity: number }[] }),
+      ? sb.from("stock").select("variant_id, quantity, reserved").in("variant_id", variantIds)
+      : Promise.resolve({ data: [] as { variant_id: string; quantity: number; reserved: number }[] }),
     sb.from("price_list_items").select("price, promo_price, price_lists(name)").eq("product_id", id).is("variant_id", null),
     sb.from("product_images").select("id, path, color, is_primary").eq("product_id", id).order("is_primary", { ascending: false }).order("created_at"),
     sb.from("sizes").select("id, name").eq("active", true).order("position"),
@@ -63,7 +63,8 @@ export default async function ProductoDetallePage({
 
   const stockByVariant = new Map<string, number>();
   for (const s of stock ?? []) {
-    stockByVariant.set(s.variant_id, (stockByVariant.get(s.variant_id) ?? 0) + s.quantity);
+    // Un solo número = disponible (físico − reservado).
+    stockByVariant.set(s.variant_id, (stockByVariant.get(s.variant_id) ?? 0) + Number(s.quantity) - Number(s.reserved ?? 0));
   }
 
   const priceByList = new Map<string, { price: number; promo: number | null }>();
