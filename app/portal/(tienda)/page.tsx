@@ -116,7 +116,7 @@ export default async function PortalHome() {
   ]);
   const accSubcatIds = new Set(cats.filter((c) => ACCESSORY_SUBCATS.has(normName(c.name))).map((c) => c.id));
   const novedades = allItems
-    .filter((p) => p.stock > 0 && !excludeMains.has(p.mainCategoryId ?? "") && !accSubcatIds.has(p.categoryId ?? ""))
+    .filter((p) => p.image && p.stock > 0 && !excludeMains.has(p.mainCategoryId ?? "") && !accSubcatIds.has(p.categoryId ?? ""))
     .sort((a, b) => (b.sku ?? -1) - (a.sku ?? -1))
     .slice(0, 8);
 
