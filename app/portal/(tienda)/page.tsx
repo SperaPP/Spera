@@ -16,6 +16,12 @@ const HERO = {
   cta: { label: "Ver todo el catálogo", href: "/portal/catalogo?all=1" },
 };
 
+// Fotos fijas por categoría madre (override de la imagen automática). La clave es
+// el nombre exacto de la categoría. Si no está acá, usa la foto del primer producto.
+const TILE_IMAGES: Record<string, string> = {
+  Mujer: "/portal/cat-mujer.jpg",
+};
+
 // Degradés de respaldo cuando una categoría no tiene foto.
 const GRADS = [
   "linear-gradient(135deg,#e0cdd3,#c7a3b0)",
@@ -119,9 +125,9 @@ export default async function PortalHome() {
         <section>
           <SectionHeading title="Categorías" subtitle="Comprá por rubro" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
-            <CategoryTile id={big.id} name={big.name} image={big.image} index={0} big />
+            <CategoryTile id={big.id} name={big.name} image={TILE_IMAGES[big.name] ?? big.image} index={0} big />
             {rest.map((t, i) => (
-              <CategoryTile key={t.id} id={t.id} name={t.name} image={t.image} index={i + 1} />
+              <CategoryTile key={t.id} id={t.id} name={t.name} image={TILE_IMAGES[t.name] ?? t.image} index={i + 1} />
             ))}
           </div>
         </section>
