@@ -62,7 +62,7 @@ export async function portalFacets(opts: {
   return { mains, cats, seasons };
 }
 
-export type CatalogItem = { id: string; name: string; price: number; compareAt: number | null; publicPrice: number | null; stock: number; featured: boolean; image: string | null; sizes: string[] };
+export type CatalogItem = { id: string; name: string; price: number; compareAt: number | null; publicPrice: number | null; stock: number; featured: boolean; image: string | null; sizes: string[]; colors: string[] };
 
 /** Item completo para el catálogo del cliente (incluye categorías para filtrar en el navegador). */
 export type CatalogFullItem = CatalogItem & { mainCategoryId: string | null; categoryId: string | null; seasonId: string | null; sku: number | null };
@@ -87,6 +87,7 @@ export async function catalogAll(opts: { org: string; list: string; warehouse: s
     rows.push(...batch);
     if (batch.length < 1000) break;
   }
+  const colorsByProduct = await activeColorsByProduct(opts.org);
   return rows.map((r) => {
     const { price, compareAt } = efectivo(Number(r.price), r.promo != null ? Number(r.promo) : null);
     return {
@@ -95,7 +96,7 @@ export async function catalogAll(opts: { org: string; list: string; warehouse: s
       image: r.image_path ? `${BUCKET_URL}/${r.image_path}` : null,
       stock: Number(r.stock), featured: r.featured,
       mainCategoryId: r.main_category_id, categoryId: r.category_id, seasonId: r.season_id,
-      sizes: r.sizes ?? [], sku: r.sku != null ? Number(r.sku) : null,
+      sizes: r.sizes ?? [], colors: colorsByProduct.get(r.id) ?? [], sku: r.sku != null ? Number(r.sku) : null,
     };
   });
 }
@@ -107,13 +108,13 @@ function efectivo(base: number, promo: number | null): { price: number; compareA
   return { price: base, compareAt: null };
 }
 
-/** Talles disponibles (variante activa con stock) por producto, para mostrar en la card. */
-async function availableSizesByProduct(productIds: string[], warehouse: string): Promise<Map<string, string[]>> {
-  const out = new Map<string, string[]>();
+/** Talles y colores disponibles (variante activa con stock) por producto, para la card. */
+async function availableAttrsByProduct(productIds: string[], warehouse: string): Promise<Map<string, { sizes: string[]; colors: string[] }>> {
+  const out = new Map<string, { sizes: string[]; colors: string[] }>();
   if (!productIds.length) return out;
   const admin = createAdminClient();
   const { data: vs } = await admin.from("product_variants")
-    .select("id, product_id, size").in("product_id", productIds).eq("active", true).not("size", "is", null);
+    .select("id, product_id, size, color").in("product_id", productIds).eq("active", true);
   const rows = vs ?? [];
   const avail = new Set<string>();
   const ids = rows.map((v) => v.id);
@@ -122,10 +123,30 @@ async function availableSizesByProduct(productIds: string[], warehouse: string):
     for (const s of st ?? []) if (Math.max(0, Number(s.quantity) - Number(s.reserved ?? 0)) > 0) avail.add(s.variant_id);
   }
   for (const v of rows) {
-    if (!avail.has(v.id) || !v.size) continue;
-    const set = out.get(v.product_id) ?? [];
-    if (!set.includes(v.size)) set.push(v.size);
-    out.set(v.product_id, set);
+    if (!avail.has(v.id)) continue;
+    const e = out.get(v.product_id) ?? { sizes: [], colors: [] };
+    if (v.size && !e.sizes.includes(v.size)) e.sizes.push(v.size);
+    if (v.color && !e.colors.includes(v.color)) e.colors.push(v.color);
+    out.set(v.product_id, e);
+  }
+  return out;
+}
+
+/** Colores (de variantes activas) por producto para toda la organización, para la card del catálogo. */
+async function activeColorsByProduct(org: string): Promise<Map<string, string[]>> {
+  const admin = createAdminClient();
+  const out = new Map<string, string[]>();
+  for (let from = 0; ; from += 1000) {
+    const { data } = await admin.from("product_variants")
+      .select("product_id, color").eq("organization_id", org).eq("active", true).not("color", "is", null)
+      .range(from, from + 999);
+    const batch = data ?? [];
+    for (const v of batch) {
+      const s = out.get(v.product_id) ?? [];
+      if (v.color && !s.includes(v.color)) s.push(v.color);
+      out.set(v.product_id, s);
+    }
+    if (batch.length < 1000) break;
   }
   return out;
 }
@@ -179,20 +200,21 @@ export async function catalog(opts: {
 
   // Precio público (referencia) + talles disponibles para la card.
   const ids = rows.map((r) => r.id);
-  const [pubByProduct, sizesByProduct] = await Promise.all([
+  const [pubByProduct, attrsByProduct] = await Promise.all([
     publicPriceByProduct(opts.org, ids),
-    availableSizesByProduct(ids, opts.warehouse),
+    availableAttrsByProduct(ids, opts.warehouse),
   ]);
 
   return {
     total,
     items: rows.map((r) => {
       const { price, compareAt } = efectivo(Number(r.price), r.promo != null ? Number(r.promo) : null);
+      const attrs = attrsByProduct.get(r.id);
       return {
         id: r.id, name: r.name, price, compareAt, publicPrice: pubByProduct.get(r.id) ?? null,
         stock: Number(r.stock), featured: r.featured,
         image: imgByProduct.has(r.id) ? `${BUCKET_URL}/${imgByProduct.get(r.id)}` : null,
-        sizes: sizesByProduct.get(r.id) ?? [],
+        sizes: attrs?.sizes ?? [], colors: attrs?.colors ?? [],
       };
     }),
   };

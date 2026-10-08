@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut, Clock, XCircle } from "lucide-react";
+import { LogOut, Clock, XCircle, Search, User } from "lucide-react";
 import { getPortalCustomer } from "@/lib/portal";
 import { CartProvider, CartButton } from "@/components/portal-cart";
 import { logoutPortal } from "../actions";
+
+// Mensaje de la barra superior (editable).
+const PROMO = "Mayorista Body Sculpt · Pedí online y pagá a cuenta corriente";
+const navLinks = [
+  { href: "/portal/catalogo", label: "Catálogo" },
+  { href: "/portal/pedidos", label: "Pedidos" },
+  { href: "/portal/cuenta", label: "Mi cuenta" },
+];
 
 export default async function TiendaLayout({ children }: { children: React.ReactNode }) {
   const { userId, customer } = await getPortalCustomer();
@@ -34,29 +42,45 @@ export default async function TiendaLayout({ children }: { children: React.React
     );
   }
 
+  const iconBtn = "flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-canvas hover:text-ink";
+
   return (
     <CartProvider>
       <div className="min-h-screen bg-canvas">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-card px-4 sm:gap-4 sm:px-6">
-          <Link href="/portal" className="flex shrink-0 items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-fg">B</span>
-            <span className="hidden font-semibold text-ink sm:inline">Portal Mayorista</span>
-          </Link>
-          {/* Accesos SIEMPRE visibles (también en celular), en el header fijo de arriba. */}
-          <nav className="flex items-center gap-3 sm:gap-4">
-            <Link href="/portal/catalogo" className="text-sm font-medium text-muted transition-colors hover:text-ink">Catálogo</Link>
-            <Link href="/portal/pedidos" className="text-sm font-medium text-muted transition-colors hover:text-ink">Pedidos</Link>
-            <Link href="/portal/cuenta" className="text-sm font-medium text-muted transition-colors hover:text-ink">Mi cuenta</Link>
-          </nav>
-          <div className="ml-auto flex items-center gap-2 sm:gap-4">
-            <span className="hidden text-sm text-muted sm:inline">{customer.name}</span>
-            <CartButton />
-            <form action={logoutPortal}>
-              <button className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-ink">
-                <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Salir</span>
-              </button>
-            </form>
+        <header className="sticky top-0 z-20 border-b border-line bg-card">
+          {/* Barra promo */}
+          <div className="bg-ink text-canvas">
+            <p className="mx-auto max-w-6xl px-4 py-1.5 text-center text-[11px] font-medium tracking-wide sm:text-xs">{PROMO}</p>
           </div>
+
+          {/* Header principal: nav (desktop) · logo centrado · íconos */}
+          <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+            <nav className="hidden flex-1 items-center gap-6 sm:flex">
+              {navLinks.map((l) => (
+                <Link key={l.href} href={l.href} className="text-sm font-medium text-muted transition-colors hover:text-ink">{l.label}</Link>
+              ))}
+            </nav>
+
+            <Link href="/portal" className="mr-auto flex-none sm:mr-0 sm:flex-none">
+              <span className="text-lg font-bold uppercase tracking-[0.22em] text-ink">Body Sculpt</span>
+            </Link>
+
+            <div className="flex flex-1 items-center justify-end gap-1 sm:gap-1.5">
+              <Link href="/portal/catalogo" aria-label="Buscar en el catálogo" className={iconBtn}><Search className="h-[18px] w-[18px]" /></Link>
+              <Link href="/portal/cuenta" aria-label="Mi cuenta" className={`hidden sm:flex ${iconBtn}`}><User className="h-[18px] w-[18px]" /></Link>
+              <CartButton />
+              <form action={logoutPortal}>
+                <button aria-label="Salir" className={iconBtn}><LogOut className="h-[18px] w-[18px]" /></button>
+              </form>
+            </div>
+          </div>
+
+          {/* Nav en celular (debajo del header) */}
+          <nav className="flex items-center justify-center gap-6 border-t border-line px-4 py-2 sm:hidden">
+            {navLinks.map((l) => (
+              <Link key={l.href} href={l.href} className="text-sm font-medium text-muted transition-colors hover:text-ink">{l.label}</Link>
+            ))}
+          </nav>
         </header>
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
       </div>

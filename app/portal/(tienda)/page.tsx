@@ -5,6 +5,17 @@ import { centralWarehouseId, mainCategoryTiles, catalog } from "@/lib/portal-cat
 import { PortalSearch } from "@/components/portal-search";
 import { PortalProductCard } from "@/components/portal-product-card";
 
+// Configuración del hero (editable). `aspectClass` controla el alto; el texto
+// editorial es opcional: si el banner ya trae texto quemado, dejá los campos vacíos.
+const HERO = {
+  image: "/portal/banner.jpg",
+  aspectClass: "aspect-[16/9]", // más alto: "aspect-[2/1]" o "aspect-[21/9]"
+  eyebrow: "",   // ej. "Primavera-Verano"
+  title: "",     // ej. "Vestite diferente"
+  subtitle: "",  // ej. "Destacá siempre"
+  cta: { label: "Ver todo el catálogo", href: "/portal/catalogo?all=1" },
+};
+
 // Degradés de respaldo cuando una categoría no tiene foto.
 const GRADS = [
   "linear-gradient(135deg,#e0cdd3,#c7a3b0)",
@@ -73,14 +84,26 @@ export default async function PortalHome() {
     <div className="space-y-12">
       {/* Hero */}
       <section className="overflow-hidden rounded-2xl border border-line bg-card">
-        <div className="relative aspect-[16/9] w-full bg-canvas">
+        <div className={`relative w-full bg-canvas ${HERO.aspectClass}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/portal/banner.jpg" alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
-          <div className="absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/55 to-transparent p-5 sm:p-7">
-            <Link href="/portal/catalogo?all=1" className="inline-flex items-center gap-2 rounded-full bg-card px-6 py-3 text-sm font-semibold text-ink shadow-lg transition-transform hover:scale-[1.03]">
-              Ver todo el catálogo <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+          <img src={HERO.image} alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
+          {(() => {
+            const hasText = !!(HERO.eyebrow || HERO.title || HERO.subtitle);
+            return (
+              <div className={`absolute inset-0 flex flex-col gap-4 bg-gradient-to-t from-black/60 to-transparent p-5 sm:p-8 ${hasText ? "items-start justify-end text-left" : "items-center justify-end"}`}>
+                {hasText && (
+                  <div className="max-w-lg">
+                    {HERO.eyebrow && <p className="font-serif text-sm italic text-white/90 sm:text-base">{HERO.eyebrow}</p>}
+                    {HERO.title && <h2 className="text-3xl font-bold uppercase leading-none tracking-tight text-white sm:text-5xl">{HERO.title}</h2>}
+                    {HERO.subtitle && <p className="mt-2 text-sm text-white/90 sm:text-lg">{HERO.subtitle}</p>}
+                  </div>
+                )}
+                <Link href={HERO.cta.href} className="inline-flex items-center gap-2 rounded-full bg-card px-6 py-3 text-sm font-semibold text-ink shadow-lg transition-transform hover:scale-[1.03]">
+                  {HERO.cta.label} <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            );
+          })()}
         </div>
       </section>
 
