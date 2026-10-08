@@ -80,7 +80,7 @@ export function PortalCatalogClient({
   if (main && mainName) chips.push({ label: mainName, clear: () => { setMain(null); setCat(null); } });
   if (cat && catName) chips.push({ label: catName, clear: () => setCat(null) });
   if (season && seasonName) chips.push({ label: seasonName, clear: () => setSeason(null) });
-  if (onlyOffers) chips.push({ label: "En oferta", clear: () => setOnlyOffers(false) });
+  if (onlyOffers) chips.push({ label: "Sale", clear: () => setOnlyOffers(false) });
 
   const mainPills = mains.filter((m) => (mainsCount.get(m.id) ?? 0) > 0 || m.id === main);
   const catOpts = cats.filter((c) => (catsCount.get(c.id) ?? 0) > 0 || c.id === cat);
@@ -113,7 +113,7 @@ export function PortalCatalogClient({
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <button onClick={() => setOnlyOffers((v) => !v)} disabled={offersCount === 0 && !onlyOffers}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${onlyOffers ? "bg-danger text-white" : "border border-line-strong text-ink hover:bg-card"}`}>
-            <Tag className="h-3.5 w-3.5" /> En oferta{offersCount > 0 && <span className={onlyOffers ? "text-white/80" : "text-faint"}>{offersCount}</span>}
+            <Tag className="h-3.5 w-3.5" /> Sale{offersCount > 0 && <span className={onlyOffers ? "text-white/80" : "text-faint"}>{offersCount}</span>}
           </button>
 
           {catOpts.length > 0 && (

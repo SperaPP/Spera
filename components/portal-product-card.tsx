@@ -55,7 +55,7 @@ export function PortalProductCard({ p }: { p: CatalogItem }) {
           {p.compareAt != null ? (
             <>
               <span className="text-xs tabular-nums text-faint line-through">{formatMoney(p.compareAt)}</span>
-              <span className="rounded-full bg-danger/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-danger">Oferta</span>
+              <span className="rounded-full bg-danger/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-danger">Sale</span>
             </>
           ) : (
             p.publicPrice != null && p.publicPrice > p.price && (
