@@ -177,6 +177,7 @@ export async function catalog(opts: {
   org: string; list: string; warehouse: string;
   category?: string | null; mainCategory?: string | null; season?: string | null;
   search?: string | null; featured?: boolean; sort?: string | null;
+  excludeMains?: string[]; // excluir productos de estas categorías madre (ej. Home/Accesorios en Novedades)
   limit: number; offset: number;
 }): Promise<{ items: CatalogItem[]; total: number }> {
   const admin = createAdminClient();
@@ -187,8 +188,16 @@ export async function catalog(opts: {
     p_main_category: opts.mainCategory ?? null, p_season: opts.season ?? null,
     p_sort: opts.sort ?? "name",
   });
-  const rows = (data ?? []) as { id: string; name: string; has_image: boolean; price: number; promo: number | null; stock: number; featured: boolean; total: number }[];
+  let rows = (data ?? []) as { id: string; name: string; has_image: boolean; price: number; promo: number | null; stock: number; featured: boolean; total: number }[];
   const total = rows[0]?.total != null ? Number(rows[0].total) : 0;
+
+  // Excluir categorías madre (el RPC no lo soporta; se filtra acá por producto).
+  if (opts.excludeMains?.length && rows.length) {
+    const { data: mc } = await admin.from("products").select("id, main_category_id").in("id", rows.map((r) => r.id));
+    const mainById = new Map((mc ?? []).map((m) => [m.id, m.main_category_id]));
+    const ex = new Set(opts.excludeMains);
+    rows = rows.filter((r) => !ex.has(mainById.get(r.id) ?? ""));
+  }
 
   // Portada por producto (una query para toda la página).
   const withImg = rows.filter((r) => r.has_image).map((r) => r.id);

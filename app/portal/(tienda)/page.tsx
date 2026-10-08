@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { getPortalCustomer } from "@/lib/portal";
-import { centralWarehouseId, mainCategoryTiles, catalog } from "@/lib/portal-catalog";
+import { centralWarehouseId, mainCategoryTiles, catalogAll } from "@/lib/portal-catalog";
 import { PortalSearch } from "@/components/portal-search";
 import { PortalProductCard } from "@/components/portal-product-card";
 
@@ -16,11 +16,23 @@ const HERO = {
   cta: { label: "Ver todo el catálogo", href: "/portal/catalogo?all=1" },
 };
 
-// Fotos fijas por categoría madre (override de la imagen automática). La clave es
-// el nombre exacto de la categoría. Si no está acá, usa la foto del primer producto.
-const TILE_IMAGES: Record<string, string> = {
-  Mujer: "/portal/cat-mujer.jpg",
+// Override por categoría madre: foto fija, etiqueta y/o link. La clave es el nombre
+// exacto de la categoría. Si no está acá: foto del primer producto, el nombre y link a esa madre.
+const TILE_CFG: Record<string, { image?: string; label?: string; href?: string }> = {
+  Mujer: { image: "/portal/cat-mujer.jpg" },
+  Home: { image: "/portal/cat-home.webp" },
+  // La tile de Outlet pasa a ser "Sale" y lleva a las ofertas.
+  Outlet: { image: "/portal/cat-sale.png", label: "Sale", href: "/portal/catalogo?sale=1" },
 };
+
+function resolveTile(t: { id: string; name: string; image: string | null }) {
+  const cfg = TILE_CFG[t.name] ?? {};
+  return {
+    href: cfg.href ?? `/portal/catalogo?main=${t.id}`,
+    label: cfg.label ?? t.name,
+    image: cfg.image ?? t.image,
+  };
+}
 
 // Degradés de respaldo cuando una categoría no tiene foto.
 const GRADS = [
@@ -46,10 +58,10 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 }
 
 // Tile de categoría con foto, degradé y etiqueta tipo pill.
-function CategoryTile({ id, name, image, index, big = false }: { id: string; name: string; image: string | null; index: number; big?: boolean }) {
+function CategoryTile({ href, label, image, index, big = false }: { href: string; label: string; image: string | null; index: number; big?: boolean }) {
   return (
     <Link
-      href={`/portal/catalogo?main=${id}`}
+      href={href}
       className={`group relative overflow-hidden rounded-2xl ${big ? "col-span-2 aspect-[16/11] sm:row-span-2 sm:aspect-auto" : "aspect-square"}`}
       style={image ? undefined : { background: GRADS[index % GRADS.length] }}
     >
@@ -60,7 +72,7 @@ function CategoryTile({ id, name, image, index, big = false }: { id: string; nam
       <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-transparent" />
       <span className="absolute inset-x-0 bottom-0 flex justify-center p-3 sm:p-4">
         <span className={`rounded-full bg-card/95 font-semibold text-ink shadow-sm backdrop-blur-sm transition-colors group-hover:bg-card ${big ? "px-5 py-2 text-base" : "px-4 py-1.5 text-sm"}`}>
-          {name}
+          {label}
         </span>
       </span>
     </Link>
@@ -77,14 +89,21 @@ export default async function PortalHome() {
     return <p className="rounded-xl border border-warn/40 bg-warn-bg/30 px-4 py-6 text-sm text-ink">Tu cuenta todavía no tiene una lista de precios asignada. Escribinos para habilitarte.</p>;
   }
 
-  const [tiles, destacados] = await Promise.all([
-    mainCategoryTiles(org),
-    wh ? catalog({ org, list, warehouse: wh, featured: true, limit: 8, offset: 0 }) : Promise.resolve({ items: [], total: 0 }),
-  ]);
+  const tiles = await mainCategoryTiles(org);
 
   // Mujer va de tile grande (es el rubro principal); el resto, chicos.
   const big = tiles.find((t) => /mujer/i.test(t.name)) ?? tiles[0];
   const rest = tiles.filter((t) => t.id !== big?.id);
+
+  // Novedades: la ropa más nueva (excluye Home y Accesorios). Ordena por SKU desc
+  // (lo último cargado primero) y toma 8. "featured" no sirve acá: casi todo lo
+  // destacado son cuadros (Home).
+  const excludeMains = new Set(tiles.filter((t) => /^(home|accesorios)$/i.test(t.name)).map((t) => t.id));
+  const allItems = wh ? await catalogAll({ org, list, warehouse: wh }) : [];
+  const novedades = allItems
+    .filter((p) => p.stock > 0 && !excludeMains.has(p.mainCategoryId ?? "__none__"))
+    .sort((a, b) => (b.sku ?? -1) - (a.sku ?? -1))
+    .slice(0, 8);
 
   return (
     <div className="space-y-12">
@@ -125,20 +144,21 @@ export default async function PortalHome() {
         <section>
           <SectionHeading title="Categorías" subtitle="Comprá por rubro" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
-            <CategoryTile id={big.id} name={big.name} image={TILE_IMAGES[big.name] ?? big.image} index={0} big />
-            {rest.map((t, i) => (
-              <CategoryTile key={t.id} id={t.id} name={t.name} image={TILE_IMAGES[t.name] ?? t.image} index={i + 1} />
-            ))}
+            {(() => { const r = resolveTile(big); return <CategoryTile href={r.href} label={r.label} image={r.image} index={0} big />; })()}
+            {rest.map((t, i) => {
+              const r = resolveTile(t);
+              return <CategoryTile key={t.id} href={r.href} label={r.label} image={r.image} index={i + 1} />;
+            })}
           </div>
         </section>
       )}
 
-      {/* Novedades */}
-      {destacados.items.length > 0 && (
+      {/* Novedades (solo ropa) */}
+      {novedades.length > 0 && (
         <section>
           <SectionHeading title="Novedades" subtitle="Lo nuevo de la semana" />
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {destacados.items.map((p) => <PortalProductCard key={p.id} p={p} />)}
+            {novedades.map((p) => <PortalProductCard key={p.id} p={p} />)}
           </div>
           <div className="mt-8 flex justify-center">
             <Link href="/portal/catalogo?all=1" className="inline-flex items-center gap-2 rounded-full border border-ink px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-ink hover:text-canvas">

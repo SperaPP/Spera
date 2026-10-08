@@ -17,14 +17,14 @@ export function PortalCatalogClient({
   products: CatalogFullItem[];
   mains: Opt[]; cats: Opt[]; seasons: Opt[];
   defaultMainId: string | null;
-  initial: { main?: string; cat?: string; season?: string; q?: string };
+  initial: { main?: string; cat?: string; season?: string; q?: string; offers?: boolean };
 }) {
-  const noExplicit = !initial.main && !initial.cat && !initial.season && !initial.q;
+  const noExplicit = !initial.main && !initial.cat && !initial.season && !initial.q && !initial.offers;
   const [main, setMain] = useState<string | null>(initial.main ?? (noExplicit ? defaultMainId : null));
   const [cat, setCat] = useState<string | null>(initial.cat ?? null);
   const [season, setSeason] = useState<string | null>(initial.season ?? null);
   const [q, setQ] = useState(initial.q ?? "");
-  const [onlyOffers, setOnlyOffers] = useState(false);
+  const [onlyOffers, setOnlyOffers] = useState(initial.offers ?? false);
   const [sort, setSort] = useState<string>("sku_desc");
   const [visible, setVisible] = useState(STEP);
 

@@ -2,10 +2,10 @@ import { getPortalCustomer } from "@/lib/portal";
 import { centralWarehouseId, categoriasActivas, categoriasPrincipales, temporadasActivas, catalogAll } from "@/lib/portal-catalog";
 import { PortalCatalogClient } from "@/components/portal-catalog-client";
 
-type Params = { cat?: string; main?: string; season?: string; q?: string };
+type Params = { cat?: string; main?: string; season?: string; q?: string; sale?: string };
 
 export default async function PortalCatalogo({ searchParams }: { searchParams: Promise<Params> }) {
-  const { cat, main, season, q } = await searchParams;
+  const { cat, main, season, q, sale } = await searchParams;
 
   const { customer } = await getPortalCustomer();
   const list = customer?.priceListId ?? null;
@@ -32,7 +32,7 @@ export default async function PortalCatalogo({ searchParams }: { searchParams: P
       cats={cats}
       seasons={seasons}
       defaultMainId={null}
-      initial={{ main, cat, season, q }}
+      initial={{ main, cat, season, q, offers: sale === "1" }}
     />
   );
 }
