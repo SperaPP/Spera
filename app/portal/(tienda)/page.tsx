@@ -14,6 +14,42 @@ const GRADS = [
   "linear-gradient(135deg,#d8c3be,#be9b93)",
 ];
 
+// Encabezado de sección editorial: guiones + título en mayúscula + subtítulo en itálica.
+function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="mb-6 flex flex-col items-center text-center">
+      <div className="flex items-center gap-3">
+        <span className="h-px w-8 bg-ink/25" />
+        <h2 className="text-lg font-bold uppercase tracking-[0.14em] text-ink sm:text-2xl">{title}</h2>
+        <span className="h-px w-8 bg-ink/25" />
+      </div>
+      {subtitle && <p className="mt-1.5 font-serif text-sm italic text-muted">{subtitle}</p>}
+    </div>
+  );
+}
+
+// Tile de categoría con foto, degradé y etiqueta tipo pill.
+function CategoryTile({ id, name, image, index, big = false }: { id: string; name: string; image: string | null; index: number; big?: boolean }) {
+  return (
+    <Link
+      href={`/portal/catalogo?main=${id}`}
+      className={`group relative overflow-hidden rounded-2xl ${big ? "col-span-2 aspect-[16/11] sm:row-span-2 sm:aspect-auto" : "aspect-square"}`}
+      style={image ? undefined : { background: GRADS[index % GRADS.length] }}
+    >
+      {image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+      )}
+      <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-transparent" />
+      <span className="absolute inset-x-0 bottom-0 flex justify-center p-3 sm:p-4">
+        <span className={`rounded-full bg-card/95 font-semibold text-ink shadow-sm backdrop-blur-sm transition-colors group-hover:bg-card ${big ? "px-5 py-2 text-base" : "px-4 py-1.5 text-sm"}`}>
+          {name}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 export default async function PortalHome() {
   const { customer } = await getPortalCustomer();
   const list = customer?.priceListId ?? null;
@@ -29,38 +65,40 @@ export default async function PortalHome() {
     wh ? catalog({ org, list, warehouse: wh, featured: true, limit: 8, offset: 0 }) : Promise.resolve({ items: [], total: 0 }),
   ]);
 
+  // Mujer va de tile grande (es el rubro principal); el resto, chicos.
+  const big = tiles.find((t) => /mujer/i.test(t.name)) ?? tiles[0];
+  const rest = tiles.filter((t) => t.id !== big?.id);
+
   return (
-    <div className="space-y-10">
-      {/* Portada */}
+    <div className="space-y-12">
+      {/* Hero */}
       <section className="overflow-hidden rounded-2xl border border-line bg-card">
         <div className="relative aspect-[16/9] w-full bg-canvas">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/portal/banner.jpg" alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
-        </div>
-        <div className="flex flex-col gap-4 p-7 sm:p-9">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Hola, {customer!.name}</p>
-          <h1 className="text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-[2.4rem]">Reponé lo que más rota.</h1>
-          <div className="max-w-md"><PortalSearch /></div>
-          <Link href="/portal/catalogo?all=1" className="inline-flex w-fit items-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-sm font-semibold text-canvas transition-opacity hover:opacity-90">
-            Ver todo el catálogo <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/55 to-transparent p-5 sm:p-7">
+            <Link href="/portal/catalogo?all=1" className="inline-flex items-center gap-2 rounded-full bg-card px-6 py-3 text-sm font-semibold text-ink shadow-lg transition-transform hover:scale-[1.03]">
+              Ver todo el catálogo <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* Categorías madre */}
-      {tiles.length > 0 && (
+      {/* Saludo + buscador */}
+      <section className="flex flex-col items-center gap-3 text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Hola, {customer!.name}</p>
+        <h1 className="font-serif text-2xl italic text-ink sm:text-3xl">¿Qué estás buscando hoy?</h1>
+        <div className="mt-1 w-full max-w-xl"><PortalSearch /></div>
+      </section>
+
+      {/* Categorías (mosaico) */}
+      {tiles.length > 0 && big && (
         <section>
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-faint">Comprá por categoría</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {tiles.map((t, i) => (
-              <Link key={t.id} href={`/portal/catalogo?main=${t.id}`} className="group relative flex aspect-[3/4] items-end overflow-hidden rounded-xl p-4" style={t.image ? undefined : { background: GRADS[i % GRADS.length] }}>
-                {t.image && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={t.image} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                )}
-                <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-transparent" />
-                <span className="relative text-lg font-semibold text-white drop-shadow-sm">{t.name}</span>
-              </Link>
+          <SectionHeading title="Categorías" subtitle="Comprá por rubro" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
+            <CategoryTile id={big.id} name={big.name} image={big.image} index={0} big />
+            {rest.map((t, i) => (
+              <CategoryTile key={t.id} id={t.id} name={t.name} image={t.image} index={i + 1} />
             ))}
           </div>
         </section>
@@ -69,12 +107,14 @@ export default async function PortalHome() {
       {/* Novedades */}
       {destacados.items.length > 0 && (
         <section>
-          <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-faint">Novedades</h2>
-            <Link href="/portal/catalogo?all=1" className="flex items-center gap-1 text-sm font-medium text-accent hover:underline">Ver más <ArrowRight className="h-3.5 w-3.5" /></Link>
-          </div>
+          <SectionHeading title="Novedades" subtitle="Lo nuevo de la semana" />
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {destacados.items.map((p) => <PortalProductCard key={p.id} p={p} />)}
+          </div>
+          <div className="mt-8 flex justify-center">
+            <Link href="/portal/catalogo?all=1" className="inline-flex items-center gap-2 rounded-full border border-ink px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-ink hover:text-canvas">
+              Ver todo el catálogo <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </section>
       )}
