@@ -28,27 +28,22 @@ export default async function PortalHome() {
     mainCategoryTiles(org),
     wh ? catalog({ org, list, warehouse: wh, featured: true, limit: 8, offset: 0 }) : Promise.resolve({ items: [], total: 0 }),
   ]);
-  const heroImg = tiles.find((t) => t.image)?.image ?? destacados.items.find((i) => i.image)?.image ?? null;
 
   return (
     <div className="space-y-10">
       {/* Portada */}
       <section className="overflow-hidden rounded-2xl border border-line bg-card">
-        <div className="grid sm:grid-cols-2">
-          <div className="flex flex-col justify-center gap-4 p-7 sm:p-9">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Hola, {customer!.name}</p>
-            <h1 className="text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-[2.4rem]">Reponé lo que más rota.</h1>
-            <div className="max-w-md"><PortalSearch /></div>
-            <Link href="/portal/catalogo?all=1" className="inline-flex w-fit items-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-sm font-semibold text-canvas transition-opacity hover:opacity-90">
-              Ver todo el catálogo <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="relative hidden min-h-[240px] bg-canvas sm:block" style={heroImg ? undefined : { background: GRADS[0] }}>
-            {heroImg && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            )}
-          </div>
+        <div className="relative aspect-[16/9] w-full bg-canvas">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/portal/banner.jpg" alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
+        </div>
+        <div className="flex flex-col gap-4 p-7 sm:p-9">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Hola, {customer!.name}</p>
+          <h1 className="text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-[2.4rem]">Reponé lo que más rota.</h1>
+          <div className="max-w-md"><PortalSearch /></div>
+          <Link href="/portal/catalogo?all=1" className="inline-flex w-fit items-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-sm font-semibold text-canvas transition-opacity hover:opacity-90">
+            Ver todo el catálogo <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </section>
 
