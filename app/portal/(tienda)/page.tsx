@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { getPortalCustomer } from "@/lib/portal";
-import { centralWarehouseId, mainCategoryTiles, catalogAll } from "@/lib/portal-catalog";
+import { centralWarehouseId, mainCategoryTiles, catalogAll, categoriasActivas } from "@/lib/portal-catalog";
 import { PortalSearch } from "@/components/portal-search";
 import { PortalProductCard } from "@/components/portal-product-card";
 
@@ -33,6 +33,17 @@ function resolveTile(t: { id: string; name: string; image: string | null }) {
     image: cfg.image ?? t.image,
   };
 }
+
+// Subcategorías de accesorios/bolsos/calzado que NO son ropa (se excluyen de Novedades).
+const normName = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, "");
+const ACCESSORY_SUBCATS = new Set([
+  "accesorios", "anillo", "bag", "bandana", "bandolera", "boina", "bolso", "bolsos", "broche",
+  "bufanda", "bufandon", "cadena", "cartera", "carteras", "correa", "cuello", "dije", "gorra", "gorras",
+  "gorro", "gorros", "guantes", "llavero", "mochila", "mochilas", "morral", "neceser", "piluso",
+  "portacelular", "rinonera", "tapaboca", "vincha", "medias", "sandalias", "zapatilla", "zapatillas",
+  "calzados", "calzado", "bijou", "billetera", "monedero", "pulsera", "aros", "collar", "cinto",
+  "cinturon", "panuelo", "visera", "pashmina",
+]);
 
 // Degradés de respaldo cuando una categoría no tiene foto.
 const GRADS = [
@@ -95,13 +106,17 @@ export default async function PortalHome() {
   const big = tiles.find((t) => /mujer/i.test(t.name)) ?? tiles[0];
   const rest = tiles.filter((t) => t.id !== big?.id);
 
-  // Novedades: la ropa más nueva (excluye Home y Accesorios). Ordena por SKU desc
-  // (lo último cargado primero) y toma 8. "featured" no sirve acá: casi todo lo
-  // destacado son cuadros (Home).
+  // Novedades: la ropa más nueva. Excluye la categoría madre Home/Accesorios Y las
+  // subcategorías de accesorios/bolsos/calzado. Ordena por SKU desc (lo último cargado
+  // primero) y toma 8. "featured" no sirve acá: casi todo lo destacado son cuadros (Home).
   const excludeMains = new Set(tiles.filter((t) => /^(home|accesorios)$/i.test(t.name)).map((t) => t.id));
-  const allItems = wh ? await catalogAll({ org, list, warehouse: wh }) : [];
+  const [allItems, cats] = await Promise.all([
+    wh ? catalogAll({ org, list, warehouse: wh }) : Promise.resolve([]),
+    categoriasActivas(),
+  ]);
+  const accSubcatIds = new Set(cats.filter((c) => ACCESSORY_SUBCATS.has(normName(c.name))).map((c) => c.id));
   const novedades = allItems
-    .filter((p) => p.stock > 0 && !excludeMains.has(p.mainCategoryId ?? "__none__"))
+    .filter((p) => p.stock > 0 && !excludeMains.has(p.mainCategoryId ?? "") && !accSubcatIds.has(p.categoryId ?? ""))
     .sort((a, b) => (b.sku ?? -1) - (a.sku ?? -1))
     .slice(0, 8);
 
