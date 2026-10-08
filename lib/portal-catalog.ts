@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normColor } from "@/lib/colors";
 
 export const BUCKET_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
 
@@ -224,6 +225,7 @@ export type PortalProduct = {
   id: string; name: string; description: string | null; price: number; compareAt: number | null; publicPrice: number | null;
   variationType: string;
   images: string[];
+  imagesByColor: { color: string; url: string }[]; // fotos etiquetadas por color (clave normalizada), portada primero
   variants: { id: string; label: string | null; size: string | null; color: string | null; stock: number }[];
 };
 
@@ -257,12 +259,25 @@ export async function portalProduct(productId: string, org: string, list: string
   if (variants.length === 0) return null; // sin stock en ninguna variante activa → no disponible
 
   const pubById = await publicPriceByProduct(org, [productId]);
-  const { data: imgs } = await admin.from("product_images").select("path, is_primary").eq("product_id", productId).order("is_primary", { ascending: false });
+  const { data: imgs } = await admin.from("product_images").select("path, color, is_primary")
+    .eq("product_id", productId).order("is_primary", { ascending: false }).order("position");
+
+  const rows = imgs ?? [];
+  // Fotos por color (primera por color según orden portada/posición).
+  const seen = new Set<string>();
+  const imagesByColor: { color: string; url: string }[] = [];
+  for (const im of rows) {
+    const key = normColor(im.color as string | null);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    imagesByColor.push({ color: key, url: `${BUCKET_URL}/${im.path}` });
+  }
 
   return {
     id: p.id, name: p.name, description: p.description, price: effPrice, compareAt, publicPrice: pubById.get(productId) ?? null,
     variationType: (p.variation_type as string) ?? "none",
-    images: (imgs ?? []).map((im) => `${BUCKET_URL}/${im.path}`),
+    images: rows.map((im) => `${BUCKET_URL}/${im.path}`),
+    imagesByColor,
     variants,
   };
 }

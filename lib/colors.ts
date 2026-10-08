@@ -21,6 +21,11 @@ function norm(name: string): string {
   return name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, "");
 }
 
+/** Normaliza un nombre de color para emparejar foto↔variante (sin mayúsculas ni espacios de más). */
+export function normColor(c: string | null | undefined): string {
+  return (c ?? "").trim().toLowerCase();
+}
+
 /** Devuelve el hex de un color por su nombre, o null si no se reconoce. */
 export function colorHex(name: string): string | null {
   const n = norm(name);

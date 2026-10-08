@@ -34,7 +34,7 @@ export default async function PortalProductoPage({ params }: { params: Promise<{
             {p.compareAt != null ? (
               <>
                 <span className="text-base tabular-nums text-faint line-through">{formatMoney(p.compareAt)}</span>
-                <span className="rounded-full bg-danger/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-danger">Oferta</span>
+                <span className="rounded-full bg-danger/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-danger">Sale</span>
               </>
             ) : (
               p.publicPrice != null && p.publicPrice > p.price && (
@@ -46,7 +46,7 @@ export default async function PortalProductoPage({ params }: { params: Promise<{
 
           <div className="mt-5">
             <h2 className="mb-2 text-sm font-medium text-ink">Cargá tu pedido por talle y color</h2>
-            <PortalVariantMatrix productId={p.id} name={p.name} price={p.price} image={p.images[0] ?? null} variants={p.variants} />
+            <PortalVariantMatrix productId={p.id} name={p.name} price={p.price} image={p.images[0] ?? null} imagesByColor={p.imagesByColor} variants={p.variants} showPreview={false} />
           </div>
         </div>
       </div>

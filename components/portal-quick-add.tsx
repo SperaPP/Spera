@@ -60,7 +60,7 @@ export function PortalQuickAdd({ productId }: { productId: string }) {
                   <p className="mt-2 text-sm">Este producto ya no está disponible.</p>
                 </div>
               ) : (
-                <PortalVariantMatrix productId={prod.id} name={prod.name} price={prod.price} image={prod.images[0] ?? null} variants={prod.variants} onAdded={close} />
+                <PortalVariantMatrix productId={prod.id} name={prod.name} price={prod.price} image={prod.images[0] ?? null} imagesByColor={prod.imagesByColor} variants={prod.variants} onAdded={close} />
               )}
             </div>
           </div>
