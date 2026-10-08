@@ -90,7 +90,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
       </Link>
 
       <div className="mb-5 rounded-xl border border-line bg-card p-5">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-ink">{customer.name}</h1>
             <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
@@ -101,7 +101,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
               {infoField("Teléfono", customer.phone)}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <Link href={`/clientes/${customer.id}/editar`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
               <Pencil className="h-4 w-4" />
               Editar
