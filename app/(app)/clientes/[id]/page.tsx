@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AjusteSaldoButton } from "@/components/ajuste-saldo-button";
 import { CambiarPasswordClienteButton } from "@/components/cambiar-password-cliente-button";
+import { EnviarLinkPortalButton } from "@/components/enviar-link-portal-button";
 
 /** Link al comprobante que originó el movimiento de cuenta corriente. */
 function movHref(referenceType: string | null, referenceId: string | null): string | null {
@@ -110,6 +111,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
               Cobrar
             </Link>
             {isAdmin === true && customer.auth_user_id && <CambiarPasswordClienteButton customerId={customer.id} />}
+            {isAdmin === true && customer.auth_user_id && <EnviarLinkPortalButton customerId={customer.id} />}
             {isAdmin === true && <AjusteSaldoButton customerId={customer.id} balance={balance} />}
           </div>
         </div>

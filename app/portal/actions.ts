@@ -87,6 +87,18 @@ export async function logoutPortal() {
   redirect("/portal/login");
 }
 
+/** Setea la contraseña nueva del cliente (con la sesión de recuperación activa, del link). */
+export async function setClavePortal(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 6) return { error: "La contraseña debe tener al menos 6 caracteres." };
+  const sb = await createClient();
+  const { data: auth } = await sb.auth.getUser();
+  if (!auth?.user) return { error: "El enlace expiró o no es válido. Pedile al local uno nuevo." };
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) return { error: error.message };
+  redirect("/portal");
+}
+
 /** Stock DISPONIBLE actual (Central) para las variantes del carrito. Solo lectura;
  *  el portal-cart lo usa para re-validar contra el stock vivo. */
 export async function stockDisponiblePortal(variantIds: string[]): Promise<Record<string, number>> {

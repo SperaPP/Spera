@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -126,6 +127,36 @@ export async function cambiarPasswordCliente(customerId: string, newPassword: st
   const { error } = await admin.auth.admin.updateUserById(c.auth_user_id as string, { password: newPassword });
   if (error) return { error: error.message };
   return { ok: true };
+}
+
+/** Genera un link de un solo uso para que el cliente entre al portal y cree su contraseña.
+ *  Pensado para enviar por WhatsApp. Reservado a administración. */
+export async function generarLinkAccesoCliente(
+  customerId: string
+): Promise<ActionState & { link?: string; phone?: string | null; name?: string }> {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  const { data: c } = await sb.from("customers")
+    .select("name, email, phone, auth_user_id").eq("id", customerId).eq("organization_id", orgId).maybeSingle();
+  if (!c) return { error: "Cliente inválido" };
+  if (!c.auth_user_id) return { error: "El cliente no tiene cuenta de portal (todavía no se registró)." };
+  if (!c.email) return { error: "El cliente no tiene email cargado; agregá uno para generar el link." };
+
+  const h = await headers();
+  const origin = h.get("origin") || process.env.NEXT_PUBLIC_SITE_URL || "";
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "recovery",
+    email: c.email as string,
+    options: { redirectTo: `${origin}/auth/callback?next=/portal/nueva-clave` },
+  });
+  if (error) return { error: error.message };
+  const link = data.properties?.action_link;
+  if (!link) return { error: "No se pudo generar el link." };
+  return { ok: true, link, phone: (c.phone as string | null) ?? null, name: c.name as string };
 }
 
 // ── Duplicados de clientes ─────────────────────────────────────
