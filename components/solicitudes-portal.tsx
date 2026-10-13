@@ -25,7 +25,7 @@ export function SolicitudesPortal({ pending, tipos }: { pending: Pending[]; tipo
   function aprobar(id: string) {
     setBusy(id);
     start(async () => {
-      const r = await aprobarPortalCliente(id, tipoBy[id] || null);
+      const r = await aprobarPortalCliente(id, tipoBy[id] || defaultTipo || null);
       setBusy(null);
       if (r.error) { toast.error(r.error); return; }
       toast.success("Cliente aprobado."); router.refresh();
@@ -60,7 +60,7 @@ export function SolicitudesPortal({ pending, tipos }: { pending: Pending[]; tipo
                 {p.phone && <span>{p.phone}</span>}
               </div>
             </div>
-            <select value={tipoBy[p.id] ?? ""} onChange={(e) => setTipoBy((t) => ({ ...t, [p.id]: e.target.value }))} className={select} title="Lista de precios del cliente">
+            <select value={tipoBy[p.id] ?? defaultTipo} onChange={(e) => setTipoBy((t) => ({ ...t, [p.id]: e.target.value }))} className={select} title="Lista de precios del cliente">
               {tipos.length === 0 && <option value="">Sin tipos</option>}
               {tipos.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>

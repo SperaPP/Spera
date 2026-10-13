@@ -90,8 +90,19 @@ export async function aprobarPortalCliente(customerId: string, customerTypeId: s
   const sb = await createClient();
   const { data: orgId } = await sb.rpc("current_org_id");
   if (!orgId) return { error: "Sin organización" };
+
+  // El portal es mayorista: si no vino un tipo (p. ej. una solicitud que llegó después
+  // de abrir la pantalla), asignamos el tipo "Mayorista" sí o sí, para que el cliente
+  // SIEMPRE quede con su lista de precios. Sin tipo = sin lista = portal roto.
+  let typeId = customerTypeId;
+  if (!typeId) {
+    const { data: t } = await sb.from("customer_types")
+      .select("id").eq("organization_id", orgId).ilike("name", "%mayorista%").limit(1).maybeSingle();
+    typeId = t?.id ?? null;
+  }
+
   const { error } = await sb.from("customers")
-    .update({ portal_status: "aprobado", customer_type_id: customerTypeId, active: true })
+    .update({ portal_status: "aprobado", customer_type_id: typeId, active: true })
     .eq("id", customerId).eq("organization_id", orgId);
   if (error) return { error: error.message };
   revalidatePath("/clientes");
