@@ -63,7 +63,7 @@ export function StockTable({ rows, warehouses, canEdit }: { rows: Row[]; warehou
                         <p className="px-2 py-4 text-center text-sm text-muted">{loading ? "Cargando…" : "—"}</p>
                       ) : (
                         <>
-                          <p className="mb-2 px-1 text-xs text-muted">{canEdit ? "Editá la existencia por variante y depósito. Se registra como ajuste." : "Solo lectura (no tenés permiso de edición de stock)."}</p>
+                          <p className="mb-2 px-1 text-xs text-muted">{canEdit ? "Editás el stock FÍSICO (lo que hay en el depósito). Al lado ves lo reservado y el disponible. Se registra como ajuste." : "Solo lectura (no tenés permiso de edición de stock)."}</p>
                           <StockMatrix productId={p.id} variants={cache[p.id].variants} warehouses={warehouses} stockMap={cache[p.id].stockMap} reservedMap={cache[p.id].reservedMap} readOnly={!canEdit} />
                         </>
                       )}

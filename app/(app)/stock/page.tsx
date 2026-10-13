@@ -83,8 +83,10 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
     const m = byProdWh.get(p.id), mr = byProdWhRes.get(p.id);
     const perWh: Record<string, number> = {};
     let total = 0;
-    // Un solo número = disponible (físico − reservado). La reserva sigue por dentro.
-    for (const w of whs) { const disp = (m?.get(w.id) ?? 0) - (mr?.get(w.id) ?? 0); perWh[w.id] = disp; total += disp; }
+    // El resumen muestra el FÍSICO por depósito (lo que hay). Reservado y disponible
+    // se ven al expandir la variante. (mr se usa en la matriz expandida.)
+    void mr;
+    for (const w of whs) { const f = m?.get(w.id) ?? 0; perWh[w.id] = f; total += f; }
     return { id: p.id, name: p.name, perWh, total };
   });
 

@@ -63,8 +63,8 @@ export default async function ProductoDetallePage({
 
   const stockByVariant = new Map<string, number>();
   for (const s of stock ?? []) {
-    // Un solo número = disponible (físico − reservado).
-    stockByVariant.set(s.variant_id, (stockByVariant.get(s.variant_id) ?? 0) + Number(s.quantity) - Number(s.reserved ?? 0));
+    // Muestra el FÍSICO por variante (lo que hay en depósito).
+    stockByVariant.set(s.variant_id, (stockByVariant.get(s.variant_id) ?? 0) + Number(s.quantity));
   }
 
   const priceByList = new Map<string, { price: number; promo: number | null }>();
