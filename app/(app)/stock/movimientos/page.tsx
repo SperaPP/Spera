@@ -16,6 +16,8 @@ const REASON: Record<string, { label: string; cls: string }> = {
   devolucion: { label: "Devolución", cls: "text-ok" },
   anulacion: { label: "Anulación", cls: "text-ok" },
   ingreso: { label: "Ingreso", cls: "text-ok" },
+  reserva: { label: "Reserva de pedido", cls: "text-warn" },
+  liberacion: { label: "Liberación de reserva", cls: "text-warn" },
 };
 
 const lbl = (s: string | null, c: string | null) => [s, c].filter(Boolean).join(" / ") || "Única";
@@ -77,7 +79,7 @@ export default async function MovimientosStockPage({ searchParams }: { searchPar
         <ArrowLeft className="h-4 w-4" /> Volver a stock
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Registro de inventario</h1>
-      <p className="mt-1 mb-4 text-sm text-muted">Buscá una prenda (por nombre o SKU) y mirá todos sus movimientos de stock: ventas, despachos, transferencias, ajustes, cargas.</p>
+      <p className="mt-1 mb-4 text-sm text-muted">Buscá una prenda (por nombre o SKU) y mirá todos sus movimientos: físico (ventas, despachos, transferencias, ajustes, cargas) y reservas (armado/anulación de pedidos sin despachar). Las filas marcadas &quot;reservado&quot; mueven lo reservado, no el físico.</p>
 
       <div className="mb-4">
         <ProductSearch basePath="/stock/movimientos" placeholder="Buscar por nombre o SKU…" />
@@ -111,6 +113,7 @@ export default async function MovimientosStockPage({ searchParams }: { searchPar
             <tbody>
               {movs.map((m, i) => {
                 const r = REASON[m.reason] ?? { label: m.reason, cls: "text-muted" };
+                const isRes = m.reason === "reserva" || m.reason === "liberacion";
                 return (
                   <tr key={i} className="border-b border-line last:border-0 hover:bg-canvas">
                     <td className="px-4 py-2.5 whitespace-nowrap text-muted">{formatDateTime(m.created_at)}</td>
@@ -121,8 +124,9 @@ export default async function MovimientosStockPage({ searchParams }: { searchPar
                     </td>
                     <td className="px-4 py-2.5 text-muted">{m.warehouse}</td>
                     <td className={`px-4 py-2.5 font-medium ${r.cls}`}>{r.label}</td>
-                    <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${m.delta > 0 ? "text-ok" : m.delta < 0 ? "text-danger" : "text-muted"}`}>
+                    <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${isRes ? "text-warn" : m.delta > 0 ? "text-ok" : m.delta < 0 ? "text-danger" : "text-muted"}`}>
                       {m.delta > 0 ? `+${m.delta}` : m.delta}
+                      {isRes && <span className="ml-1 text-[10px] font-normal text-faint">reservado</span>}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-muted">{m.quien ?? "—"}</td>
                   </tr>
