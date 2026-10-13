@@ -131,3 +131,36 @@ export async function analizarTiendanube(): Promise<Resp> {
     },
   };
 }
+
+/** Reconciliación de stock: encola TODAS las variantes linkeadas a TN para que el
+ *  cron empuje el disponible actual de cada una. Úsese tras un período sin sync o
+ *  cuando se sospeche arrastre. Reservado a administración. */
+export async function reconciliarStockTN(): Promise<{ ok: boolean; encoladas?: number; error?: string }> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied.error ?? "No autorizado" };
+
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { ok: false, error: "Sin organización" };
+
+  const admin = createAdminClient();
+  // Traer todas las variantes linkeadas (paginado) y encolarlas (upsert idempotente).
+  const links: { variant_id: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin.from("tiendanube_links")
+      .select("variant_id").eq("organization_id", orgId).range(from, from + 999);
+    if (error) return { ok: false, error: error.message };
+    const batch = data ?? [];
+    links.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  if (links.length === 0) return { ok: true, encoladas: 0 };
+
+  const now = new Date().toISOString();
+  for (let i = 0; i < links.length; i += 500) {
+    const rows = links.slice(i, i + 500).map((l) => ({ organization_id: orgId, variant_id: l.variant_id, enqueued_at: now }));
+    const { error } = await admin.from("tn_stock_sync_queue").upsert(rows, { onConflict: "organization_id,variant_id" });
+    if (error) return { ok: false, error: error.message };
+  }
+  return { ok: true, encoladas: links.length };
+}

@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getTNCreds, fetchStoreName, tnConfigured } from "@/lib/tiendanube";
 import { TiendanubeAnalisis } from "@/components/tiendanube-analisis";
+import { ReconciliarStockTN } from "@/components/reconciliar-stock-tn";
 
 export default async function TiendanubePage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
   const { connected, error } = await searchParams;
@@ -55,6 +56,7 @@ export default async function TiendanubePage({ searchParams }: { searchParams: P
             </a>
           </div>
 
+          <ReconciliarStockTN />
           <TiendanubeAnalisis />
         </div>
       ) : (
