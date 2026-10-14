@@ -1,0 +1,51 @@
+import "server-only";
+
+// Configuración del conector ARCA/AFIP. Todo sale de variables de entorno; el
+// certificado y la clave NUNCA se commitean ni se loguean (son secrets de Vercel).
+//
+// Variables esperadas:
+//   ARCA_ENV        'homologacion' (default) | 'produccion'
+//   ARCA_CUIT       CUIT del emisor (con o sin guiones; se normaliza a dígitos)
+//   ARCA_PTO_VENTA  Punto de venta habilitado para Web Services (ej. 45)
+//   ARCA_CERT       Certificado .pem (contenido completo, multilínea)
+//   ARCA_KEY        Clave privada .pem (contenido completo, multilínea) — SECRETO
+//
+// Entorno de HOMOLOGACIÓN hasta validar; recién ahí se cambia el cert y ARCA_ENV.
+
+export type ArcaEnv = "homologacion" | "produccion";
+
+export function arcaEnv(): ArcaEnv {
+  return process.env.ARCA_ENV === "produccion" ? "produccion" : "homologacion";
+}
+
+// Normaliza un PEM que viene de una env var: tolera \r\n y \n literales (algunos
+// paneles escapan los saltos de línea al pegar).
+function normalizePem(raw: string): string {
+  const s = (raw ?? "").trim();
+  if (!s) return "";
+  return s.includes("\\n") && !s.includes("\n") ? s.replace(/\\n/g, "\n") : s;
+}
+
+export function arcaConfig() {
+  const env = arcaEnv();
+  return {
+    env,
+    cuit: (process.env.ARCA_CUIT ?? "").replace(/\D/g, ""),
+    ptoVenta: Number(process.env.ARCA_PTO_VENTA ?? "0"),
+    cert: normalizePem(process.env.ARCA_CERT ?? ""),
+    key: normalizePem(process.env.ARCA_KEY ?? ""),
+    wsaaUrl:
+      env === "produccion"
+        ? "https://wsaa.afip.gov.ar/ws/services/LoginCms"
+        : "https://wsaahomo.afip.gov.ar/ws/services/LoginCms",
+    wsfeUrl:
+      env === "produccion"
+        ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx"
+        : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx",
+  };
+}
+
+export function arcaConfigured(): boolean {
+  const c = arcaConfig();
+  return Boolean(c.cuit && c.ptoVenta > 0 && c.cert && c.key);
+}
