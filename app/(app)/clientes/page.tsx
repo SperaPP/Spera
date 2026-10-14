@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, Users, GitMerge } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requireView } from "@/lib/auth";
 import { formatMoney } from "@/lib/format";
 import { SolicitudesPortal } from "@/components/solicitudes-portal";
 import { Pagination } from "@/components/pagination";
@@ -21,6 +22,7 @@ function relName(r: unknown): string | null {
 }
 
 export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ page?: string; q?: string }> }) {
+  await requireView("clientes");
   const { page: pageParam, q } = await searchParams;
   const query = (q ?? "").trim();
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);

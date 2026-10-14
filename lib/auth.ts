@@ -1,4 +1,5 @@
 import "server-only";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canEdit, canView, type Perms } from "@/lib/permissions";
 
@@ -63,6 +64,24 @@ export async function requireCan(
   const ok = edit ? canEdit(perms, module) : canView(perms, module);
   if (!ok) return { error: "No tenés permiso para esta acción." };
   return null;
+}
+
+/**
+ * Guard de PÁGINA (server component, capa 1): si el usuario no puede VER el módulo,
+ * lo saca de la página (hasta ahora el permiso "ver" solo apagaba el link del sidebar,
+ * así que se podía entrar por URL directa a /reportes, /clientes, /cobranzas, etc.).
+ * El admin ve todo. Uso: al inicio del page.tsx → `await requireView("reportes");`
+ */
+export async function requireView(module: string): Promise<void> {
+  const sb = await createClient();
+  const { data: auth } = await sb.auth.getUser();
+  if (!auth?.user) redirect("/login");
+  const [{ data: isAdmin }, perms] = await Promise.all([
+    sb.rpc("is_admin"),
+    getPermissions(),
+  ]);
+  if (isAdmin === true) return;
+  if (!canView(perms, module)) redirect("/");
 }
 
 /** Guard para acciones reservadas al SuperAdministrador. */

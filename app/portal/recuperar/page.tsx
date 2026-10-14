@@ -25,6 +25,7 @@ export default function PortalRecuperarPage() {
           </div>
         ) : (
           <form action={action} className="space-y-4">
+            <input type="hidden" name="scope" value="portal" />
             <div>
               <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-ink">Email</label>
               <input id="email" name="email" type="email" autoComplete="email" required className={input} />

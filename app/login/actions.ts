@@ -8,16 +8,21 @@ import type { ActionState } from "@/lib/auth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Envía el mail de recuperación de contraseña (personal y portal). */
+/** Envía el mail de recuperación de contraseña (personal y portal).
+ *  scope=portal → el enlace lleva al flujo del portal (/portal/nueva-clave) y no al
+ *  de empleados (/nueva-contrasena), que dejaba al cliente en el panel interno. */
 export async function solicitarReset(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   if (!EMAIL_RE.test(email)) return { error: "Email inválido." };
+
+  const scope = String(formData.get("scope") ?? "");
+  const next = scope === "portal" ? "/portal/nueva-clave" : "/nueva-contrasena";
 
   const h = await headers();
   const origin = h.get("origin") || process.env.NEXT_PUBLIC_SITE_URL || "";
   const sb = await createClient();
   // No revelamos si el email existe o no: siempre respondemos ok.
-  await sb.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/callback?next=/nueva-contrasena` });
+  await sb.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/callback?next=${next}` });
   return { ok: true };
 }
 

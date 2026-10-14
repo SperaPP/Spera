@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Plus, HandCoins, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getStoreScope } from "@/lib/auth";
+import { getStoreScope, requireView } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
 
@@ -18,6 +18,7 @@ type Cobro = {
 const PAGE_SIZE = 50;
 
 export default async function CobranzasPage({ searchParams }: { searchParams: Promise<{ page?: string; q?: string }> }) {
+  await requireView("cobranzas");
   const { page: pageParam, q } = await searchParams;
   const query = (q ?? "").trim();
   const page = Math.max(1, Number(pageParam) || 1);

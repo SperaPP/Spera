@@ -255,7 +255,16 @@ export async function unificarClientes(targetId: string, sourceIds: string[]): P
   const sb = await createClient();
   const { data, error } = await sb.rpc("merge_customers", { p_target: targetId, p_sources: sources });
   if (error) return { error: error.message };
-  const res = (data ?? {}) as { unificadas?: number; conflictos_portal?: number };
+  const res = (data ?? {}) as { unificadas?: number; conflictos_portal?: number; auth_huerfanos?: string[] };
+
+  // Logins que quedaron sin cuenta (conflicto: ambas tenían portal) → borrarlos de Auth
+  // para que no queden sesiones muertas. Best-effort: si alguno falla, no corta la unificación.
+  const orphans = Array.isArray(res.auth_huerfanos) ? res.auth_huerfanos : [];
+  if (orphans.length > 0) {
+    const admin = createAdminClient();
+    await Promise.all(orphans.map((uid) => admin.auth.admin.deleteUser(uid).catch(() => null)));
+  }
+
   revalidatePath("/clientes");
   revalidatePath("/clientes/duplicados");
   revalidatePath(`/clientes/${targetId}`);

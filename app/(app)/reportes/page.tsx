@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getStoreScope } from "@/lib/auth";
+import { getStoreScope, requireView } from "@/lib/auth";
 import { formatMoney, formatNumber, TZ, todayLocal } from "@/lib/format";
 
 const PERIODS = [
@@ -34,6 +34,7 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
 }
 
 export default async function ReportesPage({ searchParams }: { searchParams: Promise<{ periodo?: string }> }) {
+  await requireView("reportes");
   const { periodo: raw } = await searchParams;
   const periodo = PERIODS.some((p) => p.key === raw) ? raw! : "mes";
   const { from, to } = range(periodo);

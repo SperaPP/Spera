@@ -27,6 +27,20 @@ export async function registrarPortal(_prev: ActionState, formData: FormData): P
   const { data: org } = await admin.from("organizations").select("id").order("created_at", { ascending: true }).limit(1).maybeSingle();
   if (!org) return { error: "No se pudo registrar (sin organización)." };
 
+  // Dedup: si ya hay una ficha de cliente (cargada por mostrador) con el mismo
+  // documento o email, se le vincula el login en vez de crear una ficha duplicada.
+  const { data: byDoc } = await admin.from("customers")
+    .select("id, auth_user_id").eq("organization_id", org.id).eq("doc_number", docNumber).limit(1).maybeSingle();
+  let existing = byDoc as { id: string; auth_user_id: string | null } | null;
+  if (!existing) {
+    const { data: byEmail } = await admin.from("customers")
+      .select("id, auth_user_id").eq("organization_id", org.id).eq("email", email).limit(1).maybeSingle();
+    existing = byEmail as { id: string; auth_user_id: string | null } | null;
+  }
+  if (existing?.auth_user_id) {
+    return { error: "Ya existe una cuenta de portal con ese documento o email. Probá ingresar o recuperar la contraseña." };
+  }
+
   const { data: created, error } = await admin.auth.admin.createUser({
     email, password, email_confirm: true,
     user_metadata: { portal: "true", full_name: name },
@@ -35,14 +49,18 @@ export async function registrarPortal(_prev: ActionState, formData: FormData): P
   const uid = created.user?.id;
   if (!uid) return { error: "No se pudo crear la cuenta." };
 
-  const { error: cErr } = await admin.from("customers").insert({
-    organization_id: org.id, name, doc_type: docType, doc_number: docNumber,
-    email, phone: phone || null, auth_user_id: uid, portal_status: "pendiente", active: true,
-  });
-  if (cErr) {
-    // Rollback del auth user si el cliente no se pudo crear.
+  const linkErr = existing
+    ? (await admin.from("customers").update({
+        email, phone: phone || null, auth_user_id: uid, portal_status: "pendiente", active: true,
+      }).eq("id", existing.id)).error
+    : (await admin.from("customers").insert({
+        organization_id: org.id, name, doc_type: docType, doc_number: docNumber,
+        email, phone: phone || null, auth_user_id: uid, portal_status: "pendiente", active: true,
+      })).error;
+  if (linkErr) {
+    // Rollback del auth user si el cliente no se pudo crear/vincular.
     await admin.auth.admin.deleteUser(uid);
-    return { error: cErr.message };
+    return { error: linkErr.message };
   }
 
   const sb = await createClient();
