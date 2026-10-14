@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Boxes, ClipboardCheck, PackagePlus, History } from "lucide-react";
+import { Boxes, ClipboardCheck, PackagePlus, History, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getPermissions, getStoreScope } from "@/lib/auth";
 import { canView, canEdit } from "@/lib/permissions";
@@ -95,9 +95,12 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Stock</h1>
-          <p className="mt-1 text-sm text-muted">Stock disponible por depósito (lo que se puede vender). Clic en un producto para ajustar por variante.</p>
+          <p className="mt-1 text-sm text-muted">Stock físico por depósito. Clic en un producto para ver reservado/disponible y ajustar por variante.</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Link href="/stock/reservas" className="flex items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+            <Clock className="h-4 w-4" /> Reservas
+          </Link>
           <Link href="/stock/movimientos" className="flex items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas">
             <History className="h-4 w-4" /> Registro
           </Link>
