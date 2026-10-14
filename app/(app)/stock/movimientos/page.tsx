@@ -18,6 +18,7 @@ const REASON: Record<string, { label: string; cls: string }> = {
   ingreso: { label: "Ingreso", cls: "text-ok" },
   reserva: { label: "Reserva de pedido", cls: "text-warn" },
   liberacion: { label: "Liberación de reserva", cls: "text-warn" },
+  faltante: { label: "Faltante en despacho (sin stock)", cls: "text-danger" },
 };
 
 const lbl = (s: string | null, c: string | null) => [s, c].filter(Boolean).join(" / ") || "Única";
