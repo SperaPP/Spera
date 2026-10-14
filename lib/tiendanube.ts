@@ -3,6 +3,7 @@
 // "Authentication: bearer TOKEN" (NO "Authorization: Bearer") + "User-Agent" obligatorio.
 // Es intencional y está verificado contra la tienda real; no cambiar el header.
 import "server-only";
+import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const API = "https://api.tiendanube.com/v1";
@@ -156,10 +157,13 @@ export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ pro
   if (!store?.warehouse_id) return { processed: 0, failed: 0, remaining: 0 };
   const wh = store.warehouse_id as string;
 
-  // Lease: un solo drenador por org a la vez (se auto-libera a los 90s si el drenado muere).
+  // Lease: un solo drenador por org a la vez (se auto-libera a los 90s si el drenado
+  // muere). Token de dueño: liberamos SOLO si seguimos siendo el dueño, así un drenado
+  // que se pasó de los 90s no le pisa el lease al que lo tomó después (A2).
+  const leaseToken = randomUUID();
   await admin.from("tn_sync_lock").upsert({ organization_id: orgId, locked_until: new Date(0).toISOString() }, { onConflict: "organization_id", ignoreDuplicates: true });
   const { data: lease } = await admin.from("tn_sync_lock")
-    .update({ locked_until: new Date(Date.now() + 90_000).toISOString() })
+    .update({ locked_until: new Date(Date.now() + 90_000).toISOString(), owner: leaseToken })
     .eq("organization_id", orgId).lt("locked_until", new Date().toISOString()).select("organization_id");
   if (!lease || lease.length === 0) return { processed: 0, failed: 0, remaining: 0, skipped: true };
 
@@ -234,7 +238,10 @@ export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ pro
       }
     }
   } finally {
-    await admin.from("tn_sync_lock").update({ locked_until: new Date().toISOString() }).eq("organization_id", orgId);
+    // Liberar solo si seguimos siendo el dueño (si el lease venció y otro lo tomó,
+    // este update no matchea y no le pisamos el lease al nuevo drenador).
+    await admin.from("tn_sync_lock").update({ locked_until: new Date().toISOString() })
+      .eq("organization_id", orgId).eq("owner", leaseToken);
   }
   const { count } = await admin.from("tn_stock_sync_queue")
     .select("*", { count: "exact", head: true }).eq("organization_id", orgId);
@@ -421,9 +428,12 @@ export async function syncTNOrdersRecent(orgId: string, windowMin = 45): Promise
   if (!creds) return { seen: 0, created: 0, errors: 0 };
   const since = new Date(Date.now() - windowMin * 60_000).toISOString();
   let seen = 0, created = 0, errors = 0;
-  let url: string | null = `${API}/${creds.storeId}/orders?updated_at_min=${encodeURIComponent(since)}&per_page=50&page=1`;
+  // per_page al máximo de TN (200) y hasta 25 páginas (5000 pedidos/ventana): antes
+  // topaba en 3×50=150 y, con un backlog mayor, se perdían pedidos que caían fuera de
+  // la ventana antes de alcanzarlos (A1).
+  let url: string | null = `${API}/${creds.storeId}/orders?updated_at_min=${encodeURIComponent(since)}&per_page=200&page=1`;
   let guard = 0;
-  while (url && guard++ < 3) {
+  while (url && guard++ < 25) {
     const res: Response = await tnRequest(url, { headers: { Authentication: `bearer ${creds.token}`, "User-Agent": USER_AGENT, "Content-Type": "application/json" } });
     if (res.status === 404) break;
     if (!res.ok) break;
