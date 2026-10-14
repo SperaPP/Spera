@@ -11,10 +11,10 @@ import { normColor } from "@/lib/colors";
 type Variant = { id: string; label: string | null; size: string | null; color: string | null; stock: number };
 
 export function PortalVariantMatrix({
-  productId, name, price, image, imagesByColor = [], variants, onAdded, showPreview = true,
+  productId, name, price, image, imagesByColor = [], variants, onAdded, showPreview = true, stickyFooter = false,
 }: {
   productId: string; name: string; price: number; image: string | null;
-  imagesByColor?: { color: string; url: string }[]; variants: Variant[]; onAdded?: () => void; showPreview?: boolean;
+  imagesByColor?: { color: string; url: string }[]; variants: Variant[]; onAdded?: () => void; showPreview?: boolean; stickyFooter?: boolean;
 }) {
   const { add } = useCart();
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -65,7 +65,7 @@ export function PortalVariantMatrix({
       {/* Panel de foto (cambia según el color elegido) */}
       {panel && (
         <div className="space-y-2">
-          <div className="aspect-square w-full overflow-hidden rounded-xl border border-line bg-canvas">
+          <div className="h-40 w-full overflow-hidden rounded-xl border border-line bg-canvas sm:aspect-square sm:h-auto">
             {preview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={preview} alt={name} className="h-full w-full object-cover" />
@@ -154,13 +154,13 @@ export function PortalVariantMatrix({
           </table>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-3">
+        <div className={`mt-4 flex flex-col gap-2.5 rounded-xl border border-line bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between ${stickyFooter ? "sticky bottom-0 z-10 shadow-[0_-10px_16px_-10px_rgba(0,0,0,0.18)]" : ""}`}>
           <div className="text-sm">
             <span className="text-muted">Seleccionado: </span>
             <span className="font-semibold text-ink">{totalUnidades} u.</span>
             {totalUnidades > 0 && <span className="ml-2 font-semibold tabular-nums text-accent">{formatMoney(totalPrecio)}</span>}
           </div>
-          <button onClick={agregar} disabled={totalUnidades === 0} className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-50">
+          <button onClick={agregar} disabled={totalUnidades === 0} className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-50 sm:w-auto sm:py-2.5">
             <ShoppingCart className="h-4 w-4" /> Agregar al pedido
           </button>
         </div>

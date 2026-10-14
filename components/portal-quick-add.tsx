@@ -30,9 +30,9 @@ export function PortalQuickAdd({ productId }: { productId: string }) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[8vh]" onClick={close}>
-          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-line bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" onClick={close}>
+          <div className="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3.5">
               <div className="min-w-0">
                 <h2 className="truncate text-sm font-semibold text-ink">{prod?.name ?? "Cargando…"}</h2>
                 {prod && (
@@ -51,7 +51,7 @@ export function PortalQuickAdd({ productId }: { productId: string }) {
               <button type="button" onClick={close} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-canvas hover:text-ink"><X className="h-4 w-4" /></button>
             </div>
 
-            <div className="p-5">
+            <div className="flex-1 overflow-y-auto p-5">
               {loading ? (
                 <p className="py-10 text-center text-sm text-muted">Cargando el producto…</p>
               ) : !prod ? (
@@ -60,7 +60,7 @@ export function PortalQuickAdd({ productId }: { productId: string }) {
                   <p className="mt-2 text-sm">Este producto ya no está disponible.</p>
                 </div>
               ) : (
-                <PortalVariantMatrix productId={prod.id} name={prod.name} price={prod.price} image={prod.images[0] ?? null} imagesByColor={prod.imagesByColor} variants={prod.variants} onAdded={close} />
+                <PortalVariantMatrix productId={prod.id} name={prod.name} price={prod.price} image={prod.images[0] ?? null} imagesByColor={prod.imagesByColor} variants={prod.variants} onAdded={close} stickyFooter />
               )}
             </div>
           </div>
