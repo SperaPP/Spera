@@ -3,7 +3,6 @@ import { Receipt, Eye, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
-import { FacturarButton } from "@/components/facturar-button";
 import { ImprimirArmadoButton } from "@/components/imprimir-armado-button";
 import { VentasFilters } from "@/components/ventas-filters";
 import { Pagination } from "@/components/pagination";
@@ -178,7 +177,6 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                         <Eye className="h-4 w-4" />
                       </Link>
                       <ImprimirArmadoButton saleId={s.id} printed={s.armado_printed_at != null} isAdmin={isAdmin === true} />
-                      <FacturarButton />
                     </div>
                   </td>
                 </tr>

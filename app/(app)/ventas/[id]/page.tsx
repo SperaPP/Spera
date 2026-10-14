@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AnularVentaButton } from "@/components/anular-venta-button";
+import { FacturarButton } from "@/components/facturar-button";
+import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
+
+const CBTE_LABEL: Record<number, string> = { 1: "Factura A", 6: "Factura B", 3: "Nota de Crédito A", 8: "Nota de Crédito B", 2: "Nota de Débito A", 7: "Nota de Débito B" };
 
 function relName(r: unknown): string | null {
   const o = Array.isArray(r) ? r[0] : r;
@@ -60,6 +64,16 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
   const numById = new Map((linked ?? []).map((s) => [s.id, s.number]));
   const cambioDeVenta = ((exTo ?? [])[0]?.original_sale_id as string | null) ?? undefined;
   const generoCambios = [...new Set((exFrom ?? []).map((e) => e.new_sale_id).filter(Boolean) as string[])];
+
+  // Facturación ARCA: comprobante ya emitido (de este entorno) o posibilidad de emitir.
+  const arcaEnv = arcaConfig().env;
+  const { data: invoice } = await sb
+    .from("arca_invoices")
+    .select("cbte_tipo, pto_vta, cbte_nro, cae, cae_vto, imp_total")
+    .eq("sale_id", id).eq("environment", arcaEnv).maybeSingle();
+  const puedeFacturar =
+    isAdmin === true && sale.status === "completada" && sale.channel !== "cambio" &&
+    Number(sale.total) > 0 && arcaConfigured() && !invoice;
 
   const field = (label: string, value: string | null) =>
     value ? <div className="text-sm"><span className="text-muted">{label}: </span><span className="text-ink">{value}</span></div> : null;
@@ -170,6 +184,25 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
           <div className="mt-2 flex justify-between border-t border-line pt-2"><span className="font-medium text-ink">Total</span><span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(Number(sale.total))}</span></div>
         </div>
       </div>
+
+      {(invoice || puedeFacturar) && (
+        <div className="mt-5 rounded-xl border border-line bg-card p-5">
+          <h2 className="mb-3 text-sm font-medium text-ink">Facturación (ARCA)</h2>
+          {invoice ? (
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-muted">Comprobante</span><span className="font-medium text-ink">{CBTE_LABEL[invoice.cbte_tipo as number] ?? `Tipo ${invoice.cbte_tipo}`} · {String(invoice.pto_vta).padStart(4, "0")}-{String(invoice.cbte_nro).padStart(8, "0")}</span></div>
+              <div className="flex justify-between"><span className="text-muted">CAE</span><span className="font-medium tabular-nums text-ink">{invoice.cae}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Vto. CAE</span><span className="tabular-nums text-ink">{invoice.cae_vto}</span></div>
+              {arcaEnv !== "produccion" && <p className="pt-1 text-xs text-warn">Emitido en homologación (prueba, sin validez fiscal).</p>}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted">Esta venta todavía no está facturada.</p>
+              <FacturarButton saleId={sale.id} env={arcaEnv} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
