@@ -134,7 +134,19 @@ const MAX_FAILS = 10; // tras N fallos consecutivos, se descarta (dead-letter)
  *  variante encolada a TN. Un solo drenador por org a la vez (lease). Borra la fila
  *  solo si no fue re-encolada durante el PUT (no pierde updates). Las fallidas van al
  *  fondo (no starvan a las buenas) y se descartan tras MAX_FAILS. */
-export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ processed: number; failed: number; remaining: number; skipped?: boolean }> {
+/** Mapa SKU → ids actuales de Tiendanube (producto/variante), leyendo el catálogo vivo.
+ *  Base de la auto-reparación de vínculos: si un link quedó apuntando a un id viejo,
+ *  re-resolvemos por SKU contra lo que TN tiene hoy. */
+export async function tnCatalogBySku(creds: TNCreds): Promise<Map<string, { prod: string; variant: string }>> {
+  const catalog = await fetchTNProducts(creds);
+  const m = new Map<string, { prod: string; variant: string }>();
+  for (const tp of catalog) for (const tv of tp.variants) {
+    if (tv.sku) m.set(String(tv.sku).trim().toLowerCase(), { prod: tp.id, variant: tv.tnVariantId });
+  }
+  return m;
+}
+
+export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ processed: number; failed: number; remaining: number; relinked?: number; removed?: number; skipped?: boolean }> {
   const admin = createAdminClient();
   const creds = await getTNCreds(orgId);
   if (!creds) return { processed: 0, failed: 0, remaining: 0 };
@@ -151,7 +163,7 @@ export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ pro
     .eq("organization_id", orgId).lt("locked_until", new Date().toISOString()).select("organization_id");
   if (!lease || lease.length === 0) return { processed: 0, failed: 0, remaining: 0, skipped: true };
 
-  let processed = 0, failed = 0;
+  let processed = 0, failed = 0, relinked = 0, removed = 0;
   try {
     const { data: queue } = await admin.from("tn_stock_sync_queue")
       .select("variant_id, enqueued_at, fail_count").eq("organization_id", orgId)
@@ -161,6 +173,11 @@ export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ pro
       const { data: links } = await admin.from("tiendanube_links")
         .select("variant_id, tn_product_id, tn_variant_id").eq("organization_id", orgId).in("variant_id", varIds);
       const linkByVar = new Map((links ?? []).map((l) => [l.variant_id as string, l]));
+      // SKU de cada variante del lote (para auto-reparar vínculos rotos re-resolviendo por SKU).
+      const { data: skus } = await admin.from("product_variants").select("id, sku").in("id", varIds);
+      const skuByVar = new Map<string, string>();
+      for (const s of skus ?? []) if (s.sku) skuByVar.set(s.id as string, String(s.sku).trim().toLowerCase());
+      let catalogBySku: Map<string, { prod: string; variant: string }> | null = null;
 
       for (const q of queue) {
         const vId = q.variant_id as string;
@@ -173,8 +190,30 @@ export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ pro
         // Disponible leído lo más tarde posible (justo antes del PUT).
         const { data: s } = await admin.from("stock").select("quantity, reserved").eq("warehouse_id", wh).eq("variant_id", vId).maybeSingle();
         const disp = Math.max(0, (s?.quantity ?? 0) - (s?.reserved ?? 0));
-        const res = await tnFetch(creds, `/products/${link.tn_product_id}/variants/${link.tn_variant_id}`,
+        let res = await tnFetch(creds, `/products/${link.tn_product_id}/variants/${link.tn_variant_id}`,
           { method: "PUT", body: JSON.stringify({ stock: disp }) });
+        // Auto-reparación: si TN responde 404, el producto/variante cambió de id en TN.
+        // Re-resolvemos por SKU contra el catálogo vivo, corregimos el link y reintentamos.
+        if (res.status === 404) {
+          if (!catalogBySku) catalogBySku = await tnCatalogBySku(creds).catch(() => null);
+          const sku = skuByVar.get(vId);
+          const match = sku && catalogBySku ? catalogBySku.get(sku) : undefined;
+          if (match) {
+            await admin.from("tiendanube_links")
+              .update({ tn_product_id: match.prod, tn_variant_id: match.variant, last_synced_at: new Date().toISOString() })
+              .eq("organization_id", orgId).eq("variant_id", vId);
+            res = await tnFetch(creds, `/products/${match.prod}/variants/${match.variant}`, { method: "PUT", body: JSON.stringify({ stock: disp }) });
+            if (res.ok) relinked++;
+          } else if (catalogBySku) {
+            // El SKU ya no existe en TN → el producto se quitó de la tienda. Sacamos el link
+            // y lo quitamos de la cola (no hay a dónde sincronizar).
+            await admin.from("tiendanube_links").delete().eq("organization_id", orgId).eq("variant_id", vId);
+            await admin.from("tn_stock_sync_queue").delete().eq("organization_id", orgId).eq("variant_id", vId).eq("enqueued_at", enq);
+            removed++;
+            await sleepMs(250);
+            continue;
+          }
+        }
         if (res.ok) {
           // Borrado condicionado por enqueued_at: si el trigger re-encoló durante el PUT
           // (venta física en el medio), este delete NO matchea y la variante se reprocesa.
@@ -199,7 +238,7 @@ export async function syncTNStockOnce(orgId: string, limit = 100): Promise<{ pro
   }
   const { count } = await admin.from("tn_stock_sync_queue")
     .select("*", { count: "exact", head: true }).eq("organization_id", orgId);
-  return { processed, failed, remaining: count ?? 0 };
+  return { processed, failed, remaining: count ?? 0, relinked, removed };
 }
 
 /** Drena la cola de todas las organizaciones conectadas a TN. */
@@ -304,6 +343,57 @@ export async function publishTNProduct(orgId: string, productId: string): Promis
   if (links.length) await admin.from("tiendanube_links").upsert(links, { onConflict: "organization_id,variant_id" });
 
   return { ok: true, tnProductId: tnPid, linked: links.length };
+}
+
+/** Repara TODOS los vínculos con Tiendanube re-resolviendo por SKU contra el catálogo
+ *  vivo. Corrige los que quedaron apuntando a ids viejos y crea los que faltan. Encola
+ *  los corregidos para empujar su stock. Devuelve un resumen. */
+export async function repairTNLinks(orgId: string): Promise<{ ok: boolean; corregidos?: number; sinCambios?: number; sinMatch?: number; error?: string }> {
+  const admin = createAdminClient();
+  const creds = await getTNCreds(orgId);
+  if (!creds) return { ok: false, error: "Tiendanube no está conectado" };
+
+  let bySku: Map<string, { prod: string; variant: string }>;
+  try { bySku = await tnCatalogBySku(creds); } catch { return { ok: false, error: "No se pudo leer el catálogo de Tiendanube" }; }
+
+  // Variantes activas con SKU (paginado) + sus links actuales.
+  const vars: { id: string; sku: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await admin.from("product_variants").select("id, sku")
+      .eq("organization_id", orgId).eq("active", true).not("sku", "is", null).range(from, from + 999);
+    const batch = data ?? [];
+    for (const v of batch) vars.push({ id: v.id as string, sku: String(v.sku).trim().toLowerCase() });
+    if (batch.length < 1000) break;
+  }
+  const linkByVar = new Map<string, { tn_product_id: string; tn_variant_id: string }>();
+  for (let from = 0; ; from += 1000) {
+    const { data } = await admin.from("tiendanube_links").select("variant_id, tn_product_id, tn_variant_id")
+      .eq("organization_id", orgId).range(from, from + 999);
+    const batch = data ?? [];
+    for (const l of batch) linkByVar.set(l.variant_id as string, { tn_product_id: l.tn_product_id as string, tn_variant_id: l.tn_variant_id as string });
+    if (batch.length < 1000) break;
+  }
+
+  const now = new Date().toISOString();
+  const fix: { organization_id: string; variant_id: string; tn_product_id: string; tn_variant_id: string; last_synced_at: string }[] = [];
+  let sinCambios = 0, sinMatch = 0;
+  for (const v of vars) {
+    const m = bySku.get(v.sku);
+    if (!m) { sinMatch++; continue; }
+    const cur = linkByVar.get(v.id);
+    if (cur && cur.tn_product_id === m.prod && cur.tn_variant_id === m.variant) { sinCambios++; continue; }
+    fix.push({ organization_id: orgId, variant_id: v.id, tn_product_id: m.prod, tn_variant_id: m.variant, last_synced_at: now });
+  }
+
+  for (let i = 0; i < fix.length; i += 500) {
+    const chunk = fix.slice(i, i + 500);
+    const { error } = await admin.from("tiendanube_links").upsert(chunk, { onConflict: "organization_id,variant_id" });
+    if (error) return { ok: false, error: error.message };
+    // Encolar los corregidos para empujar el stock actual a los ids nuevos.
+    const q = chunk.map((c) => ({ organization_id: orgId, variant_id: c.variant_id, enqueued_at: now }));
+    await admin.from("tn_stock_sync_queue").upsert(q, { onConflict: "organization_id,variant_id" });
+  }
+  return { ok: true, corregidos: fix.length, sinCambios, sinMatch };
 }
 
 /** Muestra u oculta un producto en la tienda (published true/false). No lo borra:

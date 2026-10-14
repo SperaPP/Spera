@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
-import { getTNCreds, fetchTNProducts, fetchStoreName } from "@/lib/tiendanube";
+import { getTNCreds, fetchTNProducts, fetchStoreName, repairTNLinks } from "@/lib/tiendanube";
 
 export type Analisis = {
   storeName: string | null;
@@ -163,4 +163,15 @@ export async function reconciliarStockTN(): Promise<{ ok: boolean; encoladas?: n
     if (error) return { ok: false, error: error.message };
   }
   return { ok: true, encoladas: links.length };
+}
+
+/** Repara los vínculos con Tiendanube rotos (re-vincula por SKU al producto/variante
+ *  actual de TN) y encola los corregidos para empujar su stock. Reservado a administración. */
+export async function repararVinculosTN(): Promise<{ ok: boolean; corregidos?: number; sinCambios?: number; sinMatch?: number; error?: string }> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied.error ?? "No autorizado" };
+  const sb = await createClient();
+  const { data: orgId } = await sb.rpc("current_org_id");
+  if (!orgId) return { ok: false, error: "Sin organización" };
+  return repairTNLinks(orgId as string);
 }
