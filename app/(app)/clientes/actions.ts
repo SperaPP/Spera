@@ -151,10 +151,25 @@ export async function generarLinkAccesoCliente(
   const sb = await createClient();
   const { data: orgId } = await sb.rpc("current_org_id");
   const { data: c } = await sb.from("customers")
-    .select("name, email, phone, auth_user_id").eq("id", customerId).eq("organization_id", orgId).maybeSingle();
+    .select("name, email, phone, auth_user_id, portal_status, customer_type_id").eq("id", customerId).eq("organization_id", orgId).maybeSingle();
   if (!c) return { error: "Cliente inválido" };
   if (!c.auth_user_id) return { error: "El cliente no tiene cuenta de portal (todavía no se registró)." };
   if (!c.email) return { error: "El cliente no tiene email cargado; agregá uno para generar el link." };
+
+  // Mandar el link habilita al cliente: lo aprobamos (y le asignamos la lista Mayorista
+  // si no tenía tipo), para que no quede trabado en "revisión" al crear su contraseña.
+  if (c.portal_status !== "aprobado" || !c.customer_type_id) {
+    let typeId = c.customer_type_id as string | null;
+    if (!typeId) {
+      const { data: t } = await sb.from("customer_types")
+        .select("id").eq("organization_id", orgId).ilike("name", "%mayorista%").limit(1).maybeSingle();
+      typeId = t?.id ?? null;
+    }
+    await sb.from("customers")
+      .update({ portal_status: "aprobado", customer_type_id: typeId, active: true })
+      .eq("id", customerId).eq("organization_id", orgId);
+    revalidatePath("/clientes");
+  }
 
   const h = await headers();
   const origin = h.get("origin") || process.env.NEXT_PUBLIC_SITE_URL || "";

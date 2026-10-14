@@ -44,7 +44,7 @@ export function EnviarLinkPortalButton({ customerId }: { customerId: string }) {
               <h2 className="text-sm font-semibold text-ink">Link de acceso al portal</h2>
               <button onClick={() => setOpen(false)} className="rounded-md p-1 text-muted hover:text-ink"><X className="h-4 w-4" /></button>
             </div>
-            <p className="text-xs text-muted">Mandale este link al cliente. Al abrirlo, crea su propia contraseña y queda adentro del portal. Es de un solo uso y vence; si no lo usa, generás otro.</p>
+            <p className="text-xs text-muted">Al generar el link, el cliente queda <strong>habilitado</strong> (aprobado, con lista Mayorista). Mandáselo: al abrirlo crea su contraseña y entra al portal. Es de un solo uso y vence; si no lo usa, generás otro.</p>
 
             <div className="mt-3 flex items-center gap-2">
               <input readOnly value={link} className="w-full truncate rounded-lg border border-line-strong bg-canvas px-3 py-2 text-xs text-muted outline-none" />
