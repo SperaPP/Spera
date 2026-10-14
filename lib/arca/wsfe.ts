@@ -66,13 +66,14 @@ function yyyymmdd(d: Date): string {
 }
 
 export type EmitParams = {
-  cbteTipo: number;   // 1=Factura A, 6=Factura B
-  docTipo: number;    // 80=CUIT, 96=DNI, 99=consumidor final
+  cbteTipo: number;      // 1=Factura A, 6=Factura B
+  docTipo: number;       // 80=CUIT, 96=DNI, 99=consumidor final
   docNro: string;
-  neto: number;       // sin IVA
-  iva: number;        // importe de IVA
-  total: number;      // neto + iva (lo que se cobró)
-  ivaId: number;      // 5 = 21%
+  neto: number;          // sin IVA
+  iva: number;           // importe de IVA
+  total: number;         // neto + iva (lo que se cobró)
+  ivaId: number;         // alícuota IVA: 5 = 21%
+  ivaReceptorId: number; // RG 5616 — condición IVA del receptor: 1 RI, 4 Exento, 5 ConsFinal, 6 Monotributo
 };
 export type EmitResult =
   | { ok: true; cbteNro: number; cae: string; caeVto: string; cbteFch: string }
@@ -106,6 +107,7 @@ export async function emitInvoice(orgId: string, p: EmitParams): Promise<EmitRes
       `<ar:ImpNeto>${f2(p.neto)}</ar:ImpNeto><ar:ImpOpEx>0</ar:ImpOpEx>` +
       `<ar:ImpIVA>${f2(p.iva)}</ar:ImpIVA><ar:ImpTrib>0</ar:ImpTrib>` +
       `<ar:MonId>PES</ar:MonId><ar:MonCotiz>1</ar:MonCotiz>` +
+      `<ar:CondicionIVAReceptorId>${p.ivaReceptorId}</ar:CondicionIVAReceptorId>` +
       `<ar:Iva><ar:AlicIva><ar:Id>${p.ivaId}</ar:Id><ar:BaseImp>${f2(p.neto)}</ar:BaseImp><ar:Importe>${f2(p.iva)}</ar:Importe></ar:AlicIva></ar:Iva>` +
       `</ar:FECAEDetRequest></ar:FeDetReq></ar:FeCAEReq>`;
 

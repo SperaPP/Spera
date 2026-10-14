@@ -48,6 +48,12 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
   const cond = cust?.fiscal_condition ?? "consumidor_final";
   const docDigits = (cust?.doc_digits ?? (sale.customer_doc ?? "").replace(/\D/g, "")) || "";
 
+  // Condición IVA del receptor (RG 5616): 1 RI, 4 Exento, 5 Consumidor Final, 6 Monotributo.
+  const IVA_RECEPTOR: Record<string, number> = {
+    responsable_inscripto: 1, exento: 4, consumidor_final: 5, monotributo: 6,
+  };
+  const ivaReceptorId = IVA_RECEPTOR[cond] ?? 5;
+
   let cbteTipo: number, docTipo: number, docNro: string, tipoLabel: string;
   if (cond === "responsable_inscripto" && docDigits.length >= 11) {
     cbteTipo = 1; docTipo = 80; docNro = docDigits; tipoLabel = "Factura A"; // a RI, con CUIT
@@ -62,7 +68,7 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
   const neto = round2(total / 1.21);
   const iva = round2(total - neto);
 
-  const r = await emitInvoice(org as string, { cbteTipo, docTipo, docNro, neto, iva, total, ivaId: 5 });
+  const r = await emitInvoice(org as string, { cbteTipo, docTipo, docNro, neto, iva, total, ivaId: 5, ivaReceptorId });
   if (!r.ok) return { ok: false, error: r.error };
 
   const { data: auth } = await sb.auth.getUser();
