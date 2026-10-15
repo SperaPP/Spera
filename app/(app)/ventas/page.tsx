@@ -142,7 +142,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
           <p className="mt-1 text-sm text-muted">Las ventas del POS van a aparecer acá.</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-line bg-card">
+        <div className="overflow-x-auto rounded-xl border border-line bg-card">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
@@ -195,9 +195,9 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                         const inv = invBySale.get(s.id);
                         if (inv) {
                           return (
-                            <Link href={`/ventas/${s.id}/comprobante`} title={`${CBTE_LABEL[inv.cbte_tipo as number] ?? "Comprobante"} ${String(inv.pto_vta).padStart(4, "0")}-${String(inv.cbte_nro).padStart(8, "0")}`}
-                              className="flex h-8 items-center gap-1 rounded-lg border border-ok/40 bg-ok-bg px-2 text-xs font-medium text-ok">
-                              <FileText className="h-3.5 w-3.5" /> Facturada
+                            <Link href={`/ventas/${s.id}/comprobante`} title={`Facturada · ${CBTE_LABEL[inv.cbte_tipo as number] ?? "Comprobante"} ${String(inv.pto_vta).padStart(4, "0")}-${String(inv.cbte_nro).padStart(8, "0")}`}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-ok/40 bg-ok-bg text-ok transition-colors hover:bg-ok/15">
+                              <FileText className="h-4 w-4" />
                             </Link>
                           );
                         }
