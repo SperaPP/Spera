@@ -6,6 +6,7 @@ import { getStoreScope } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AnularVentaButton } from "@/components/anular-venta-button";
 import { FacturarButton } from "@/components/facturar-button";
+import { NotaCreditoButton } from "@/components/nota-credito-button";
 import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
 
 const CBTE_LABEL: Record<number, string> = { 1: "Factura A", 6: "Factura B", 3: "Nota de Crédito A", 8: "Nota de Crédito B", 2: "Nota de Débito A", 7: "Nota de Débito B" };
@@ -65,15 +66,19 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
   const cambioDeVenta = ((exTo ?? [])[0]?.original_sale_id as string | null) ?? undefined;
   const generoCambios = [...new Set((exFrom ?? []).map((e) => e.new_sale_id).filter(Boolean) as string[])];
 
-  // Facturación ARCA: comprobante ya emitido (de este entorno) o posibilidad de emitir.
+  // Facturación ARCA: factura y/o nota de crédito ya emitidas (de este entorno).
   const arcaEnv = arcaConfig().env;
-  const { data: invoice } = await sb
+  const { data: comprobantes } = await sb
     .from("arca_invoices")
-    .select("cbte_tipo, pto_vta, cbte_nro, cae, cae_vto, imp_total")
-    .eq("sale_id", id).eq("environment", arcaEnv).maybeSingle();
+    .select("id, cbte_tipo, pto_vta, cbte_nro, cae, cae_vto, imp_total, asociado_a")
+    .eq("sale_id", id).eq("environment", arcaEnv);
+  const factura = (comprobantes ?? []).find((c) => [1, 6, 11].includes(c.cbte_tipo as number)) ?? null;
+  const nota = (comprobantes ?? []).find((c) => [3, 8, 13].includes(c.cbte_tipo as number)) ?? null;
   const puedeFacturar =
     isAdmin === true && sale.status === "completada" && sale.channel !== "cambio" &&
-    Number(sale.total) > 0 && arcaConfigured() && !invoice;
+    Number(sale.total) > 0 && arcaConfigured() && !factura;
+  const puedeNota = isAdmin === true && !!factura && !nota && arcaConfigured();
+  const cbteNum = (pv: number, nro: number) => `${String(pv).padStart(4, "0")}-${String(nro).padStart(8, "0")}`;
 
   const field = (label: string, value: string | null) =>
     value ? <div className="text-sm"><span className="text-muted">{label}: </span><span className="text-ink">{value}</span></div> : null;
@@ -185,17 +190,32 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
         </div>
       </div>
 
-      {(invoice || puedeFacturar) && (
+      {(factura || puedeFacturar) && (
         <div className="mt-5 rounded-xl border border-line bg-card p-5">
           <h2 className="mb-3 text-sm font-medium text-ink">Facturación (ARCA)</h2>
-          {invoice ? (
+          {factura ? (
             <div className="space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted">Comprobante</span><span className="font-medium text-ink">{CBTE_LABEL[invoice.cbte_tipo as number] ?? `Tipo ${invoice.cbte_tipo}`} · {String(invoice.pto_vta).padStart(4, "0")}-{String(invoice.cbte_nro).padStart(8, "0")}</span></div>
-              <div className="flex justify-between"><span className="text-muted">CAE</span><span className="font-medium tabular-nums text-ink">{invoice.cae}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Vto. CAE</span><span className="tabular-nums text-ink">{invoice.cae_vto}</span></div>
-              <Link href={`/ventas/${sale.id}/comprobante`} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
-                <Receipt className="h-3.5 w-3.5" /> Ver / imprimir comprobante
-              </Link>
+              <div className="flex justify-between"><span className="text-muted">Comprobante</span><span className="font-medium text-ink">{CBTE_LABEL[factura.cbte_tipo as number] ?? `Tipo ${factura.cbte_tipo}`} · {cbteNum(factura.pto_vta as number, factura.cbte_nro as number)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">CAE</span><span className="font-medium tabular-nums text-ink">{factura.cae}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Vto. CAE</span><span className="tabular-nums text-ink">{factura.cae_vto}</span></div>
+              <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                <Link href={`/ventas/${sale.id}/comprobante?doc=${factura.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
+                  <Receipt className="h-3.5 w-3.5" /> Ver / imprimir comprobante
+                </Link>
+                {puedeNota && <NotaCreditoButton saleId={sale.id} env={arcaEnv} />}
+              </div>
+
+              {nota && (
+                <div className="mt-3 border-t border-line pt-3">
+                  <div className="flex justify-between"><span className="text-muted">Nota de crédito</span><span className="font-medium text-ink">{CBTE_LABEL[nota.cbte_tipo as number] ?? `Tipo ${nota.cbte_tipo}`} · {cbteNum(nota.pto_vta as number, nota.cbte_nro as number)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted">CAE</span><span className="font-medium tabular-nums text-ink">{nota.cae}</span></div>
+                  <Link href={`/ventas/${sale.id}/comprobante?doc=${nota.id}`} className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
+                    <Receipt className="h-3.5 w-3.5" /> Ver / imprimir nota de crédito
+                  </Link>
+                  <p className="pt-1.5 text-xs text-warn">La factura fue anulada por esta nota de crédito.</p>
+                </div>
+              )}
+
               {arcaEnv !== "produccion" && <p className="pt-1 text-xs text-warn">Emitido en homologación (prueba, sin validez fiscal).</p>}
             </div>
           ) : (

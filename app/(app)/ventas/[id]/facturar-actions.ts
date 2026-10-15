@@ -11,6 +11,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // AFIP devuelve fechas YYYYMMDD → ISO YYYY-MM-DD para columnas date.
 const toISO = (yyyymmdd: string) => `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
 
+const FACTURA_TIPOS = [1, 6, 11]; // A, B, C
+const NC_DE: Record<number, number> = { 1: 3, 6: 8, 11: 13 }; // factura → su nota de crédito
+
 /**
  * Factura una venta en ARCA: pide el CAE y lo guarda. Solo admin. Idempotente: si la
  * venta ya tiene CAE en este entorno, no vuelve a emitir. NO se dispara solo: únicamente
@@ -37,9 +40,10 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
   const total = round2(Number(sale.total));
   if (total <= 0) return { ok: false, error: "La venta no tiene importe para facturar." };
 
-  // Idempotencia: ¿ya tiene CAE en este entorno?
+  // Idempotencia: ¿ya tiene FACTURA en este entorno? (puede existir además una NC)
   const { data: prev } = await admin.from("arca_invoices")
-    .select("cbte_nro, cae, cbte_tipo").eq("organization_id", org).eq("sale_id", saleId).eq("environment", cfg.env).maybeSingle();
+    .select("cbte_nro, cae").eq("organization_id", org).eq("sale_id", saleId).eq("environment", cfg.env)
+    .in("cbte_tipo", FACTURA_TIPOS).maybeSingle();
   if (prev) return { ok: true, cae: prev.cae as string, nro: prev.cbte_nro as number, yaExistia: true };
 
   // Tipo de comprobante y documento del receptor.
@@ -76,6 +80,7 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
     organization_id: org, sale_id: saleId, environment: cfg.env,
     cbte_tipo: cbteTipo, pto_vta: cfg.ptoVenta, cbte_nro: r.cbteNro,
     doc_tipo: docTipo, doc_nro: docNro, imp_neto: neto, imp_iva: iva, imp_total: total,
+    iva_receptor_id: ivaReceptorId,
     cae: r.cae, cae_vto: toISO(r.caeVto), cbte_fch: toISO(r.cbteFch),
     created_by: auth?.user?.id ?? null,
   });
@@ -86,4 +91,63 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
 
   revalidatePath(`/ventas/${saleId}`);
   return { ok: true, cae: r.cae, nro: r.cbteNro, tipo: tipoLabel };
+}
+
+/**
+ * Emite una NOTA DE CRÉDITO que anula por completo la factura de una venta (tipo 3 si
+ * era Factura A, 8 si era B), asociada al comprobante original. Solo admin, idempotente
+ * (si ya hay NC, la devuelve). Nunca automática. NO toca stock ni cuenta corriente: es
+ * solo el comprobante fiscal que revierte la factura.
+ */
+export async function emitirNotaCredito(saleId: string): Promise<{ ok: boolean; cae?: string; nro?: number; tipo?: string; error?: string; yaExistia?: boolean }> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied.error };
+  if (!arcaConfigured()) return { ok: false, error: "ARCA no está configurado." };
+
+  const sb = await createClient();
+  const { data: org } = await sb.rpc("current_org_id");
+  if (!org) return { ok: false, error: "Sin organización." };
+  const cfg = arcaConfig();
+  const admin = createAdminClient();
+
+  // Factura original de la venta (en este entorno).
+  const { data: factura } = await admin.from("arca_invoices")
+    .select("id, cbte_tipo, doc_tipo, doc_nro, imp_neto, imp_iva, imp_total, iva_receptor_id, pto_vta, cbte_nro")
+    .eq("organization_id", org).eq("sale_id", saleId).eq("environment", cfg.env)
+    .in("cbte_tipo", FACTURA_TIPOS).maybeSingle();
+  if (!factura) return { ok: false, error: "La venta no tiene factura emitida para anular." };
+
+  const ncTipo = NC_DE[factura.cbte_tipo as number];
+  if (!ncTipo) return { ok: false, error: "Tipo de comprobante sin nota de crédito definida." };
+
+  // Idempotencia: ¿ya hay una NC asociada a esta factura?
+  const { data: prevNc } = await admin.from("arca_invoices")
+    .select("cbte_nro, cae").eq("organization_id", org).eq("environment", cfg.env)
+    .eq("asociado_a", factura.id as string).maybeSingle();
+  if (prevNc) return { ok: true, cae: prevNc.cae as string, nro: prevNc.cbte_nro as number, yaExistia: true };
+
+  const neto = Number(factura.imp_neto), iva = Number(factura.imp_iva), total = Number(factura.imp_total);
+  const r = await emitInvoice(org as string, {
+    cbteTipo: ncTipo,
+    docTipo: factura.doc_tipo as number,
+    docNro: factura.doc_nro as string,
+    neto, iva, total, ivaId: 5,
+    ivaReceptorId: (factura.iva_receptor_id as number) ?? 5,
+    asociados: [{ tipo: factura.cbte_tipo as number, ptoVta: factura.pto_vta as number, nro: factura.cbte_nro as number }],
+  });
+  if (!r.ok) return { ok: false, error: r.error };
+
+  const { data: auth } = await sb.auth.getUser();
+  const { error: insErr } = await admin.from("arca_invoices").insert({
+    organization_id: org, sale_id: saleId, environment: cfg.env,
+    cbte_tipo: ncTipo, pto_vta: cfg.ptoVenta, cbte_nro: r.cbteNro,
+    doc_tipo: factura.doc_tipo, doc_nro: factura.doc_nro, imp_neto: neto, imp_iva: iva, imp_total: total,
+    iva_receptor_id: factura.iva_receptor_id, asociado_a: factura.id,
+    cae: r.cae, cae_vto: toISO(r.caeVto), cbte_fch: toISO(r.cbteFch),
+    created_by: auth?.user?.id ?? null,
+  });
+  if (insErr) return { ok: false, error: `Se emitió el CAE ${r.cae} (NC ${r.cbteNro}) pero falló el guardado local: ${insErr.message}` };
+
+  revalidatePath(`/ventas/${saleId}`);
+  return { ok: true, cae: r.cae, nro: r.cbteNro, tipo: ncTipo === 3 ? "Nota de Crédito A" : "Nota de Crédito B" };
 }

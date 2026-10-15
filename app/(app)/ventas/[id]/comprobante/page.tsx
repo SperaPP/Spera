@@ -20,8 +20,9 @@ function relFiscal(r: unknown): string | null {
   return (o as { fiscal_condition: string } | null)?.fiscal_condition ?? null;
 }
 
-export default async function ComprobantePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ComprobantePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ doc?: string }> }) {
   const { id } = await params;
+  const { doc } = await searchParams;
   const sb = await createClient();
 
   const { data: sale } = await sb
@@ -34,10 +35,12 @@ export default async function ComprobantePage({ params }: { params: Promise<{ id
   if (scopeStore && sale.store_id !== scopeStore) notFound();
 
   const env = arcaConfig().env;
-  const { data: inv } = await sb
-    .from("arca_invoices")
-    .select("cbte_tipo, pto_vta, cbte_nro, doc_tipo, doc_nro, imp_neto, imp_iva, imp_total, cae, cae_vto, cbte_fch")
-    .eq("sale_id", id).eq("environment", env).maybeSingle();
+  const cols = "cbte_tipo, pto_vta, cbte_nro, doc_tipo, doc_nro, imp_neto, imp_iva, imp_total, cae, cae_vto, cbte_fch";
+  const base = sb.from("arca_invoices").select(cols).eq("sale_id", id).eq("environment", env);
+  // ?doc=<id> elige un comprobante puntual (ej. la nota de crédito); por defecto, la factura.
+  const { data: inv } = doc
+    ? await base.eq("id", doc).maybeSingle()
+    : await base.in("cbte_tipo", [1, 6, 11]).maybeSingle();
   if (!inv) notFound(); // la venta todavía no se facturó en este entorno
 
   const emisor = arcaEmisor();

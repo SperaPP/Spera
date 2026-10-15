@@ -74,6 +74,7 @@ export type EmitParams = {
   total: number;         // neto + iva (lo que se cobró)
   ivaId: number;         // alícuota IVA: 5 = 21%
   ivaReceptorId: number; // RG 5616 — condición IVA del receptor: 1 RI, 4 Exento, 5 ConsFinal, 6 Monotributo
+  asociados?: { tipo: number; ptoVta: number; nro: number }[]; // CbtesAsoc (notas de crédito/débito)
 };
 export type EmitResult =
   | { ok: true; cbteNro: number; cae: string; caeVto: string; cbteFch: string }
@@ -95,6 +96,12 @@ export async function emitInvoice(orgId: string, p: EmitParams): Promise<EmitRes
     const nro = Number(pick(lastXml, "CbteNro") ?? "0") + 1;
     const fch = yyyymmdd(new Date());
 
+    const cbtesAsoc = (p.asociados && p.asociados.length)
+      ? `<ar:CbtesAsoc>` + p.asociados.map((a) =>
+          `<ar:CbteAsoc><ar:Tipo>${a.tipo}</ar:Tipo><ar:PtoVta>${a.ptoVta}</ar:PtoVta><ar:Nro>${a.nro}</ar:Nro><ar:Cuit>${cfg.cuit}</ar:Cuit></ar:CbteAsoc>`
+        ).join("") + `</ar:CbtesAsoc>`
+      : "";
+
     const det =
       `<ar:FeCAEReq>` +
       `<ar:FeCabReq><ar:CantReg>1</ar:CantReg><ar:PtoVta>${cfg.ptoVenta}</ar:PtoVta><ar:CbteTipo>${p.cbteTipo}</ar:CbteTipo></ar:FeCabReq>` +
@@ -108,6 +115,7 @@ export async function emitInvoice(orgId: string, p: EmitParams): Promise<EmitRes
       `<ar:ImpIVA>${f2(p.iva)}</ar:ImpIVA><ar:ImpTrib>0</ar:ImpTrib>` +
       `<ar:MonId>PES</ar:MonId><ar:MonCotiz>1</ar:MonCotiz>` +
       `<ar:CondicionIVAReceptorId>${p.ivaReceptorId}</ar:CondicionIVAReceptorId>` +
+      cbtesAsoc +
       `<ar:Iva><ar:AlicIva><ar:Id>${p.ivaId}</ar:Id><ar:BaseImp>${f2(p.neto)}</ar:BaseImp><ar:Importe>${f2(p.iva)}</ar:Importe></ar:AlicIva></ar:Iva>` +
       `</ar:FECAEDetRequest></ar:FeDetReq></ar:FeCAEReq>`;
 
