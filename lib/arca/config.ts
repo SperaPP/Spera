@@ -49,3 +49,17 @@ export function arcaConfigured(): boolean {
   const c = arcaConfig();
   return Boolean(c.cuit && c.ptoVenta > 0 && c.cert && c.key);
 }
+
+// Datos fiscales del emisor para el comprobante impreso. Lo conocido (constancia) va
+// por default; IIBB e inicio de actividades son opcionales por env hasta tenerlos.
+export function arcaEmisor() {
+  return {
+    razonSocial: process.env.ARCA_RAZON_SOCIAL || "MASTRONARDI NICOLAS",
+    nombreFantasia: process.env.ARCA_NOMBRE_FANTASIA || "BODY SCULPT",
+    cuit: arcaConfig().cuit,
+    domicilio: process.env.ARCA_DOMICILIO || "Saladillo 2527 - CP 1440 - CABA",
+    condicionIva: process.env.ARCA_COND_IVA || "IVA Responsable Inscripto",
+    iibb: process.env.ARCA_IIBB || "",
+    inicioActividades: process.env.ARCA_INICIO_ACT || "",
+  };
+}

@@ -193,6 +193,9 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
               <div className="flex justify-between"><span className="text-muted">Comprobante</span><span className="font-medium text-ink">{CBTE_LABEL[invoice.cbte_tipo as number] ?? `Tipo ${invoice.cbte_tipo}`} · {String(invoice.pto_vta).padStart(4, "0")}-{String(invoice.cbte_nro).padStart(8, "0")}</span></div>
               <div className="flex justify-between"><span className="text-muted">CAE</span><span className="font-medium tabular-nums text-ink">{invoice.cae}</span></div>
               <div className="flex justify-between"><span className="text-muted">Vto. CAE</span><span className="tabular-nums text-ink">{invoice.cae_vto}</span></div>
+              <Link href={`/ventas/${sale.id}/comprobante`} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-canvas">
+                <Receipt className="h-3.5 w-3.5" /> Ver / imprimir comprobante
+              </Link>
               {arcaEnv !== "produccion" && <p className="pt-1 text-xs text-warn">Emitido en homologación (prueba, sin validez fiscal).</p>}
             </div>
           ) : (
