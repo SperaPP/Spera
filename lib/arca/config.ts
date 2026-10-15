@@ -59,7 +59,7 @@ export function arcaEmisor() {
     cuit: arcaConfig().cuit,
     domicilio: process.env.ARCA_DOMICILIO || "Saladillo 2527 - CP 1440 - CABA",
     condicionIva: process.env.ARCA_COND_IVA || "IVA Responsable Inscripto",
-    iibb: process.env.ARCA_IIBB || "",
-    inicioActividades: process.env.ARCA_INICIO_ACT || "",
+    iibb: process.env.ARCA_IIBB || "20-37808641-9",
+    inicioActividades: process.env.ARCA_INICIO_ACT || "27/01/2012",
   };
 }
