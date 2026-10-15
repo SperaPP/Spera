@@ -33,7 +33,7 @@ async function wsfeCall(method: string, innerXml: string): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: `${NS}${method}` },
     body,
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(45000), // AFIP producción a veces tarda en FECAESolicitar
   });
   const text = await res.text();
   const fault = pick(text, "faultstring");

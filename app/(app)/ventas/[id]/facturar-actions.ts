@@ -81,7 +81,12 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
   const neto = round2(total / 1.21);
   const iva = round2(total - neto);
 
-  const r = await emitInvoice(org as string, { cbteTipo, docTipo, docNro, neto, iva, total, ivaId: 5, ivaReceptorId });
+  let r;
+  try {
+    r = await emitInvoice(org as string, { cbteTipo, docTipo, docNro, neto, iva, total, ivaId: 5, ivaReceptorId });
+  } catch (e) {
+    return { ok: false, error: `ARCA no respondió o dio un error: ${e instanceof Error ? e.message : String(e)}` };
+  }
   if (!r.ok) return { ok: false, error: r.error };
 
   const { data: auth } = await sb.auth.getUser();
@@ -136,14 +141,19 @@ export async function emitirNotaCredito(saleId: string): Promise<{ ok: boolean; 
   if (prevNc) return { ok: true, cae: prevNc.cae as string, nro: prevNc.cbte_nro as number, yaExistia: true };
 
   const neto = Number(factura.imp_neto), iva = Number(factura.imp_iva), total = Number(factura.imp_total);
-  const r = await emitInvoice(org as string, {
-    cbteTipo: ncTipo,
-    docTipo: factura.doc_tipo as number,
-    docNro: factura.doc_nro as string,
-    neto, iva, total, ivaId: 5,
-    ivaReceptorId: (factura.iva_receptor_id as number) ?? 5,
-    asociados: [{ tipo: factura.cbte_tipo as number, ptoVta: factura.pto_vta as number, nro: factura.cbte_nro as number }],
-  });
+  let r;
+  try {
+    r = await emitInvoice(org as string, {
+      cbteTipo: ncTipo,
+      docTipo: factura.doc_tipo as number,
+      docNro: factura.doc_nro as string,
+      neto, iva, total, ivaId: 5,
+      ivaReceptorId: (factura.iva_receptor_id as number) ?? 5,
+      asociados: [{ tipo: factura.cbte_tipo as number, ptoVta: factura.pto_vta as number, nro: factura.cbte_nro as number }],
+    });
+  } catch (e) {
+    return { ok: false, error: `ARCA no respondió o dio un error: ${e instanceof Error ? e.message : String(e)}` };
+  }
   if (!r.ok) return { ok: false, error: r.error };
 
   const { data: auth } = await sb.auth.getUser();
