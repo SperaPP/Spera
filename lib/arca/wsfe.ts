@@ -29,12 +29,20 @@ async function wsfeCall(method: string, innerXml: string): Promise<string> {
     "  </soap:Body>",
     "</soap:Envelope>",
   ].join("\n");
-  const res = await fetch(cfg.wsfeUrl, {
-    method: "POST",
-    headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: `${NS}${method}` },
-    body,
-    signal: AbortSignal.timeout(45000), // AFIP producción a veces tarda en FECAESolicitar
-  });
+  let res: Response;
+  try {
+    res = await fetch(cfg.wsfeUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: `${NS}${method}` },
+      body,
+      signal: AbortSignal.timeout(45000), // AFIP producción a veces tarda en FECAESolicitar
+    });
+  } catch (e) {
+    // "fetch failed" esconde el motivo real en .cause (ECONNRESET, timeout, DNS, TLS…).
+    const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
+    const detail = cause?.code ?? cause?.message ?? (e instanceof Error ? e.message : String(e));
+    throw new Error(`no se pudo conectar a WSFE (${method}): ${detail}`);
+  }
   const text = await res.text();
   const fault = pick(text, "faultstring");
   if (!res.ok || fault) throw new Error(`WSFE ${method} ${res.status}: ${fault ?? text.slice(0, 300)}`);
