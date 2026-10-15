@@ -26,8 +26,17 @@ function normalizePem(raw: string): string {
   return s.includes("\\n") && !s.includes("\n") ? s.replace(/\\n/g, "\n") : s;
 }
 
+// Padrón: el servicio disponible varía por contribuyente (a4, a5, a13...). Se configura
+// con ARCA_PADRON_SERVICE (ej. 'ws_sr_padron_a5'). Vacío = padrón DESHABILITADO (la
+// facturación no depende de él; la condición del cliente se usa de lo cargado a mano).
+function padronAlcance(service: string): string {
+  return service.match(/_a(\d+)$/)?.[1] ?? "";
+}
+
 export function arcaConfig() {
   const env = arcaEnv();
+  const padronService = (process.env.ARCA_PADRON_SERVICE ?? "").trim();
+  const alc = padronAlcance(padronService);
   return {
     env,
     cuit: (process.env.ARCA_CUIT ?? "").replace(/\D/g, ""),
@@ -42,17 +51,23 @@ export function arcaConfig() {
       env === "produccion"
         ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx"
         : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx",
-    // Padrón A5 (constancia de inscripción por CUIT) — servicio WSAA 'ws_sr_padron_a5'.
-    padronUrl:
-      env === "produccion"
-        ? "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5"
-        : "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
+    // Padrón (consulta de condición por CUIT). Servicio y endpoint se derivan del alcance.
+    padronService,
+    padronAlcance: alc,
+    padronUrl: alc
+      ? `https://${env === "produccion" ? "aws" : "awshomo"}.afip.gov.ar/sr-padron/webservices/personaServiceA${alc}`
+      : "",
   };
 }
 
 export function arcaConfigured(): boolean {
   const c = arcaConfig();
   return Boolean(c.cuit && c.ptoVenta > 0 && c.cert && c.key);
+}
+
+/** El padrón está habilitado solo si se configuró ARCA_PADRON_SERVICE. */
+export function arcaPadronConfigured(): boolean {
+  return Boolean(arcaConfig().padronAlcance);
 }
 
 // Datos fiscales del emisor para el comprobante impreso. Lo conocido (constancia) va

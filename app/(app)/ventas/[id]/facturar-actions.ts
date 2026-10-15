@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
-import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
+import { arcaConfig, arcaConfigured, arcaPadronConfigured } from "@/lib/arca/config";
 import { emitInvoice } from "@/lib/arca/wsfe";
 import { consultarPadron } from "@/lib/arca/padron";
 
@@ -53,10 +53,10 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
   let cond = cust?.fiscal_condition ?? "consumidor_final";
   const docDigits = (cust?.doc_digits ?? (sale.customer_doc ?? "").replace(/\D/g, "")) || "";
 
-  // Si hay CUIT, confirmar la condición REAL contra el padrón de AFIP (no confiar en lo
-  // tipeado, que puede estar mal y haría emitir el comprobante equivocado). Best-effort:
-  // si el padrón no está disponible/autorizado, se usa lo guardado.
-  if (docDigits.length === 11) {
+  // Si el padrón está habilitado y hay CUIT, confirmar la condición REAL contra AFIP (no
+  // confiar en lo tipeado). Best-effort: si falla, se usa lo guardado. Si el padrón no
+  // está configurado (ej. aún no se autorizó el servicio), se saltea sin costo.
+  if (docDigits.length === 11 && arcaPadronConfigured()) {
     const p = await consultarPadron(org as string, docDigits);
     if (p.ok) cond = p.condicion;
   }

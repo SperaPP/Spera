@@ -7,9 +7,6 @@ import { arcaConfig } from "@/lib/arca/config";
 // de lo tipeado a mano (evita emitir el comprobante equivocado). Servicio WSAA:
 // 'ws_sr_padron_a5' (hay que autorizarlo al certificado, igual que wsfe).
 
-const SERVICE = "ws_sr_padron_a5";
-const NS = "http://a5.soap.ws.server.puc.sr/";
-
 const pick = (xml: string, tag: string): string | null =>
   xml.match(new RegExp(`<(?:\\w+:)?${tag}>([\\s\\S]*?)</(?:\\w+:)?${tag}>`, "i"))?.[1]?.trim() ?? null;
 
@@ -25,20 +22,25 @@ export async function consultarPadron(orgId: string, cuit: string): Promise<Padr
   if (digits.length !== 11) return { ok: false, error: "El CUIT debe tener 11 dígitos." };
 
   const cfg = arcaConfig();
+  if (!cfg.padronService || !cfg.padronUrl) {
+    return { ok: false, error: "El padrón no está configurado (falta ARCA_PADRON_SERVICE)." };
+  }
+  const ns = `http://a${cfg.padronAlcance}.soap.ws.server.puc.sr/`;
+
   let token: string, sign: string;
   try {
-    ({ token, sign } = await getAuthTicket(orgId, SERVICE));
+    ({ token, sign } = await getAuthTicket(orgId, cfg.padronService));
   } catch (e) {
     return { ok: false, error: `No se pudo autenticar el padrón: ${e instanceof Error ? e.message : String(e)}` };
   }
 
   const body = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:a5="' + NS + '">',
-    "  <soap:Body><a5:getPersona>",
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:a="' + ns + '">',
+    "  <soap:Body><a:getPersona>",
     `    <token>${token}</token><sign>${sign}</sign>`,
     `    <cuitRepresentada>${cfg.cuit}</cuitRepresentada><idPersona>${digits}</idPersona>`,
-    "  </a5:getPersona></soap:Body>",
+    "  </a:getPersona></soap:Body>",
     "</soap:Envelope>",
   ].join("\n");
 
