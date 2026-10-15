@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { crearCliente } from "@/app/(app)/clientes/actions";
+import { Search } from "lucide-react";
+import { crearCliente, consultarPadronCliente } from "@/app/(app)/clientes/actions";
 
 type CustomerType = { id: string; name: string; defaultFiscal: string; priceListName: string | null };
 type Fiscal = "consumidor_final" | "responsable_inscripto" | "monotributo" | "exento";
@@ -35,6 +36,20 @@ export function NuevoClienteForm({ customerTypes }: { customerTypes: CustomerTyp
     setTypeId(id);
     const t = customerTypes.find((x) => x.id === id);
     if (t) setFiscal(t.defaultFiscal as Fiscal);
+  }
+
+  const [looking, startLook] = useTransition();
+  function traerDeAfip() {
+    const cuit = docNumber.replace(/\D/g, "");
+    if (cuit.length !== 11) return toast.error("Cargá un CUIT de 11 dígitos para consultar AFIP.");
+    startLook(async () => {
+      const r = await consultarPadronCliente(cuit);
+      if (!r.ok) { toast.error(r.error ?? "No se pudo consultar AFIP."); return; }
+      if (r.condicion) setFiscal(r.condicion as Fiscal);
+      if (r.razonSocial) setName(r.razonSocial);
+      setDocType("CUIT");
+      toast.success(`AFIP: ${FISCAL.find((f) => f.value === r.condicion)?.label ?? r.condicion}${r.razonSocial ? ` · ${r.razonSocial}` : ""}`);
+    });
   }
 
   function submit() {
@@ -88,7 +103,13 @@ export function NuevoClienteForm({ customerTypes }: { customerTypes: CustomerTyp
           </div>
           <div>
             <label className={label} htmlFor="docNumber">Número</label>
-            <input id="docNumber" className={input} value={docNumber} onChange={(e) => setDocNumber(e.target.value)} placeholder="20-12345678-9" />
+            <div className="flex gap-2">
+              <input id="docNumber" className={input} value={docNumber} onChange={(e) => setDocNumber(e.target.value)} placeholder="20-12345678-9" />
+              <button type="button" onClick={traerDeAfip} disabled={looking} title="Traer condición y razón social desde AFIP (por CUIT)"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas disabled:opacity-60">
+                <Search className="h-4 w-4" /> {looking ? "…" : "AFIP"}
+              </button>
+            </div>
           </div>
           <div>
             <label className={label} htmlFor="email">Email</label>

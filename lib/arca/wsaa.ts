@@ -9,8 +9,6 @@ import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
 // SOAP y recibimos un TA (token + sign) válido ~12h. El TA se cachea en Supabase y se
 // reusa hasta cerca del vencimiento (WSAA no deja pedir otro mientras uno siga vigente).
 
-const SERVICE = "wsfe";
-
 /** TRA: XML del pedido de acceso para un servicio (wsfe). */
 function buildTRA(service: string): string {
   const now = Date.now();
@@ -101,7 +99,7 @@ async function callLoginCms(cmsB64: string, url: string): Promise<TA> {
  * Devuelve un TA válido (token + sign) para WSFE, reusando el cacheado si todavía no
  * vence (margen de 10 min). Si no hay o venció, pide uno nuevo a WSAA y lo guarda.
  */
-export async function getAuthTicket(orgId: string): Promise<{ token: string; sign: string }> {
+export async function getAuthTicket(orgId: string, service = "wsfe"): Promise<{ token: string; sign: string }> {
   if (!arcaConfigured()) throw new Error("ARCA no está configurado (faltan certificado, clave, CUIT o punto de venta).");
   const cfg = arcaConfig();
   const admin = createAdminClient();
@@ -109,19 +107,19 @@ export async function getAuthTicket(orgId: string): Promise<{ token: string; sig
   const { data: cached } = await admin
     .from("arca_auth_tickets")
     .select("token, sign, expiration_time")
-    .eq("organization_id", orgId).eq("service", SERVICE).eq("environment", cfg.env)
+    .eq("organization_id", orgId).eq("service", service).eq("environment", cfg.env)
     .maybeSingle();
 
   if (cached && new Date(cached.expiration_time as string).getTime() - Date.now() > 10 * 60_000) {
     return { token: cached.token as string, sign: cached.sign as string };
   }
 
-  const cms = signTRA(buildTRA(SERVICE), cfg.cert, cfg.key);
+  const cms = signTRA(buildTRA(service), cfg.cert, cfg.key);
   const ta = await callLoginCms(cms, cfg.wsaaUrl);
 
   await admin.from("arca_auth_tickets").upsert(
     {
-      organization_id: orgId, service: SERVICE, environment: cfg.env,
+      organization_id: orgId, service, environment: cfg.env,
       token: ta.token, sign: ta.sign,
       generation_time: ta.generationTime, expiration_time: ta.expirationTime,
       updated_at: new Date().toISOString(),
@@ -138,7 +136,7 @@ export async function probeWSAA(orgId: string): Promise<{ ok: boolean; env: stri
     await getAuthTicket(orgId);
     const admin = createAdminClient();
     const { data } = await admin.from("arca_auth_tickets")
-      .select("expiration_time").eq("organization_id", orgId).eq("service", SERVICE).eq("environment", cfg.env).maybeSingle();
+      .select("expiration_time").eq("organization_id", orgId).eq("service", "wsfe").eq("environment", cfg.env).maybeSingle();
     return { ok: true, env: cfg.env, expira: data?.expiration_time as string | undefined };
   } catch (e) {
     return { ok: false, env: cfg.env, error: e instanceof Error ? e.message : String(e) };

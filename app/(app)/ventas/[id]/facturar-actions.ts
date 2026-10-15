@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
 import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
 import { emitInvoice } from "@/lib/arca/wsfe";
+import { consultarPadron } from "@/lib/arca/padron";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 // AFIP devuelve fechas YYYYMMDD → ISO YYYY-MM-DD para columnas date.
@@ -49,8 +50,16 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
   // Tipo de comprobante y documento del receptor.
   const cust = (Array.isArray(sale.customers) ? sale.customers[0] : sale.customers) as
     { fiscal_condition?: string; doc_type?: string | null; doc_digits?: string | null } | null;
-  const cond = cust?.fiscal_condition ?? "consumidor_final";
+  let cond = cust?.fiscal_condition ?? "consumidor_final";
   const docDigits = (cust?.doc_digits ?? (sale.customer_doc ?? "").replace(/\D/g, "")) || "";
+
+  // Si hay CUIT, confirmar la condición REAL contra el padrón de AFIP (no confiar en lo
+  // tipeado, que puede estar mal y haría emitir el comprobante equivocado). Best-effort:
+  // si el padrón no está disponible/autorizado, se usa lo guardado.
+  if (docDigits.length === 11) {
+    const p = await consultarPadron(org as string, docDigits);
+    if (p.ok) cond = p.condicion;
+  }
 
   // Condición IVA del receptor (RG 5616): 1 RI, 4 Exento, 5 Consumidor Final, 6 Monotributo.
   const IVA_RECEPTOR: Record<string, number> = {

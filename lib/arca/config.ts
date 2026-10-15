@@ -42,6 +42,11 @@ export function arcaConfig() {
       env === "produccion"
         ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx"
         : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx",
+    // Padrón A5 (constancia de inscripción por CUIT) — servicio WSAA 'ws_sr_padron_a5'.
+    padronUrl:
+      env === "produccion"
+        ? "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5"
+        : "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
   };
 }
 

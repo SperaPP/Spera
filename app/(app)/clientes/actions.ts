@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireCan, requireAdmin, type ActionState } from "@/lib/auth";
+import { consultarPadron } from "@/lib/arca/padron";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Ingresá un nombre"),
@@ -281,4 +282,19 @@ export async function ajustarSaldoCliente(customerId: string, delta: number, rea
   if (error) return { error: error.message };
   revalidatePath(`/clientes/${customerId}`);
   return { ok: true };
+}
+
+/** Consulta el padrón de AFIP por CUIT para traer la condición fiscal real + razón
+ *  social + domicilio (y así no tipear mal la condición). */
+export async function consultarPadronCliente(cuit: string): Promise<{
+  ok: boolean; condicion?: string; razonSocial?: string | null; domicilio?: string | null; error?: string;
+}> {
+  const denied = await requireCan("clientes", true);
+  if (denied) return { ok: false, error: denied.error };
+  const sb = await createClient();
+  const { data: org } = await sb.rpc("current_org_id");
+  if (!org) return { ok: false, error: "Sin organización." };
+  const r = await consultarPadron(org as string, cuit);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, condicion: r.condicion, razonSocial: r.razonSocial, domicilio: r.domicilio };
 }
