@@ -1,12 +1,16 @@
 import Link from "next/link";
-import { Receipt, Eye, Printer } from "lucide-react";
+import { Receipt, Eye, Printer, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { ProductSearch } from "@/components/product-search";
 import { ImprimirArmadoButton } from "@/components/imprimir-armado-button";
+import { FacturarButton } from "@/components/facturar-button";
 import { VentasFilters } from "@/components/ventas-filters";
 import { Pagination } from "@/components/pagination";
 import { getStoreScope } from "@/lib/auth";
+import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
+
+const CBTE_LABEL: Record<number, string> = { 1: "Fac A", 6: "Fac B", 11: "Fac C" };
 
 const AR_OFFSET = "-03:00";
 const PAGE_SIZE = 50;
@@ -78,6 +82,16 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
 
   const [{ data: rows }, { count: total }] = await Promise.all([req, cntReq]);
   const pageCount = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
+
+  // Estado de facturación (ARCA) de las ventas de esta página.
+  const arcaEnv = arcaConfig().env;
+  const arcaOk = arcaConfigured();
+  const saleIds = (rows ?? []).map((s) => s.id as string);
+  const { data: invs } = arcaOk && saleIds.length
+    ? await sb.from("arca_invoices").select("sale_id, cbte_tipo, pto_vta, cbte_nro")
+        .eq("environment", arcaEnv).in("cbte_tipo", [1, 6, 11]).in("sale_id", saleIds)
+    : { data: [] as { sale_id: string; cbte_tipo: number; pto_vta: number; cbte_nro: number }[] };
+  const invBySale = new Map((invs ?? []).map((i) => [i.sale_id as string, i]));
 
   // Disponibles para "Imprimir todos": sin imprimir y no anuladas, según filtros (menos "impreso").
   let availReq = sb.from("sales").select("id", { count: "exact", head: true }).is("armado_printed_at", null).neq("status", "anulada");
@@ -177,6 +191,19 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                         <Eye className="h-4 w-4" />
                       </Link>
                       <ImprimirArmadoButton saleId={s.id} printed={s.armado_printed_at != null} isAdmin={isAdmin === true} />
+                      {(() => {
+                        const inv = invBySale.get(s.id);
+                        if (inv) {
+                          return (
+                            <Link href={`/ventas/${s.id}/comprobante`} title={`${CBTE_LABEL[inv.cbte_tipo as number] ?? "Comprobante"} ${String(inv.pto_vta).padStart(4, "0")}-${String(inv.cbte_nro).padStart(8, "0")}`}
+                              className="flex h-8 items-center gap-1 rounded-lg border border-ok/40 bg-ok-bg px-2 text-xs font-medium text-ok">
+                              <FileText className="h-3.5 w-3.5" /> Facturada
+                            </Link>
+                          );
+                        }
+                        const puede = isAdmin === true && s.status === "completada" && s.channel !== "cambio" && Number(s.total) > 0 && arcaOk;
+                        return puede ? <FacturarButton saleId={s.id} env={arcaEnv} compact /> : null;
+                      })()}
                     </div>
                   </td>
                 </tr>
