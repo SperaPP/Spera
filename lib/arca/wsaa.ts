@@ -2,6 +2,7 @@ import "server-only";
 import forge from "node-forge";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
+import { afipDispatcher, type AfipFetchInit } from "@/lib/arca/http";
 
 // WSAA — Web Service de Autenticación y Autorización de ARCA/AFIP.
 // Flujo: armamos un TRA (ticket de requerimiento), lo firmamos como CMS/PKCS#7 con el
@@ -79,7 +80,8 @@ async function callLoginCms(cmsB64: string, url: string): Promise<TA> {
     headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: "" },
     body,
     signal: AbortSignal.timeout(20000),
-  });
+    dispatcher: afipDispatcher,
+  } as AfipFetchInit);
   const text = await res.text();
   const fault = pick(text, "faultstring");
   if (!res.ok || fault) throw new Error(`WSAA ${res.status}: ${fault ?? text.slice(0, 300)}`);

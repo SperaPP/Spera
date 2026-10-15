@@ -1,6 +1,7 @@
 import "server-only";
 import { getAuthTicket } from "@/lib/arca/wsaa";
 import { arcaConfig } from "@/lib/arca/config";
+import { afipDispatcher, type AfipFetchInit } from "@/lib/arca/http";
 
 // WSFEv1 — Facturación Electrónica de ARCA/AFIP.
 // Dos llamadas: FECompUltimoAutorizado (último número para PV+tipo) y FECAESolicitar
@@ -36,7 +37,8 @@ async function wsfeCall(method: string, innerXml: string): Promise<string> {
       headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: `${NS}${method}` },
       body,
       signal: AbortSignal.timeout(45000), // AFIP producción a veces tarda en FECAESolicitar
-    });
+      dispatcher: afipDispatcher, // acepta la clave DH corta de AFIP (ver lib/arca/http)
+    } as AfipFetchInit);
   } catch (e) {
     // "fetch failed" esconde el motivo real en .cause (ECONNRESET, timeout, DNS, TLS…).
     const cause = (e as { cause?: { code?: string; message?: string } })?.cause;

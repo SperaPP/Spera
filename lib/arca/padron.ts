@@ -1,6 +1,7 @@
 import "server-only";
 import { getAuthTicket } from "@/lib/arca/wsaa";
 import { arcaConfig } from "@/lib/arca/config";
+import { afipDispatcher, type AfipFetchInit } from "@/lib/arca/http";
 
 // Padrón A5 de ARCA (constancia de inscripción por CUIT). Devuelve la condición real
 // frente al IVA del contribuyente, más razón social y domicilio. Sirve para no depender
@@ -51,7 +52,8 @@ export async function consultarPadron(orgId: string, cuit: string): Promise<Padr
       headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: "" },
       body,
       signal: AbortSignal.timeout(20000),
-    });
+      dispatcher: afipDispatcher,
+    } as AfipFetchInit);
     text = await res.text();
     const fault = pick(text, "faultstring");
     if (!res.ok || fault) return { ok: false, error: `Padrón ${res.status}: ${fault ?? text.slice(0, 200)}` };
