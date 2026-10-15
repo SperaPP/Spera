@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PackageOpen, Search, X, Tag } from "lucide-react";
 import type { CatalogFullItem } from "@/lib/portal-catalog";
 import { PortalProductCard } from "@/components/portal-product-card";
@@ -28,7 +28,65 @@ export function PortalCatalogClient({
   const [sort, setSort] = useState<string>("sku_desc");
   const [visible, setVisible] = useState(STEP);
 
-  useEffect(() => { setVisible(STEP); }, [main, cat, season, q, sort, onlyOffers]);
+  // Al cambiar un filtro/búsqueda se vuelve a arrancar desde arriba — SALVO cuando
+  // estamos restaurando la vista al "volver atrás" (ver abajo).
+  const restoring = useRef(false);
+  useEffect(() => {
+    if (restoring.current) return;
+    setVisible(STEP);
+  }, [main, cat, season, q, sort, onlyOffers]);
+
+  // ── Preservar la vista al entrar a un producto y volver ──────────────────────
+  // Guarda filtros + búsqueda + orden + cuántos cargados + scroll en sessionStorage,
+  // atados a la URL actual. Al volver a la MISMA vista, la restaura tal cual, así el
+  // cliente no "empieza de nuevo" ni pierde dónde estaba mirando.
+  const SS_KEY = "portal-catalogo-vista";
+  const stateRef = useRef({ main, cat, season, q, sort, onlyOffers, visible });
+  stateRef.current = { main, cat, season, q, sort, onlyOffers, visible };
+
+  const saveView = useCallback(() => {
+    try {
+      sessionStorage.setItem(SS_KEY, JSON.stringify({
+        url: window.location.pathname + window.location.search,
+        ...stateRef.current, scrollY: window.scrollY,
+      }));
+    } catch { /* sessionStorage no disponible */ }
+  }, []);
+
+  // Restaurar una sola vez, solo si volvemos a la MISMA URL (si no, es una entrada nueva).
+  const didRestore = useRef(false);
+  useEffect(() => {
+    if (didRestore.current) return;
+    didRestore.current = true;
+    try {
+      const raw = sessionStorage.getItem(SS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.url !== window.location.pathname + window.location.search) return;
+      restoring.current = true;
+      if (s.main !== undefined) setMain(s.main);
+      if (s.cat !== undefined) setCat(s.cat);
+      if (s.season !== undefined) setSeason(s.season);
+      if (typeof s.q === "string") setQ(s.q);
+      if (typeof s.sort === "string") setSort(s.sort);
+      if (typeof s.onlyOffers === "boolean") setOnlyOffers(s.onlyOffers);
+      if (typeof s.visible === "number") setVisible(Math.max(STEP, s.visible));
+      if (typeof s.scrollY === "number") {
+        const y = s.scrollY;
+        requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
+      }
+      setTimeout(() => { restoring.current = false; }, 0);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Guardar la vista al cambiar algo y mientras se scrollea (para caer justo al volver).
+  useEffect(() => {
+    saveView();
+    let raf = 0;
+    const onScroll = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; saveView(); }); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, [saveView, main, cat, season, q, sort, onlyOffers, visible]);
 
   const qn = norm(q.trim());
   const matchesQ = useMemo(() => (p: CatalogFullItem) => !qn || norm(p.name).includes(qn), [qn]);

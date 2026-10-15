@@ -9,10 +9,11 @@ export function PortalGallery({ images, alt }: { images: string[]; alt: string }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-card">
-      <div className="aspect-square w-full bg-canvas">
+      {/* Vertical (apto indumentaria) y object-contain: la foto se ve ENTERA, sin recorte. */}
+      <div className="aspect-[3/4] w-full bg-canvas">
         {main ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={main} alt={alt} className="h-full w-full object-cover" />
+          <img src={main} alt={alt} className="h-full w-full object-contain" />
         ) : (
           <span className="flex h-full w-full items-center justify-center text-faint"><ImageOff className="h-10 w-10" /></span>
         )}
