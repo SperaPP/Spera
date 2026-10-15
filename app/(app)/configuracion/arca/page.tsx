@@ -1,12 +1,15 @@
 import { FileText } from "lucide-react";
 import { requireView } from "@/lib/auth";
 import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
+import { certEnvironment } from "@/lib/arca/wsaa";
 import { ArcaTestButton } from "@/components/arca-test-button";
 
 export default async function ArcaConfigPage() {
   await requireView("configuracion");
   const cfg = arcaConfig();
   const ok = arcaConfigured();
+  const certEnv = ok ? certEnvironment() : null;
+  const mismatch = certEnv != null && certEnv !== cfg.env;
 
   const row = (k: string, v: string, warn = false) => (
     <div className="flex items-center justify-between py-1.5 text-sm">
@@ -28,9 +31,17 @@ export default async function ArcaConfigPage() {
           {row("Entorno", cfg.env === "produccion" ? "Producción" : "Homologación (pruebas)", cfg.env !== "produccion")}
           {row("CUIT emisor", cfg.cuit || "— falta")}
           {row("Punto de venta", cfg.ptoVenta ? String(cfg.ptoVenta) : "— falta")}
-          {row("Certificado", cfg.cert ? "cargado" : "— falta")}
+          {row("Certificado", cfg.cert ? (certEnv ? `cargado · ${certEnv === "produccion" ? "producción" : "homologación"}` : "cargado") : "— falta", mismatch)}
           {row("Clave privada", cfg.key ? "cargada" : "— falta")}
         </div>
+
+        {mismatch && (
+          <div className="mt-3 rounded-lg border border-danger bg-danger-bg px-3 py-2 text-sm text-ink">
+            ⚠️ El certificado cargado es de <strong>{certEnv === "produccion" ? "producción" : "homologación"}</strong> pero el
+            entorno está en <strong>{cfg.env === "produccion" ? "producción" : "homologación"}</strong>. No van a coincidir con
+            ARCA. Cargá el certificado del entorno correcto (o cambiá <code className="text-ink">ARCA_ENV</code>).
+          </div>
+        )}
 
         <div className="mt-4 border-t border-line pt-4">
           {ok ? (

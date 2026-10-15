@@ -129,6 +129,24 @@ export async function getAuthTicket(orgId: string, service = "wsfe"): Promise<{ 
   return { token: ta.token, sign: ta.sign };
 }
 
+/**
+ * Detecta si el certificado cargado es de HOMOLOGACIÓN o PRODUCCIÓN mirando su emisor
+ * (AFIP: "Computadores Test" = homologación, "Computadores" = producción). Sirve para
+ * avisar si el certificado no coincide con ARCA_ENV antes del pasaje a producción.
+ */
+export function certEnvironment(): "homologacion" | "produccion" | null {
+  try {
+    const cert = forge.pki.certificateFromPem(arcaConfig().cert);
+    const cn = (cert.issuer.getField("CN") as { value?: string } | null)?.value;
+    if (!cn) return null;
+    if (/test/i.test(cn)) return "homologacion";
+    if (/computadores/i.test(cn)) return "produccion";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Prueba de conexión: fuerza obtener un TA y devuelve hasta cuándo es válido. */
 export async function probeWSAA(orgId: string): Promise<{ ok: boolean; env: string; expira?: string; error?: string }> {
   const cfg = arcaConfig();
