@@ -19,6 +19,7 @@ import {
   Settings,
   ShieldCheck,
   ScrollText,
+  Sparkles,
   Store,
   type LucideIcon,
 } from "lucide-react";
@@ -41,6 +42,7 @@ const NAV: NavItem[] = [
   { href: "/caja", label: "Caja", icon: Wallet, module: "caja" },
   { href: "/cobranzas", label: "Cobranzas", icon: HandCoins, module: "cobranzas" },
   { href: "/reportes", label: "Reportes", icon: BarChart3, module: "reportes" },
+  { href: "/asistente", label: "Asistente", icon: Sparkles, module: "asistente" },
   { href: "/configuracion", label: "Configuración", icon: Settings, module: "configuracion" },
   { href: "/tiendanube", label: "Tiendanube", icon: Store, adminOnly: true },
   { href: "/usuarios", label: "Usuarios y roles", icon: ShieldCheck, adminOnly: true },

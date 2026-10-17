@@ -70,6 +70,9 @@ export async function updateSession(request: NextRequest) {
     ["/stock", "stock"], ["/transferencias", "transferencias"],
     ["/clientes", "clientes"], ["/precios", "precios"], ["/caja", "caja"],
     ["/cobranzas", "cobranzas"], ["/reportes", "reportes"], ["/configuracion", "configuracion"],
+    // Asistente IA: estricto a propósito (acá NO hay bypass de admin → solo quien
+    // tenga el permiso tildado entra, ni siquiera un SuperAdministrador sin él).
+    ["/asistente", "asistente"], ["/api/asistente", "asistente"],
   ];
   const gated = MODULES.find(([prefix]) => path === prefix || path.startsWith(prefix + "/"));
   if (gated) {

@@ -22,6 +22,8 @@ export const MODULES: { key: string; label: string }[] = [
   { key: "reportes", label: "Reportes" },
   { key: "configuracion", label: "Configuración" },
   { key: "tiendanube", label: "Tiendanube" },
+  // Gateado ESTRICTO (sin bypass de admin): solo lo ve el rol que lo tenga tildado.
+  { key: "asistente", label: "Asistente IA" },
 ];
 
 export function canView(perms: Perms, module: string): boolean {
