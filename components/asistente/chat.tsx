@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Mic, MicOff, SendHorizonal, Square, Volume2, VolumeX, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 /**
@@ -69,11 +70,26 @@ function renderLinea(linea: string, key: number): ReactNode {
 }
 
 function limpiarParaVoz(texto: string): string {
-  return texto
-    .replace(/\*\*/g, "")
-    .replace(/^#{1,4}\s/gm, "")
-    .replace(/^\s*[-•*]\s/gm, "")
-    .replace(/`/g, "");
+  return (
+    texto
+      .replace(/\*\*/g, "")
+      .replace(/^#{1,4}\s/gm, "")
+      .replace(/^\s*[-•*]\s/gm, "")
+      .replace(/`/g, "")
+      // Plata masticada para el lector: "$ 1.234,56" → "1.234 pesos con 56 centavos".
+      .replace(/\$\s*([\d.]+),(\d{2})\b/g, "$1 pesos con $2 centavos")
+      .replace(/\$\s*([\d.]+)/g, "$1 pesos")
+  );
+}
+
+/** Elige la mejor voz en español disponible (es-AR primero; si no, otra latina/española). */
+function elegirVozEspanol(voces: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  const norm = (l: string) => l.toLowerCase().replace("_", "-");
+  for (const pref of ["es-ar", "es-419", "es-us", "es-mx", "es-es"]) {
+    const v = voces.find((x) => norm(x.lang) === pref);
+    if (v) return v;
+  }
+  return voces.find((x) => norm(x.lang).startsWith("es")) ?? null;
 }
 
 export function AsistenteChat() {
@@ -86,6 +102,10 @@ export function AsistenteChat() {
   const [soportaVoz, setSoportaVoz] = useState(false);
 
   const recRef = useRef<SpeechRec | null>(null);
+  const vocesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const avisoVozRef = useRef(false);
+  const keepListeningRef = useRef(false);
+  const finalVozRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const msgsRef = useRef<Msg[]>(msgs);
@@ -97,8 +117,16 @@ export function AsistenteChat() {
       const v = localStorage.getItem("asistente_voz");
       if (v != null) setVozActiva(v === "1");
     } catch { /* sin storage, usa el default */ }
+    // Las voces del navegador cargan tarde (async): cachearlas cuando estén,
+    // si no la primera lectura cae en la voz por defecto (inglesa).
+    const cargarVoces = () => {
+      try { vocesRef.current = window.speechSynthesis?.getVoices() ?? []; } catch { /* no-op */ }
+    };
+    cargarVoces();
+    try { window.speechSynthesis?.addEventListener("voiceschanged", cargarVoces); } catch { /* no-op */ }
     return () => {
       abortRef.current?.abort();
+      try { window.speechSynthesis?.removeEventListener("voiceschanged", cargarVoces); } catch { /* no-op */ }
       try { window.speechSynthesis?.cancel(); } catch { /* no-op */ }
     };
   }, []);
@@ -112,10 +140,20 @@ export function AsistenteChat() {
       if (!window.speechSynthesis) return;
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(limpiarParaVoz(texto));
-      const voces = window.speechSynthesis.getVoices();
-      const esAr = voces.find((v) => v.lang === "es-AR") ?? voces.find((v) => v.lang.startsWith("es"));
-      if (esAr) u.voice = esAr;
-      u.lang = esAr?.lang ?? "es-AR";
+      const voces = vocesRef.current.length ? vocesRef.current : window.speechSynthesis.getVoices();
+      const voz = elegirVozEspanol(voces);
+      if (!voz) {
+        // Leer español con voz inglesa suena horrible: mejor avisar qué falta.
+        if (!avisoVozRef.current) {
+          avisoVozRef.current = true;
+          toast.info(
+            "Este dispositivo no tiene voz en español instalada, así que no leo en voz alta. En Windows: Configuración → Hora e idioma → Voz → Agregar voces → Español."
+          );
+        }
+        return;
+      }
+      u.voice = voz;
+      u.lang = voz.lang;
       u.rate = 1.05;
       window.speechSynthesis.speak(u);
     } catch { /* sin TTS, queda el texto */ }
@@ -124,6 +162,11 @@ export function AsistenteChat() {
   const enviar = useCallback(async (texto: string) => {
     const pregunta = texto.trim();
     if (!pregunta || pensando) return;
+    // Si estaba escuchando, frenar el micrófono: enviar es decisión del usuario.
+    keepListeningRef.current = false;
+    try { recRef.current?.stop(); } catch { /* no-op */ }
+    setEscuchando(false);
+    finalVozRef.current = "";
     try { window.speechSynthesis?.cancel(); } catch { /* no-op */ }
 
     const historia: Msg[] = [...msgsRef.current, { role: "user", content: pregunta }];
@@ -191,35 +234,48 @@ export function AsistenteChat() {
     }
   }, [pensando, vozActiva, hablar]);
 
+  const frenarMic = useCallback(() => {
+    keepListeningRef.current = false;
+    try { recRef.current?.stop(); } catch { /* no-op */ }
+    setEscuchando(false);
+  }, []);
+
   const toggleMic = useCallback(() => {
     if (escuchando) {
-      recRef.current?.stop();
+      frenarMic(); // lo dictado queda en el cuadro; se envía cuando el usuario quiera
       return;
     }
     const rec = crearReconocedor();
     if (!rec) return;
+    rec.continuous = true; // escucha con pausas: NO corta ni envía al primer silencio
     recRef.current = rec;
-    let finalTexto = "";
+    finalVozRef.current = input.trim() ? input.trim() + " " : "";
     rec.onresult = (e) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalTexto += r[0].transcript;
+        if (r.isFinal) finalVozRef.current += r[0].transcript + " ";
         else interim += r[0].transcript;
       }
-      setInput(finalTexto + interim);
+      setInput((finalVozRef.current + interim).replace(/\s+/g, " "));
     };
     rec.onend = () => {
+      // El navegador corta solo tras un silencio largo: si el usuario no frenó, retomar.
+      if (keepListeningRef.current) {
+        try { rec.start(); return; } catch { /* no pudo retomar: apagar */ }
+      }
       setEscuchando(false);
-      const texto = finalTexto.trim();
-      if (texto) void enviar(texto); // habló → se envía sola, sin tocar nada
     };
-    rec.onerror = () => setEscuchando(false);
+    rec.onerror = (e) => {
+      if (e.error === "no-speech") return; // silencio: onend retoma
+      keepListeningRef.current = false;
+      setEscuchando(false);
+    };
     try { window.speechSynthesis?.cancel(); } catch { /* no-op */ }
-    setInput("");
+    keepListeningRef.current = true;
     setEscuchando(true);
     rec.start();
-  }, [escuchando, enviar]);
+  }, [escuchando, input, frenarMic]);
 
   function toggleVoz() {
     const nuevo = !vozActiva;
@@ -314,7 +370,7 @@ export function AsistenteChat() {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void enviar(input); }
             }}
             rows={1}
-            placeholder={escuchando ? "Escuchando… hablá tranquilo" : "Preguntá lo que quieras…"}
+            placeholder={escuchando ? "Escuchando… tomate tu tiempo y tocá enviar cuando termines" : "Preguntá lo que quieras…"}
             className="max-h-32 min-h-10 flex-1 resize-none rounded-xl border border-line-strong bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-accent"
           />
 

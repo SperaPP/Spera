@@ -16,7 +16,9 @@ import { buildSystemPrompt } from "@/lib/asistente/manual";
 
 export const maxDuration = 120;
 
-const MODEL = process.env.ASISTENTE_MODEL || "claude-sonnet-5-5";
+// Haiku: el modelo económico (≈5× más barato); si las respuestas quedan flojas,
+// subir a claude-sonnet-5-5 con la env ASISTENTE_MODEL, sin tocar código.
+const MODEL = process.env.ASISTENTE_MODEL || "claude-haiku-5-5";
 const MAX_VUELTAS = 12; // tope de idas y vueltas con herramientas por pregunta
 const BUCKET_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
 
