@@ -111,7 +111,13 @@ async function runVerImagenes(input: { urls?: string[] }): Promise<{ content: To
       continue;
     }
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      // Las fotos originales pueden ser enormes (>8000px, importadas de Woo) y la API
+      // las rechaza. Supabase Pro transforma al vuelo: pedimos una versión de 800px
+      // y, si la transformación no está disponible, caemos al original.
+      const path = url.slice(BUCKET_URL.length);
+      const resized = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/product-images${path}?width=800&quality=75`;
+      let res = await fetch(resized, { signal: AbortSignal.timeout(15_000) });
+      if (!res.ok) res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       const type = IMG_TYPES[(res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase()];
       if (!res.ok || !type) {
         blocks.push({ type: "text", text: `No pude bajar (${res.status}): ${url}` });
@@ -210,6 +216,11 @@ export async function POST(req: NextRequest) {
           }
           messages.push({ role: "assistant", content: msg.content });
           messages.push({ role: "user", content: results });
+
+          // Si ya venía hablando, separar del texto que sigue (si no, pega las frases).
+          if (msg.content.some((b) => b.type === "text" && b.text.trim() !== "")) {
+            send({ t: "delta", v: "\n\n" });
+          }
 
           if (vuelta === MAX_VUELTAS - 1) {
             send({ t: "delta", v: "\n\n(Me quedé sin vueltas de consulta para esta pregunta; probá acotarla.)" });
