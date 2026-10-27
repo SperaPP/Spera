@@ -15,6 +15,8 @@ import { buildCtx, createInTN, reconcileExisting, matchCatalog, pageAll, type It
 
 export type WorkItem = { productId: string; name: string; tnProductId: string | null; how: "sku" | "nombre" | "nuevo" };
 const BATCH = 3;
+// Con menos de esto de presupuesto no se arranca otro producto (crear + fotos tarda).
+const MIN_LEFT_MS = 18_000;
 const UUID = /^[0-9a-f-]{36}$/i;
 
 async function orgOrError(): Promise<{ org: string } | { error: string }> {
@@ -64,11 +66,17 @@ export async function prepararSaleTN(): Promise<{ ok: true; items: WorkItem[] } 
 export async function syncSaleTNLote(items: WorkItem[]): Promise<{ ok: true; results: ItemResult[] } | { ok: false; error: string }> {
   const o = await orgOrError();
   if ("error" in o) return { ok: false, error: o.error };
-  const lote = (items ?? []).slice(0, BATCH).filter((i) => UUID.test(i.productId) && (i.tnProductId == null || /^\d+$/.test(i.tnProductId)));
+  const lote = (items ?? []).slice(0, BATCH);
   const ctx = await buildCtx(o.org);
   if ("error" in ctx) return { ok: false, error: ctx.error };
+  // Devuelve SOLO los que procesó (el navegador avanza según results.length): si se acaba el
+  // tiempo, los que faltan van en la próxima llamada en vez de cortarse a la mitad.
   const results: ItemResult[] = [];
   for (const it of lote) {
+    if (results.length > 0 && ctx.deadline - Date.now() < MIN_LEFT_MS) break;
+    if (!UUID.test(it.productId) || (it.tnProductId != null && !/^\d+$/.test(it.tnProductId))) {
+      results.push({ productId: it.productId, name: it.name, action: "error", notas: ["Dato inválido"] }); continue;
+    }
     try {
       results.push(it.tnProductId
         ? await reconcileExisting(ctx, it.productId, it.tnProductId, { sale: true })
@@ -111,11 +119,15 @@ export async function prepararConciliacionTN(): Promise<{ ok: true; items: WorkI
 export async function conciliarTNLote(items: WorkItem[], crearSinStock = false): Promise<{ ok: true; results: ItemResult[] } | { ok: false; error: string }> {
   const o = await orgOrError();
   if ("error" in o) return { ok: false, error: o.error };
-  const lote = (items ?? []).slice(0, BATCH).filter((i) => UUID.test(i.productId) && i.tnProductId && /^\d+$/.test(i.tnProductId));
+  const lote = (items ?? []).slice(0, BATCH);
   const ctx = await buildCtx(o.org);
   if ("error" in ctx) return { ok: false, error: ctx.error };
   const results: ItemResult[] = [];
   for (const it of lote) {
+    if (results.length > 0 && ctx.deadline - Date.now() < MIN_LEFT_MS) break;
+    if (!UUID.test(it.productId) || !it.tnProductId || !/^\d+$/.test(it.tnProductId)) {
+      results.push({ productId: it.productId, name: it.name, action: "error", notas: ["Dato inválido"] }); continue;
+    }
     try {
       results.push(await reconcileExisting(ctx, it.productId, it.tnProductId!, { sale: false, crearSinStock: crearSinStock === true }));
     } catch (e) {

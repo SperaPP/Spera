@@ -60,13 +60,26 @@ function Runner({ mode }: { mode: Mode }) {
     if (!confirm(msg)) return;
     stop.current = false; setRunning(true);
     let t = ZERO; const all: ItemResult[] = [];
-    for (let i = 0; i < items.length; i += BATCH) {
-      if (stop.current) break;
+    // El servidor procesa lo que le da el tiempo y devuelve cuántos hizo: se avanza por eso.
+    let i = 0, fallas = 0;
+    while (i < items.length && !stop.current) {
       const lote = items.slice(i, i + BATCH);
-      const r = isSale ? await syncSaleTNLote(lote) : await conciliarTNLote(lote, sinStock);
+      let r: Awaited<ReturnType<typeof syncSaleTNLote>>;
+      try {
+        r = isSale ? await syncSaleTNLote(lote) : await conciliarTNLote(lote, sinStock);
+      } catch {
+        // Corte de red o de la función: reintentar el MISMO lote es seguro (no duplica: antes
+        // de crear se busca el vínculo y el SKU). Tras 3 fallas seguidas, se frena.
+        if (++fallas >= 3) { toast.error("Se cortó la conexión varias veces. Frenado: volvé a apretar para seguir."); break; }
+        await new Promise((res) => setTimeout(res, 3000));
+        continue;
+      }
       if (!r.ok) { toast.error(r.error); break; }
+      if (!r.results.length) { toast.error("El servidor no procesó nada en este lote; frenado."); break; }
+      fallas = 0;
       for (const x of r.results) { t = sumar(t, x); all.push(x); }
-      setTot(t); setLog([...all]); setDone(Math.min(items.length, i + BATCH));
+      i += r.results.length;
+      setTot(t); setLog([...all]); setDone(i);
     }
     setRunning(false);
     toast.success(stop.current ? "Sincronización frenada." : "Sincronización terminada.");

@@ -26,9 +26,11 @@ export type SyncCtx = {
   admin: Admin;
   wh: string;                    // depósito del local Tiendanube (Mayorista - Central)
   pubListId: string;
-  saleCategoryId: string | null; // categoría "SALE" de TN (para los que se crean)
   imgTable: boolean;             // existe tn_image_links (migración 0121)
+  cats: TNCat[];                 // árbol de categorías de TN (se completa al crear)
+  deadline: number;              // ms epoch: no arrancar trabajo lento pasado este punto
 };
+type TNCat = { id: string; name: string; parent: string | null };
 
 export type ItemResult = {
   productId: string;
@@ -56,7 +58,8 @@ function normVal(s: unknown): string {
 }
 const skuKey = (s: unknown) => String(s ?? "").trim().toLowerCase();
 
-export async function buildCtx(orgId: string): Promise<SyncCtx | { error: string }> {
+/** deadlineMs: presupuesto de tiempo de esta llamada (Vercel corta a los 60s). */
+export async function buildCtx(orgId: string, deadlineMs = 45_000): Promise<SyncCtx | { error: string }> {
   const admin = createAdminClient();
   const creds = await getTNCreds(orgId);
   if (!creds) return { error: "Tiendanube no está conectado" };
@@ -67,20 +70,62 @@ export async function buildCtx(orgId: string): Promise<SyncCtx | { error: string
   // OJO: con head:true PostgREST responde 204 aunque la tabla NO exista → select normal.
   const { error: imgErr } = await admin.from("tn_image_links").select("id").limit(1);
 
-  let saleCategoryId: string | null = null;
-  const res = await tnFetch(creds, "/categories?fields=id,name&per_page=200");
-  if (res.ok) {
-    const cats = (await res.json()) as { id: number; name: Record<string, string> }[];
-    const sale = cats.find((c) => norm(Object.values(c.name ?? {})[0]) === "sale");
-    saleCategoryId = sale ? String(sale.id) : null;
+  const cats = await fetchTNCategories(creds);
+  return { orgId, creds, admin, wh: store.warehouse_id as string, pubListId: pub.id as string, imgTable: !imgErr, cats, deadline: Date.now() + deadlineMs };
+}
+
+async function fetchTNCategories(creds: TNCreds): Promise<TNCat[]> {
+  const out: TNCat[] = [];
+  for (let page = 1; page < 20; page++) {
+    const res = await tnFetch(creds, `/categories?fields=id,name,parent&per_page=200&page=${page}`);
+    if (!res.ok) break;
+    const b = (await res.json()) as { id: number; name: Record<string, string>; parent: number | null }[];
+    for (const c of b) out.push({ id: String(c.id), name: String(Object.values(c.name ?? {})[0] ?? ""), parent: c.parent ? String(c.parent) : null });
+    if (b.length < 200) break;
   }
-  return { orgId, creds, admin, wh: store.warehouse_id as string, pubListId: pub.id as string, saleCategoryId, imgTable: !imgErr };
+  return out;
+}
+
+/** Plural del nombre de categoría de Spera, al estilo de TN: Calza→Calzas, Top→Tops,
+ *  Camisa→Camisas. Lo que ya termina en "s" o es compuesto ("Pantalones & Babuchas") queda. */
+function pluralCat(name: string): string {
+  const n = name.trim();
+  if (!n || /s$/i.test(n) || /[&,y]\s/i.test(n)) return n;
+  return /[aeiouáéíóú]$/i.test(n) ? n + "s" : n + "es";
+}
+
+/** Busca (o crea, una sola vez) una categoría de TN por nombre bajo un padre. */
+async function ensureCategory(ctx: SyncCtx, name: string, parent: string | null): Promise<string | null> {
+  const find = () => ctx.cats.find((c) => c.parent === parent && norm(c.name) === norm(name))?.id ?? null;
+  const hit = find();
+  if (hit) return hit;
+  const body: Record<string, unknown> = { name: { es: name } };
+  if (parent) body.parent = Number(parent);
+  try {
+    const res = await tnFetch(ctx.creds, "/categories", { method: "POST", body: JSON.stringify(body) });
+    if (res.ok) {
+      const c = (await res.json()) as { id: number };
+      ctx.cats.push({ id: String(c.id), name, parent });
+      return String(c.id);
+    }
+  } catch { /* puede haberse creado igual: re-leemos abajo */ }
+  ctx.cats = await fetchTNCategories(ctx.creds);
+  return find();
+}
+
+/** Categorías de TN para un producto SALE: SALE + SALE > <categoría de Spera en plural>. */
+async function saleCategories(ctx: SyncCtx, speraCat: string | null): Promise<string[]> {
+  const sale = await ensureCategory(ctx, "SALE", null);
+  if (!sale) return [];
+  if (!speraCat) return [sale];
+  const sub = await ensureCategory(ctx, pluralCat(speraCat), sale);
+  return sub ? [sale, sub] : [sale];
 }
 
 // ── Lectura ───────────────────────────────────────────────────────────────────
 
 type TNVar = { id: string; values: string[]; sku: string | null; price: string | null; promo: string | null };
-type TNProd = { id: string; name: string; attributes: string[]; variants: TNVar[]; images: { id: string }[] };
+type TNProd = { id: string; name: string; attributes: string[]; variants: TNVar[]; images: { id: string }[]; categories: string[] };
 
 function parseTNProduct(raw: Record<string, unknown>): TNProd {
   const first = (o: unknown) => (o && typeof o === "object" ? String(Object.values(o as Record<string, string>)[0] ?? "") : String(o ?? ""));
@@ -96,6 +141,7 @@ function parseTNProduct(raw: Record<string, unknown>): TNProd {
       promo: v.promotional_price != null ? String(v.promotional_price) : null,
     })),
     images: ((raw.images ?? []) as Record<string, unknown>[]).map((i) => ({ id: String(i.id) })),
+    categories: ((raw.categories ?? []) as unknown[]).map((c) => String(typeof c === "object" && c ? (c as { id: unknown }).id : c)),
   };
 }
 
@@ -116,7 +162,7 @@ async function findTNProductBySku(ctx: SyncCtx, sku: string): Promise<string | n
 
 type SpVar = { id: string; sku: string; size: string | null; color: string | null };
 type SpProd = {
-  id: string; name: string; variationType: string;
+  id: string; name: string; variationType: string; categoryName: string | null;
   variants: SpVar[];
   disp: Map<string, number>;
   pub: { price: number; promo: number | null } | null;
@@ -125,7 +171,7 @@ type SpProd = {
 
 async function loadSpera(ctx: SyncCtx, productId: string): Promise<SpProd | null> {
   const { admin, orgId } = ctx;
-  const { data: p } = await admin.from("products").select("id, name, variation_type").eq("id", productId).eq("organization_id", orgId).maybeSingle();
+  const { data: p } = await admin.from("products").select("id, name, variation_type, categories(name)").eq("id", productId).eq("organization_id", orgId).maybeSingle();
   if (!p) return null;
   const { data: vs } = await admin.from("product_variants").select("id, sku, size, color").eq("product_id", productId).eq("active", true).not("sku", "is", null);
   const variants = (vs ?? []).filter((v) => String(v.sku).trim() !== "")
@@ -139,6 +185,7 @@ async function loadSpera(ctx: SyncCtx, productId: string): Promise<SpProd | null
   const { data: imgs } = await admin.from("product_images").select("id, path").eq("product_id", productId).order("is_primary", { ascending: false }).order("position").order("created_at");
   return {
     id: p.id as string, name: p.name as string, variationType: (p.variation_type as string) ?? "none",
+    categoryName: ((Array.isArray(p.categories) ? p.categories[0] : p.categories) as { name?: string } | null)?.name ?? null,
     variants, disp,
     pub: pl ? { price: Number(pl.price), promo: pl.promo_price != null ? Number(pl.promo_price) : null } : null,
     images: (imgs ?? []).map((i) => ({ id: i.id as string, path: i.path as string })),
@@ -219,20 +266,36 @@ async function syncImages(ctx: SyncCtx, sp: SpProd, tn: TNProd, r: ItemResult) {
     r.notas.push(`Fotos: ya tenía ${tn.images.length} en TN; se tomaron como base`);
     return;
   }
-  let pos = tn.images.length;
-  for (const im of sp.images) {
-    if (done.has(im.id)) continue;
-    pos++;
-    const res = await tnFetch(ctx.creds, `/products/${tn.id}/images`, { method: "POST", body: JSON.stringify({ src: imageUrl(im.path), position: pos }) });
-    if (res.ok) {
+  const pos = tn.images.length;
+  const pend = sp.images.filter((im) => !done.has(im.id));
+  // De a 3 en paralelo: TN tarda ~3s en bajar cada foto; en serie un producto con 14 fotos
+  // consumía casi toda la llamada.
+  const subir = async (im: { id: string; path: string }, position: number): Promise<boolean> => {
+    let tnImageId: string | null = null;
+    try {
+      const res = await tnFetch(ctx.creds, `/products/${tn.id}/images`, { method: "POST", body: JSON.stringify({ src: imageUrl(im.path), position }) });
+      if (!res.ok) { r.notas.push(`Foto no subida (TN ${res.status})`); return true; }
       const body = (await res.json()) as { id?: number | string };
-      const { error } = await ctx.admin.from("tn_image_links").insert({ organization_id: ctx.orgId, product_image_id: im.id, tn_product_id: tn.id, tn_image_id: body.id != null ? String(body.id) : null });
-      r.fotosSubidas = (r.fotosSubidas ?? 0) + 1;
-      // Si no queda registrada, la próxima pasada la volvería a subir: frenar acá.
-      if (error) { r.notas.push(`Fotos: subida pero sin registrar (${error.message}); se frena para no duplicar`); return; }
-    } else {
-      r.notas.push(`Foto no subida (TN ${res.status})`);
+      tnImageId = body.id != null ? String(body.id) : null;
+    } catch {
+      // Sin respuesta: TN pudo haberla agregado igual. Se registra como subida (sin id) para
+      // NO duplicarla en la próxima pasada; si faltara, se agrega a mano.
+      r.notas.push("Una foto quedó sin confirmar por TN (no se reintenta para no duplicarla): revisar");
     }
+    const { error } = await ctx.admin.from("tn_image_links").insert({ organization_id: ctx.orgId, product_image_id: im.id, tn_product_id: tn.id, tn_image_id: tnImageId });
+    if (tnImageId) r.fotosSubidas = (r.fotosSubidas ?? 0) + 1;
+    // Si no queda registrada, la próxima pasada la volvería a subir: frenar acá.
+    if (error) { r.notas.push(`Fotos: subida pero sin registrar (${error.message}); se frena para no duplicar`); return false; }
+    return true;
+  };
+  for (let i = 0; i < pend.length; i += 3) {
+    if (Date.now() > ctx.deadline) {
+      r.notas.push(`Fotos: ${pend.length - i} pendientes por tiempo; se suben en la próxima pasada (Conciliar)`);
+      return;
+    }
+    const tanda = pend.slice(i, i + 3);
+    const oks = await Promise.all(tanda.map((im, j) => subir(im, pos + i + j + 1)));
+    if (oks.includes(false)) return;
     await sleep(PAUSE);
   }
 }
@@ -373,6 +436,18 @@ export async function reconcileExisting(ctx: SyncCtx, productId: string, tnProdu
     }
   }
 
+  // SALE: el producto queda en SALE y en SALE > <su categoría> (se suman a las que ya
+  // tenía en TN, no se le saca ninguna).
+  if (opts.sale) {
+    const want = await saleCategories(ctx, sp.categoryName);
+    const faltan = want.filter((c) => !tn.categories.includes(c));
+    if (faltan.length) {
+      const res = await tnFetch(ctx.creds, `/products/${tn.id}`, { method: "PUT", body: JSON.stringify({ categories: [...tn.categories, ...faltan].map(Number) }) });
+      if (!res.ok) r.notas.push(`No se pudo asignar la categoría SALE (TN ${res.status})`);
+      await sleep(PAUSE);
+    }
+  }
+
   await syncImages(ctx, sp, tn, r);
   return r;
 }
@@ -385,7 +460,12 @@ export async function createInTN(ctx: SyncCtx, productId: string, opts: { publis
   const r: ItemResult = { productId, name: sp.name, action: "creado", vinculadas: 0, variantesCreadas: 0, fotosSubidas: 0, precios: 0, notas: [] };
   if (!sp.variants.length) return { ...r, action: "omitido", notas: ["Sin variantes activas con SKU"] };
 
-  // Red de seguridad anti-duplicado: si algún SKU ya está en TN, se concilia ese producto.
+  // Anti-duplicado 1: ¿Spera ya lo tiene vinculado a un producto de TN? (lo escribimos
+  // apenas TN confirma la creación, así que es la fuente más confiable).
+  const { data: yaLink } = await ctx.admin.from("tiendanube_links").select("tn_product_id")
+    .eq("organization_id", ctx.orgId).in("variant_id", sp.variants.map((v) => v.id)).limit(1).maybeSingle();
+  if (yaLink?.tn_product_id) return reconcileExisting(ctx, productId, String(yaLink.tn_product_id), { sale: opts.sale });
+  // Anti-duplicado 2: ¿algún SKU ya está en TN? → se concilia ese producto, no se crea otro.
   for (const v of sp.variants.slice(0, 3)) {
     const existing = await findTNProductBySku(ctx, v.sku);
     if (existing) return reconcileExisting(ctx, productId, existing, { sale: opts.sale });
@@ -416,15 +496,39 @@ export async function createInTN(ctx: SyncCtx, productId: string, opts: { publis
     if (!attributes.length) break; // sin atributos TN admite una sola variante
   }
 
-  const imgs = sp.images.slice(0, 20);
+  // Se crea SIN fotos (rápido: con 10 fotos TN tardaba tanto que la llamada se cortaba);
+  // las fotos se suben después, de a una, y quedan registradas.
   const payload: Record<string, unknown> = { name: { es: sp.name }, published: opts.published, variants };
   if (attributes.length) payload.attributes = attributes;
-  if (imgs.length) payload.images = imgs.map((im, i) => ({ src: imageUrl(im.path), position: i + 1 }));
-  if (opts.sale && ctx.saleCategoryId) payload.categories = [Number(ctx.saleCategoryId)];
+  if (opts.sale) {
+    const cats = await saleCategories(ctx, sp.categoryName);
+    if (cats.length) payload.categories = cats.map(Number);
+  }
 
-  const res = await tnFetch(ctx.creds, "/products", { method: "POST", body: JSON.stringify(payload) });
-  if (!res.ok) return { ...r, action: "error", notas: [`Tiendanube ${res.status}: ${(await res.text()).slice(0, 180)}`] };
-  const body = (await res.json()) as Record<string, unknown>;
+  // Un POST NO se reintenta (ver tnRequest). Si falla o tarda, puede haberse creado igual:
+  // antes de dar error, se busca por SKU y, si está, se adopta (nunca una segunda copia).
+  let body: Record<string, unknown> | null = null;
+  let fallo = "";
+  try {
+    const res = await tnFetch(ctx.creds, "/products", { method: "POST", body: JSON.stringify(payload) });
+    if (res.ok) body = (await res.json()) as Record<string, unknown>;
+    else fallo = `Tiendanube ${res.status}: ${(await res.text()).slice(0, 180)}`;
+  } catch (e) {
+    fallo = `Tiendanube no respondió (${e instanceof Error ? e.message : String(e)})`;
+  }
+  if (!body) {
+    for (const wait of [3000, 6000]) {
+      await sleep(wait);
+      const existing = await findTNProductBySku(ctx, sp.variants[0].sku);
+      if (existing) {
+        const rr = await reconcileExisting(ctx, productId, existing, { sale: opts.sale });
+        rr.notas.unshift("TN tardó en confirmar la creación; se encontró el producto y se vinculó (sin duplicar)");
+        return { ...rr, action: "creado" };
+      }
+    }
+    return { ...r, action: "error", notas: [fallo + " · no quedó creado en TN (se puede reintentar)"] };
+  }
+
   let tn = parseTNProduct(body);
   if (!tn.variants.length || tn.variants.some((v) => !v.sku)) tn = (await getTNProduct(ctx, tn.id)) ?? tn;
   r.tnProductId = tn.id;
@@ -436,14 +540,7 @@ export async function createInTN(ctx: SyncCtx, productId: string, opts: { publis
   r.vinculadas = links.length;
   r.variantesCreadas = tn.variants.length;
 
-  // Registrar las fotos subidas (mismo orden que el payload) para no repetirlas después.
-  if (ctx.imgTable && imgs.length) {
-    const tnImgs = ((body.images ?? []) as Record<string, unknown>[]).map((i) => String(i.id));
-    await ctx.admin.from("tn_image_links").insert(imgs.map((im, i) => ({
-      organization_id: ctx.orgId, product_image_id: im.id, tn_product_id: tn.id, tn_image_id: tnImgs[i] ?? null,
-    })));
-    r.fotosSubidas = tnImgs.length || imgs.length;
-  }
+  await syncImages(ctx, sp, tn, r);
   return r;
 }
 

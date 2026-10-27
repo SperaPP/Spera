@@ -45,17 +45,23 @@ export async function getTNCreds(org: string): Promise<TNCreds | null> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** fetch con timeout (20s) y reintento con espera ante 429/5xx o error de red. */
+/** fetch con timeout y reintento con espera ante 429/5xx o error de red.
+ *  OJO: un POST (crear producto/variante/foto/categoría) NO es idempotente. Si TN tarda
+ *  o responde 5xx, puede haberlo creado igual: reintentarlo creaba el producto 2, 3 o 4
+ *  veces (duplicados con segundos de diferencia). Para POST solo se reintenta un 429
+ *  (TN lo rechazó sin procesarlo); ante timeout/5xx el que llama verifica si quedó creado. */
 async function tnRequest(url: string, init: RequestInit, tries = 4): Promise<Response> {
+  const idempotent = !init.method || init.method.toUpperCase() !== "POST";
   for (let attempt = 1; ; attempt++) {
     let res: Response;
     try {
-      res = await fetch(url, { ...init, signal: AbortSignal.timeout(20000) });
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(idempotent ? 20000 : 40000) });
     } catch (e) {
-      if (attempt >= tries) throw e;
+      if (!idempotent || attempt >= tries) throw e;
       await sleep(500 * attempt);
       continue;
     }
+    if (!idempotent && res.status !== 429) return res;
     if ((res.status === 429 || res.status >= 500) && attempt < tries) {
       const ra = Number(res.headers.get("retry-after"));
       await sleep(ra > 0 ? ra * 1000 : 500 * attempt);
