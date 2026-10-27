@@ -132,10 +132,11 @@ export async function analizarTiendanube(): Promise<Resp> {
   };
 }
 
-/** Reconciliación de stock: encola TODAS las variantes linkeadas a TN para que el
- *  cron empuje el disponible actual de cada una. Úsese tras un período sin sync o
- *  cuando se sospeche arrastre. Reservado a administración. */
-export async function reconciliarStockTN(): Promise<{ ok: boolean; encoladas?: number; error?: string }> {
+/** Reconciliación de stock: (1) vincula por SKU las variantes de TN que existen en Spera
+ *  y no tenían vínculo (los productos que ya estaban en TN antes de Spera: sin vínculo
+ *  NUNCA recibían stock), y (2) encola TODAS las variantes vinculadas para que el cron
+ *  empuje el disponible actual de cada una. Reservado a administración. */
+export async function reconciliarStockTN(): Promise<{ ok: boolean; encoladas?: number; vinculadas?: number; error?: string }> {
   const denied = await requireAdmin();
   if (denied) return { ok: false, error: denied.error ?? "No autorizado" };
 
@@ -143,8 +144,13 @@ export async function reconciliarStockTN(): Promise<{ ok: boolean; encoladas?: n
   const { data: orgId } = await sb.rpc("current_org_id");
   if (!orgId) return { ok: false, error: "Sin organización" };
 
+  // (1) Vincular primero. Antes "Conciliar" solo re-empujaba las ya vinculadas, así que a
+  // los productos viejos de TN (sin vínculo) no les llegaba nunca el stock.
+  const rep = await repairTNLinks(orgId as string);
+  if (!rep.ok) return { ok: false, error: rep.error ?? "No se pudieron vincular las variantes" };
+
   const admin = createAdminClient();
-  // Traer todas las variantes linkeadas (paginado) y encolarlas (upsert idempotente).
+  // (2) Traer todas las variantes linkeadas (paginado) y encolarlas (upsert idempotente).
   const links: { variant_id: string }[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await admin.from("tiendanube_links")
@@ -154,7 +160,7 @@ export async function reconciliarStockTN(): Promise<{ ok: boolean; encoladas?: n
     links.push(...batch);
     if (batch.length < 1000) break;
   }
-  if (links.length === 0) return { ok: true, encoladas: 0 };
+  if (links.length === 0) return { ok: true, encoladas: 0, vinculadas: rep.corregidos ?? 0 };
 
   const now = new Date().toISOString();
   for (let i = 0; i < links.length; i += 500) {
@@ -162,7 +168,7 @@ export async function reconciliarStockTN(): Promise<{ ok: boolean; encoladas?: n
     const { error } = await admin.from("tn_stock_sync_queue").upsert(rows, { onConflict: "organization_id,variant_id" });
     if (error) return { ok: false, error: error.message };
   }
-  return { ok: true, encoladas: links.length };
+  return { ok: true, encoladas: links.length, vinculadas: rep.corregidos ?? 0 };
 }
 
 /** Repara los vínculos con Tiendanube rotos (re-vincula por SKU al producto/variante

@@ -8,7 +8,11 @@ const input = "w-full rounded-lg border border-line-strong bg-card px-3 py-2 tex
 
 export default function PortalNuevaClavePage() {
   const [state, action, pending] = useActionState(setClavePortal, {});
-  useEffect(() => { if (state.error) toast.error(state.error); }, [state]);
+  useEffect(() => {
+    if (state.error) toast.error(state.error);
+    // Login OK → carga completa de la página (evita la pantalla en blanco).
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state]);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
@@ -23,7 +27,7 @@ export default function PortalNuevaClavePage() {
             <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-ink">Contraseña (mín. 6)</label>
             <input id="password" name="password" type="password" autoComplete="new-password" required className={input} placeholder="Elegí una contraseña" />
           </div>
-          <button type="submit" disabled={pending} className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60">
+          <button type="submit" disabled={pending || !!state.redirectTo} className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60">
             {pending ? "Guardando…" : "Guardar y entrar"}
           </button>
         </form>

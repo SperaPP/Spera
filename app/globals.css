@@ -39,3 +39,25 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
+
+/* ── Celular (panel interno) ──────────────────────────────────────────────
+   Las tablas anchas se deslizan de costado en vez de aplastarse o cortarse
+   (muchos contenedores son overflow-hidden por el borde redondeado). Los
+   encabezados con botones bajan de línea si no entran. */
+@media (max-width: 767px) {
+  .app-main :where(div, section):has(> table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app-main table th,
+  .app-main table td {
+    white-space: nowrap;
+  }
+  .app-main h1 {
+    font-size: 1.25rem;
+  }
+  .app-main :where(div).justify-between:has(> h1),
+  .app-main :where(div).justify-between:has(> div > h1) {
+    flex-wrap: wrap;
+  }
+}

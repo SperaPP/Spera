@@ -9,7 +9,11 @@ const input = "w-full rounded-lg border border-line-strong bg-card px-3 py-2 tex
 
 export default function PortalLoginPage() {
   const [state, action, pending] = useActionState(loginPortal, {});
-  useEffect(() => { if (state.error) toast.error(state.error); }, [state]);
+  useEffect(() => {
+    if (state.error) toast.error(state.error);
+    // Login OK → carga completa de la página (evita la pantalla en blanco).
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state]);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
@@ -29,7 +33,7 @@ export default function PortalLoginPage() {
             <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-ink">Contraseña</label>
             <input id="password" name="password" type="password" autoComplete="current-password" required className={input} />
           </div>
-          <button type="submit" disabled={pending} className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60">
+          <button type="submit" disabled={pending || !!state.redirectTo} className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60">
             {pending ? "Ingresando…" : "Ingresar"}
           </button>
         </form>

@@ -16,6 +16,7 @@ export function ProductSearch({ basePath = "/productos", placeholder = "Buscar p
     timer.current = setTimeout(() => {
       const params = new URLSearchParams(sp.toString());
       if (v.trim()) params.set("q", v.trim()); else params.delete("q");
+      params.delete("page"); // búsqueda nueva → volver a la página 1
       const qs = params.toString();
       router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
     }, 300);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -21,6 +22,8 @@ import {
   ScrollText,
   Sparkles,
   Store,
+  Menu,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -51,15 +54,27 @@ const NAV: NavItem[] = [
 
 export function Sidebar({ perms, isAdmin }: { perms: Perms; isAdmin: boolean }) {
   const pathname = usePathname();
+  // Celular: el menú es un panel deslizable (en desktop queda fijo como siempre).
+  const [open, setOpen] = useState(false);
+  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
 
-  return (
-    <aside className="flex w-60 shrink-0 flex-col bg-sidebar print:hidden">
+  const content = (
+    <>
       <div className="flex items-center gap-2.5 px-5 py-5">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-fg">
           S
         </span>
         <span className="text-[17px] font-semibold text-white">Spera</span>
         <span className="text-[11px] text-sidebar-muted">Bodysculpt</span>
+        <button onClick={() => setOpen(false)} aria-label="Cerrar menú" className="ml-auto rounded-md p-1 text-sidebar-muted hover:text-white md:hidden">
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
@@ -72,7 +87,7 @@ export function Sidebar({ perms, isAdmin }: { perms: Perms; isAdmin: boolean }) 
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors md:py-2",
                 active
                   ? "bg-sidebar-active font-medium text-white"
                   : "text-sidebar-muted hover:bg-white/5 hover:text-white"
@@ -84,6 +99,28 @@ export function Sidebar({ perms, isAdmin }: { perms: Perms; isAdmin: boolean }) 
           );
         })}
       </nav>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop: fijo a la izquierda */}
+      <aside className="hidden w-60 shrink-0 flex-col bg-sidebar md:flex print:hidden">{content}</aside>
+
+      {/* Celular: botón de menú (arriba a la izquierda, sobre el header) + panel */}
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="Abrir menú"
+        className="fixed left-3 top-3 z-40 flex h-8 w-8 items-center justify-center rounded-lg text-ink hover:bg-canvas md:hidden print:hidden"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 md:hidden print:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col bg-sidebar shadow-xl">{content}</aside>
+        </div>
+      )}
+    </>
   );
 }

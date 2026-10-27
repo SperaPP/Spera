@@ -33,9 +33,9 @@ export default async function AppLayout({
     <div className="flex min-h-screen">
       <Sidebar perms={perms} isAdmin={!!isAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-end gap-3 border-b border-line bg-card px-6 print:hidden">
+        <header className="flex h-14 items-center justify-end gap-2 border-b border-line bg-card pl-14 pr-3 sm:gap-3 md:px-6 print:hidden">
           <Link href="/cuenta" className="flex items-center gap-3 rounded-lg px-1.5 py-1 transition-colors hover:bg-canvas" title="Mi cuenta">
-            <span className="text-sm text-muted">{displayName}</span>
+            <span className="hidden max-w-[40vw] truncate text-sm text-muted sm:inline">{displayName}</span>
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-medium text-accent">
               {initials}
             </span>
@@ -50,7 +50,7 @@ export default async function AppLayout({
             </button>
           </form>
         </header>
-        <main className="min-w-0 flex-1 p-6 print:p-0">{children}</main>
+        <main className="app-main min-w-0 flex-1 p-3 sm:p-4 md:p-6 print:p-0">{children}</main>
       </div>
     </div>
   );

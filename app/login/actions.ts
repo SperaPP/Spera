@@ -1,10 +1,11 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionState } from "@/lib/auth";
+
+export type LoginState = ActionState & { redirectTo?: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -27,7 +28,7 @@ export async function solicitarReset(_prev: ActionState, formData: FormData): Pr
 }
 
 /** Setea la contraseña nueva (con la sesión de recuperación ya activa). */
-export async function setNewPassword(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function setNewPassword(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const password = String(formData.get("password") ?? "");
   if (password.length < 6) return { error: "La contraseña debe tener al menos 6 caracteres." };
   const sb = await createClient();
@@ -36,13 +37,15 @@ export async function setNewPassword(_prev: ActionState, formData: FormData): Pr
   const { error } = await sb.auth.updateUser({ password });
   if (error) return { error: error.message };
   revalidatePath("/", "layout");
-  redirect("/");
+  // Carga COMPLETA (no navegación interna): el redirect() desde la acción, recién
+  // escritas las cookies de sesión, dejaba la pantalla en blanco hasta apretar F5.
+  return { ok: true, redirectTo: "/" };
 }
 
 export async function login(
-  _prev: ActionState,
+  _prev: LoginState,
   formData: FormData
-): Promise<ActionState> {
+): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
@@ -59,5 +62,7 @@ export async function login(
 
   // Invalida el cache (si no, "/" sirve la versión cacheada sin sesión y rebota al login).
   revalidatePath("/", "layout");
-  redirect("/");
+  // Carga COMPLETA (no navegación interna): el redirect() desde la acción, recién
+  // escritas las cookies de sesión, dejaba la pantalla en blanco hasta apretar F5.
+  return { ok: true, redirectTo: "/" };
 }

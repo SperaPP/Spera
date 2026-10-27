@@ -10,7 +10,11 @@ const label = "mb-1.5 block text-sm font-medium text-ink";
 
 export default function PortalRegistroPage() {
   const [state, action, pending] = useActionState(registrarPortal, {});
-  useEffect(() => { if (state.error) toast.error(state.error); }, [state]);
+  useEffect(() => {
+    if (state.error) toast.error(state.error);
+    // Login OK → carga completa de la página (evita la pantalla en blanco).
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state]);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-8">
@@ -53,7 +57,7 @@ export default function PortalRegistroPage() {
             <label htmlFor="password" className={label}>Contraseña (mín. 6)</label>
             <input id="password" name="password" type="password" autoComplete="new-password" required className={input} />
           </div>
-          <button type="submit" disabled={pending} className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60">
+          <button type="submit" disabled={pending || !!state.redirectTo} className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60">
             {pending ? "Creando cuenta…" : "Crear cuenta"}
           </button>
         </form>

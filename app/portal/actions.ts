@@ -6,11 +6,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getPortalCustomer } from "@/lib/portal";
 import { centralWarehouseId, portalProduct, type PortalProduct } from "@/lib/portal-catalog";
 import type { ActionState } from "@/lib/auth";
+import type { LoginState } from "@/app/login/actions";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Registro de un cliente mayorista en el portal. Queda pendiente de aprobación. */
-export async function registrarPortal(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function registrarPortal(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const name = String(formData.get("name") ?? "").trim();
   const docType = String(formData.get("docType") ?? "DNI").trim();
   const docNumber = String(formData.get("docNumber") ?? "").trim();
@@ -65,17 +66,21 @@ export async function registrarPortal(_prev: ActionState, formData: FormData): P
 
   const sb = await createClient();
   await sb.auth.signInWithPassword({ email, password });
-  redirect("/portal");
+  // Carga COMPLETA (no navegación interna): el redirect() desde la acción, recién
+  // escritas las cookies de sesión, dejaba la pantalla en blanco hasta apretar F5.
+  return { ok: true, redirectTo: "/portal" };
 }
 
-export async function loginPortal(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function loginPortal(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "Ingresá email y contraseña." };
   const sb = await createClient();
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) return { error: "Email o contraseña incorrectos." };
-  redirect("/portal");
+  // Carga COMPLETA (no navegación interna): el redirect() desde la acción, recién
+  // escritas las cookies de sesión, dejaba la pantalla en blanco hasta apretar F5.
+  return { ok: true, redirectTo: "/portal" };
 }
 
 /** Confirma el pedido del portal: crea la venta, descuenta stock y va a cuenta corriente. */
@@ -106,7 +111,7 @@ export async function logoutPortal() {
 }
 
 /** Setea la contraseña nueva del cliente (con la sesión de recuperación activa, del link). */
-export async function setClavePortal(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function setClavePortal(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const password = String(formData.get("password") ?? "");
   if (password.length < 6) return { error: "La contraseña debe tener al menos 6 caracteres." };
   const sb = await createClient();
@@ -114,7 +119,9 @@ export async function setClavePortal(_prev: ActionState, formData: FormData): Pr
   if (!auth?.user) return { error: "El enlace expiró o no es válido. Pedile al local uno nuevo." };
   const { error } = await sb.auth.updateUser({ password });
   if (error) return { error: error.message };
-  redirect("/portal");
+  // Carga COMPLETA (no navegación interna): el redirect() desde la acción, recién
+  // escritas las cookies de sesión, dejaba la pantalla en blanco hasta apretar F5.
+  return { ok: true, redirectTo: "/portal" };
 }
 
 /** Stock DISPONIBLE actual (Central) para las variantes del carrito. Solo lectura;

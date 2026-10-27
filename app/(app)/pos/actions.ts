@@ -203,6 +203,14 @@ export async function buscarClientePorDoc(doc: string): Promise<ShapedCustomer |
   return data ? shapeCustomer(data) : null;
 }
 
+/** Un cliente por id (para preseleccionarlo en un formulario, p. ej. ?cliente=<id>). */
+export async function buscarClientePorId(id: string): Promise<ShapedCustomer | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id ?? "")) return null;
+  const sb = await createClient();
+  const { data } = await sb.from("customers").select(CUSTOMER_SEL).eq("id", id).eq("active", true).maybeSingle();
+  return data ? shapeCustomer(data) : null;
+}
+
 /** Clientes PARECIDOS (misma persona, otro formato de documento): un DNI que aparece
  *  dentro de un CUIT ya cargado (20-DNI-3), o viceversa. Para preguntar "¿es este o es
  *  otro?" antes de crear un duplicado. No incluye el match exacto. */

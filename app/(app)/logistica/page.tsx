@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getStoreScope, getScopeWarehouseId } from "@/lib/auth";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { Pagination } from "@/components/pagination";
+import { ProductSearch } from "@/components/product-search";
 
 const PAGE_SIZE = 50;
 
@@ -32,8 +33,9 @@ const TABS = [
   { key: "todos", label: "Todas las ventas" },
 ];
 
-export default async function LogisticaPage({ searchParams }: { searchParams: Promise<{ estado?: string; page?: string }> }) {
-  const { estado, page: pageParam } = await searchParams;
+export default async function LogisticaPage({ searchParams }: { searchParams: Promise<{ estado?: string; page?: string; q?: string }> }) {
+  const { estado, page: pageParam, q } = await searchParams;
+  const query = (q ?? "").trim();
   const filter = estado && TABS.some((t) => t.key === estado) ? estado : "pendiente";
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
@@ -74,6 +76,17 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
     let cnt = sb.from("sales").select("id", { count: "exact", head: true }).eq("status", "completada");
     if (scopeStore) { req = req.eq("store_id", scopeStore); cnt = cnt.eq("store_id", scopeStore); }
     if (filter !== "todos") { req = req.eq("fulfillment_status", filter); cnt = cnt.eq("fulfillment_status", filter); }
+    // Búsqueda por cliente (nombre), N° de pedido o N° de Tiendanube.
+    if (query) {
+      const NO_MATCH = "00000000-0000-0000-0000-000000000000";
+      const { data: custs } = await sb.from("customers").select("id").ilike("name", `%${query}%`).limit(50);
+      const parts: string[] = [];
+      if (/^\d+$/.test(query)) parts.push(`number.eq.${Number(query)}`, `tn_order_number.eq.${Number(query)}`);
+      const ids = (custs ?? []).map((c) => c.id);
+      if (ids.length) parts.push(`customer_id.in.(${ids.join(",")})`);
+      if (parts.length) { req = req.or(parts.join(",")); cnt = cnt.or(parts.join(",")); }
+      else { req = req.eq("id", NO_MATCH); cnt = cnt.eq("id", NO_MATCH); }
+    }
     const [{ data }, { count }] = await Promise.all([req, cnt]);
     sales = data ?? [];
     total = count ?? 0;
@@ -96,6 +109,12 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
           </Link>
         ))}
       </div>
+
+      {!isTransfers && (
+        <div className="mb-4">
+          <ProductSearch basePath="/logistica" placeholder="Buscar por cliente o N° de pedido…" />
+        </div>
+      )}
 
       {isTransfers ? (
         transfers.length === 0 ? (
@@ -189,7 +208,7 @@ export default async function LogisticaPage({ searchParams }: { searchParams: Pr
         </div>
       )}
 
-      <Pagination page={page} pageCount={pageCount} total={total} pageSize={PAGE_SIZE} basePath="/logistica" params={{ estado: filter }} />
+      <Pagination page={page} pageCount={pageCount} total={total} pageSize={PAGE_SIZE} basePath="/logistica" params={{ estado: filter, q: query || undefined }} />
 
       <p className="mt-3 flex items-center gap-1.5 text-xs text-muted"><ScanLine className="h-3.5 w-3.5" /> Mostrador y cambios quedan entregados automáticamente. Mayoristas pasan por control y despacho; las transferencias por recepción.</p>
     </div>

@@ -95,7 +95,12 @@ export async function aprobarPortalCliente(customerId: string, customerTypeId: s
   // El portal es mayorista: si no vino un tipo (p. ej. una solicitud que llegó después
   // de abrir la pantalla), asignamos el tipo "Mayorista" sí o sí, para que el cliente
   // SIEMPRE quede con su lista de precios. Sin tipo = sin lista = portal roto.
+  // Si ya tenía un tipo asignado (habilitar desde la ficha), se respeta.
   let typeId = customerTypeId;
+  if (!typeId) {
+    const { data: cur } = await sb.from("customers").select("customer_type_id").eq("id", customerId).eq("organization_id", orgId).maybeSingle();
+    typeId = (cur?.customer_type_id as string | null) ?? null;
+  }
   if (!typeId) {
     const { data: t } = await sb.from("customer_types")
       .select("id").eq("organization_id", orgId).ilike("name", "%mayorista%").limit(1).maybeSingle();
@@ -107,6 +112,7 @@ export async function aprobarPortalCliente(customerId: string, customerTypeId: s
     .eq("id", customerId).eq("organization_id", orgId);
   if (error) return { error: error.message };
   revalidatePath("/clientes");
+  revalidatePath(`/clientes/${customerId}`);
   return { ok: true };
 }
 
@@ -166,9 +172,11 @@ export async function generarLinkAccesoCliente(
         .select("id").eq("organization_id", orgId).ilike("name", "%mayorista%").limit(1).maybeSingle();
       typeId = t?.id ?? null;
     }
-    await sb.from("customers")
+    const { error: upErr } = await sb.from("customers")
       .update({ portal_status: "aprobado", customer_type_id: typeId, active: true })
       .eq("id", customerId).eq("organization_id", orgId);
+    // Si no se pudo habilitar, no mandamos un link que lo deja trabado en "revisión".
+    if (upErr) return { error: `No se pudo habilitar al cliente: ${upErr.message}` };
     revalidatePath("/clientes");
   }
 

@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { formatMoney } from "@/lib/format";
 import { crearCobranza, pedidosPendientes, type PedidoPendiente } from "@/app/(app)/cobranzas/actions";
+import { CustomerPicker, type PickedCustomer } from "@/components/customer-picker";
 
-type Customer = { id: string; name: string; balance: number };
 type Caja = { storeId: string; name: string; sessionId: string };
 type Method = { id: string; name: string; kind: string };
 type Payment = { methodId: string; amount: string };
@@ -17,10 +17,12 @@ const input =
 const label = "mb-1.5 block text-sm font-medium text-ink";
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { customers: Customer[]; openCajas: Caja[]; paymentMethods: Method[] }) {
+export function NuevaCobranzaForm({ initialCustomer, openCajas, paymentMethods }: { initialCustomer: PickedCustomer | null; openCajas: Caja[]; paymentMethods: Method[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
+  // Arranca SIN cliente (antes elegía el primero alfabético: riesgo de cobrarle a otro).
+  const [customer, setCustomer] = useState<PickedCustomer | null>(initialCustomer);
+  const customerId = customer?.id ?? "";
   const [cajaId, setCajaId] = useState(openCajas[0]?.sessionId ?? "");
   const [notes, setNotes] = useState("");
   const [payments, setPayments] = useState<Payment[]>([{ methodId: paymentMethods[0]?.id ?? "", amount: "" }]);
@@ -28,7 +30,6 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
   const [alloc, setAlloc] = useState<Record<string, string>>({});
   const [allocTouched, setAllocTouched] = useState(false);
 
-  const customer = customers.find((c) => c.id === customerId) ?? null;
   const debt = customer?.balance ?? 0;
   const collected = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
   const caja = openCajas.find((c) => c.sessionId === cajaId) ?? null;
@@ -114,10 +115,8 @@ export function NuevaCobranzaForm({ customers, openCajas, paymentMethods }: { cu
       <div className="rounded-xl border border-line bg-card p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={label} htmlFor="customer">Cliente</label>
-            <select id="customer" className={input} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <label className={label}>Cliente</label>
+            <CustomerPicker value={customer} onChange={setCustomer} autoFocus={!initialCustomer} />
           </div>
           <div>
             <label className={label} htmlFor="caja">Caja (para efectivo)</label>

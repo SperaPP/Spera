@@ -6,6 +6,16 @@ import { formatMoney, formatDateTime } from "@/lib/format";
 import { AjusteSaldoButton } from "@/components/ajuste-saldo-button";
 import { CambiarPasswordClienteButton } from "@/components/cambiar-password-cliente-button";
 import { EnviarLinkPortalButton } from "@/components/enviar-link-portal-button";
+import { HabilitarPortalButton } from "@/components/habilitar-portal-button";
+
+// Estado del portal mayorista (solo si el cliente tiene login). Sin estado = nunca se
+// habilitó (p. ej. una ficha unificada con la de su registro): el cliente ve "en revisión".
+const PORTAL_LABEL: Record<string, { label: string; cls: string }> = {
+  aprobado: { label: "Portal habilitado", cls: "bg-ok-bg text-ok" },
+  pendiente: { label: "Portal: pendiente de aprobación", cls: "bg-warn-bg text-warn" },
+  rechazado: { label: "Portal: rechazado", cls: "bg-danger-bg text-danger" },
+  sin_estado: { label: "Portal: sin habilitar", cls: "bg-warn-bg text-warn" },
+};
 
 /** Link al comprobante que originó el movimiento de cuenta corriente. */
 function movHref(referenceType: string | null, referenceId: string | null): string | null {
@@ -100,16 +110,21 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
               {infoField("Email", customer.email)}
               {infoField("Teléfono", customer.phone)}
             </div>
+            {customer.auth_user_id && (() => {
+              const st = PORTAL_LABEL[customer.portal_status ?? "sin_estado"] ?? PORTAL_LABEL.sin_estado;
+              return <span className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>;
+            })()}
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <Link href={`/clientes/${customer.id}/editar`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
               <Pencil className="h-4 w-4" />
               Editar
             </Link>
-            <Link href="/cobranzas/nueva" className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
+            <Link href={`/cobranzas/nueva?cliente=${customer.id}`} className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-canvas">
               <HandCoins className="h-4 w-4" />
               Cobrar
             </Link>
+            {customer.auth_user_id && customer.portal_status !== "aprobado" && <HabilitarPortalButton customerId={customer.id} />}
             {isAdmin === true && customer.auth_user_id && <CambiarPasswordClienteButton customerId={customer.id} />}
             {isAdmin === true && customer.auth_user_id && <EnviarLinkPortalButton customerId={customer.id} />}
             {isAdmin === true && <AjusteSaldoButton customerId={customer.id} balance={balance} />}

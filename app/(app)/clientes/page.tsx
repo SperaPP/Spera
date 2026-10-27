@@ -36,7 +36,11 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
   const [{ data: customers }, { count: total }, { data: pend }, { data: tipos }, { data: isAdmin }] = await Promise.all([
     listReq.order("name").range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
     cntReq,
-    sb.from("customers").select("id, name, doc_type, doc_number, email, phone").eq("portal_status", "pendiente").order("created_at", { ascending: true }),
+    // Solicitudes: pendientes + los que tienen login pero quedaron SIN estado (limbo: el
+    // cliente ve "en revisión" y antes no aparecían en ningún lado para aprobarlos).
+    sb.from("customers").select("id, name, doc_type, doc_number, email, phone")
+      .or("portal_status.eq.pendiente,and(portal_status.is.null,auth_user_id.not.is.null)")
+      .order("created_at", { ascending: true }),
     sb.from("customer_types").select("id, name").order("name"),
     sb.rpc("is_admin"),
   ]);

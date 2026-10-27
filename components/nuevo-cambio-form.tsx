@@ -2,14 +2,15 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Search, ScanLine, Trash2, Plus, Minus, Receipt, Gift, RotateCcw, IdCard, UserCheck, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Search, ScanLine, Trash2, Plus, Minus, Receipt, Gift, RotateCcw, UserCheck, CheckCircle2, AlertTriangle } from "lucide-react";
 import { formatMoney } from "@/lib/format";
-import { buscarProductos, buscarPorCodigo, buscarClientePorDoc } from "@/app/(app)/pos/actions";
+import { buscarProductos, buscarPorCodigo, buscarClientesPOS } from "@/app/(app)/pos/actions";
 import { buscarTicket, previewCambio, crearCambio, type PreviewItem } from "@/app/(app)/cambios/actions";
+import { CustomerPicker } from "@/components/customer-picker";
 
 type OpenStore = { id: string; name: string; sessionId: string };
 type Method = { id: string; name: string; kind: string };
-type Customer = NonNullable<Awaited<ReturnType<typeof buscarClientePorDoc>>>;
+type Customer = Awaited<ReturnType<typeof buscarClientesPOS>>[number];
 type CartItem = { variantId: string; name: string; label: string | null; quantity: number; unitPrice: number };
 type Payment = { methodId: string; amount: string };
 type Ret = { name: string; label: string | null; qty: number };
@@ -25,7 +26,6 @@ export function NuevoCambioForm({ openStores, locked, retailPriceListId, payment
   const [scope, setScope] = useState<"minorista" | "mayorista" | null>(null);
   const [ticketInput, setTicketInput] = useState("");
   const [scopeSale, setScopeSale] = useState<{ id: string; number: number } | null>(null);
-  const [doc, setDoc] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
 
   const [returned, setReturned] = useState<Record<string, Ret>>({});
@@ -74,17 +74,6 @@ export function NuevoCambioForm({ openStores, locked, retailPriceListId, payment
       toast.success(`Ticket #${r.number}`);
     });
   }
-  function buscarCliente() {
-    const d = doc.trim();
-    if (!d) return;
-    start(async () => {
-      const c = await buscarClientePorDoc(d);
-      if (!c) { toast.error("No se encontró un cliente con ese documento."); return; }
-      setCustomer(c);
-      toast.success(`Cliente: ${c.name}`);
-    });
-  }
-
   async function scanReturn(code: string) {
     const r = await buscarPorCodigo(code, null);
     if (r.notFound) return toast.error(`Código ${code}: sin resultados`);
@@ -119,7 +108,7 @@ export function NuevoCambioForm({ openStores, locked, retailPriceListId, payment
   }
 
   function resetAll() {
-    setScope(null); setTicketInput(""); setScopeSale(null); setDoc(""); setCustomer(null);
+    setScope(null); setTicketInput(""); setScopeSale(null); setCustomer(null);
     setReturned({}); setPreview({ totalCredit: 0, items: [], allMatched: true });
     setQuery(""); setResults([]); setCart([]); setPayments([]);
   }
@@ -225,11 +214,10 @@ export function NuevoCambioForm({ openStores, locked, retailPriceListId, payment
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <IdCard className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
-                <input className={`${input} pl-9`} placeholder="DNI o CUIT del cliente" value={doc} onChange={(e) => setDoc(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") buscarCliente(); }} />
+              {/* Por nombre, DNI/CUIT o email (antes solo por documento exacto). */}
+              <div className="flex-1">
+                <CustomerPicker value={null} onChange={(c) => { if (c) { setCustomer(c); toast.success(`Cliente: ${c.name}`); } }} autoFocus />
               </div>
-              <button onClick={buscarCliente} disabled={pending || !doc.trim()} className="shrink-0 rounded-xl border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-50">Buscar</button>
               <button onClick={() => setScope(null)} className="shrink-0 text-xs text-muted hover:text-ink">Volver</button>
             </div>
           )

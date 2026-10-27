@@ -9,6 +9,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (state.error) toast.error(state.error);
+    // Login OK → carga completa de la página (evita la pantalla en blanco).
+    if (state.redirectTo) window.location.replace(state.redirectTo);
   }, [state]);
 
   return (
@@ -53,7 +55,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={pending}
+            disabled={pending || !!state.redirectTo}
             className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60"
           >
             {pending ? "Ingresando…" : "Ingresar"}
