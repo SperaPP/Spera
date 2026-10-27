@@ -65,7 +65,7 @@ async function tnRequest(url: string, init: RequestInit, tries = 4): Promise<Res
   }
 }
 
-async function tnFetch(creds: TNCreds, path: string, init?: RequestInit) {
+export async function tnFetch(creds: TNCreds, path: string, init?: RequestInit) {
   return tnRequest(`${API}/${creds.storeId}${path}`, {
     ...init,
     headers: {

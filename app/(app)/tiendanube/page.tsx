@@ -4,6 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getTNCreds, fetchStoreName, tnConfigured } from "@/lib/tiendanube";
 import { TiendanubeAnalisis } from "@/components/tiendanube-analisis";
 import { ReconciliarStockTN } from "@/components/reconciliar-stock-tn";
+import { TNSyncMasivo } from "@/components/tn-sync-masivo";
+
+// Las acciones de sincronización masiva corren en lotes; cada lote puede tardar.
+export const maxDuration = 60;
 
 export default async function TiendanubePage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
   const { connected, error } = await searchParams;
@@ -56,6 +60,7 @@ export default async function TiendanubePage({ searchParams }: { searchParams: P
             </a>
           </div>
 
+          <TNSyncMasivo />
           <ReconciliarStockTN />
           <TiendanubeAnalisis />
         </div>

@@ -20,6 +20,9 @@ const casos = [
   ["Leer credenciales de Tiendanube", "select * from tiendanube_credentials", true],
   ["Leer tickets de AFIP", "select * from arca_auth_tickets", true],
   ["Leer el esquema auth de Supabase", "select * from auth.users", true],
+  // 0121: cron.job guarda el CRON_SECRET en el comando del pg_cron.
+  ["Leer los jobs de pg_cron (CRON_SECRET)", "select command from cron.job", true],
+  ["Lo mismo con comillas", 'select command from "cron"."job"', true],
   ["DDL (crear tabla)", "create table hackeo (id int)", true],
   // Escritura SIN palabras prohibidas: prueba que la transacción read-only ataja sola.
   ["setval() — escritura disfrazada de SELECT", "select setval(pg_get_serial_sequence('audit_log','id'), 999999)", true],
