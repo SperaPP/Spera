@@ -8,9 +8,8 @@
 //  · Nunca se mueve un vínculo existente a otro producto de TN, ni se le "roba" a TN un
 //    SKU que pertenece a otra variante de Spera.
 //  · Talles/colores que existen en Spera y no en TN → se crean en el producto de TN.
-//  · Fotos: solo se AGREGAN las que faltan (nunca se borra una foto de TN). Si el producto
-//    ya tenía fotos en TN y nunca se sincronizó, las actuales de Spera se toman como base
-//    (no se suben repetidas); de ahí en más, toda foto nueva de Spera se sube.
+//  · Fotos: se AGREGAN a TN las fotos de Spera que todavía no se subieron (registro en
+//    tn_image_links), aunque TN ya tenga otras. Nunca se borra una foto de TN.
 //  · Precio: solo para SALE → precio de lista Público (tachado) + promo Público (rebajado).
 //    Sin promo Público → solo precio de lista, sin rebaja.
 //  · Productos SALE que no existen en TN → se crean OCULTOS (published=false).
@@ -256,16 +255,10 @@ async function syncImages(ctx: SyncCtx, sp: SpProd, tn: TNProd, r: ItemResult) {
     .eq("organization_id", ctx.orgId).eq("tn_product_id", tn.id);
   const done = new Set((rec ?? []).map((x) => x.product_image_id as string));
 
-  // Primera vez con un producto que YA tenía fotos en TN: las de hoy de Spera quedan
-  // como base (no se suben repetidas). Desde acá, cada foto nueva de Spera se agrega.
-  if (done.size === 0 && tn.images.length > 0) {
-    const { error } = await ctx.admin.from("tn_image_links").insert(sp.images.map((im) => ({
-      organization_id: ctx.orgId, product_image_id: im.id, tn_product_id: tn.id, tn_image_id: null,
-    })));
-    if (error) { r.notas.push(`Fotos: no se pudo registrar la base (${error.message})`); return; }
-    r.notas.push(`Fotos: ya tenía ${tn.images.length} en TN; se tomaron como base`);
-    return;
-  }
+  // Se suben TODAS las fotos de Spera que todavía no subimos a este producto, aunque TN ya
+  // tenga otras (las cargadas a mano en TN son distintas y no se pueden comparar con las de
+  // Spera). Nunca se borra una foto de TN. (Antes, si TN ya tenía fotos, las de Spera se
+  // marcaban como "base" sin subirlas: no se agregaba nada.)
   const pos = tn.images.length;
   const pend = sp.images.filter((im) => !done.has(im.id));
   // De a 3 en paralelo: TN tarda ~3s en bajar cada foto; en serie un producto con 14 fotos
@@ -281,9 +274,10 @@ async function syncImages(ctx: SyncCtx, sp: SpProd, tn: TNProd, r: ItemResult) {
       // Sin respuesta: TN pudo haberla agregado igual. Se registra como subida (sin id) para
       // NO duplicarla en la próxima pasada; si faltara, se agrega a mano.
       r.notas.push("Una foto quedó sin confirmar por TN (no se reintenta para no duplicarla): revisar");
+      tnImageId = "sin-confirmar";
     }
     const { error } = await ctx.admin.from("tn_image_links").insert({ organization_id: ctx.orgId, product_image_id: im.id, tn_product_id: tn.id, tn_image_id: tnImageId });
-    if (tnImageId) r.fotosSubidas = (r.fotosSubidas ?? 0) + 1;
+    if (tnImageId && tnImageId !== "sin-confirmar") r.fotosSubidas = (r.fotosSubidas ?? 0) + 1;
     // Si no queda registrada, la próxima pasada la volvería a subir: frenar acá.
     if (error) { r.notas.push(`Fotos: subida pero sin registrar (${error.message}); se frena para no duplicar`); return false; }
     return true;
