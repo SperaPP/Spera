@@ -448,7 +448,9 @@ export async function reconcileExisting(ctx: SyncCtx, productId: string, tnProdu
 
 // ── Producto que NO existe en TN: crearlo (oculto) ───────────────────────────────
 
-export async function createInTN(ctx: SyncCtx, productId: string, opts: { published: boolean; sale: boolean }): Promise<ItemResult> {
+/** opts.categoryIds: categorías de TN explícitas (p. ej. MUJER > Calzas para el Cyber).
+ *  Si no vienen y es SALE, va a SALE > <categoría>. */
+export async function createInTN(ctx: SyncCtx, productId: string, opts: { published: boolean; sale: boolean; categoryIds?: string[] }): Promise<ItemResult> {
   const sp = await loadSpera(ctx, productId);
   if (!sp) return { productId, name: "?", action: "error", notas: ["Producto inexistente en Spera"] };
   const r: ItemResult = { productId, name: sp.name, action: "creado", vinculadas: 0, variantesCreadas: 0, fotosSubidas: 0, precios: 0, notas: [] };
@@ -494,7 +496,9 @@ export async function createInTN(ctx: SyncCtx, productId: string, opts: { publis
   // las fotos se suben después, de a una, y quedan registradas.
   const payload: Record<string, unknown> = { name: { es: sp.name }, published: opts.published, variants };
   if (attributes.length) payload.attributes = attributes;
-  if (opts.sale) {
+  if (opts.categoryIds?.length) {
+    payload.categories = opts.categoryIds.map(Number);
+  } else if (opts.sale) {
     const cats = await saleCategories(ctx, sp.categoryName);
     if (cats.length) payload.categories = cats.map(Number);
   }
