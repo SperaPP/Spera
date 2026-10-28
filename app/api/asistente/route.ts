@@ -14,11 +14,13 @@ import { buildSystemPrompt } from "@/lib/asistente/manual";
  * asistente_query() en SQL revalida y solo permite SELECT (transacción read-only).
  */
 
-export const maxDuration = 120;
+// 300 s: una pregunta compleja encadena varias consultas y con 120 s el stream
+// moría a mitad de respuesta (se veía como "queda tildado").
+export const maxDuration = 300;
 
-// Haiku: el modelo económico (≈5× más barato); si las respuestas quedan flojas,
-// subir a claude-sonnet-5-5 con la env ASISTENTE_MODEL, sin tocar código.
-const MODEL = process.env.ASISTENTE_MODEL || "claude-haiku-5-5";
+// Sonnet: con Haiku las preguntas complejas quedaban incompletas o decía haber
+// consultado sin hacerlo (probado 27/10). Se puede cambiar con la env ASISTENTE_MODEL.
+const MODEL = process.env.ASISTENTE_MODEL || "claude-sonnet-5-5";
 const MAX_VUELTAS = 12; // tope de idas y vueltas con herramientas por pregunta
 const BUCKET_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images`;
 
@@ -194,7 +196,7 @@ export async function POST(req: NextRequest) {
         for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
           const msgStream = client.messages.stream({
             model: MODEL,
-            max_tokens: 3000,
+            max_tokens: 8000,
             system,
             tools: TOOLS,
             messages,
@@ -202,7 +204,12 @@ export async function POST(req: NextRequest) {
           msgStream.on("text", (delta) => send({ t: "delta", v: delta }));
           const msg = await msgStream.finalMessage();
 
-          if (msg.stop_reason !== "tool_use") break;
+          if (msg.stop_reason !== "tool_use") {
+            if (msg.stop_reason === "max_tokens") {
+              send({ t: "delta", v: "\n\n(La respuesta quedó larga y se cortó acá; pedime que siga o acotá la pregunta.)" });
+            }
+            break;
+          }
 
           const toolUses = msg.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
           const results: Anthropic.ToolResultBlockParam[] = [];
