@@ -159,6 +159,19 @@ async function findTNProductBySku(ctx: SyncCtx, sku: string): Promise<string | n
   return p?.id != null ? String(p.id) : null;
 }
 
+/** Producto de TN creado en los últimos 30 min que tenga alguno de esos SKU. Filtra por fecha
+ *  (respuesta inmediata), sin depender del buscador de TN, que tarda minutos en indexar: cubre
+ *  la llamada cortada justo después de crear y antes de guardar el vínculo. */
+async function findRecentBySku(ctx: SyncCtx, skus: string[]): Promise<string | null> {
+  const since = new Date(Date.now() - 30 * 60_000).toISOString();
+  const res = await tnFetch(ctx.creds, `/products?created_at_min=${encodeURIComponent(since)}&per_page=200&fields=id,variants`);
+  if (!res.ok) return null;
+  const mine = new Set(skus.map(skuKey));
+  const hit = ((await res.json()) as { id: number; variants?: { sku?: string | null }[] }[])
+    .find((p) => (p.variants ?? []).some((v) => v.sku && mine.has(skuKey(v.sku))));
+  return hit ? String(hit.id) : null;
+}
+
 type SpVar = { id: string; sku: string; size: string | null; color: string | null };
 type SpProd = {
   id: string; name: string; variationType: string; categoryName: string | null;
@@ -461,6 +474,11 @@ export async function createInTN(ctx: SyncCtx, productId: string, opts: { publis
   const { data: yaLink } = await ctx.admin.from("tiendanube_links").select("tn_product_id")
     .eq("organization_id", ctx.orgId).in("variant_id", sp.variants.map((v) => v.id)).limit(1).maybeSingle();
   if (yaLink?.tn_product_id) return reconcileExisting(ctx, productId, String(yaLink.tn_product_id), { sale: opts.sale });
+  // Anti-duplicado 3: lo creado en los últimos 30 min (ver findRecentBySku).
+  {
+    const hit = await findRecentBySku(ctx, sp.variants.map((v) => v.sku));
+    if (hit) return reconcileExisting(ctx, productId, hit, { sale: opts.sale });
+  }
   // Anti-duplicado 2: ¿algún SKU ya está en TN? → se concilia ese producto, no se crea otro.
   for (const v of sp.variants.slice(0, 3)) {
     const existing = await findTNProductBySku(ctx, v.sku);
@@ -517,7 +535,7 @@ export async function createInTN(ctx: SyncCtx, productId: string, opts: { publis
   if (!body) {
     for (const wait of [3000, 6000]) {
       await sleep(wait);
-      const existing = await findTNProductBySku(ctx, sp.variants[0].sku);
+      const existing = (await findRecentBySku(ctx, sp.variants.map((v) => v.sku))) ?? (await findTNProductBySku(ctx, sp.variants[0].sku));
       if (existing) {
         const rr = await reconcileExisting(ctx, productId, existing, { sale: opts.sale });
         rr.notas.unshift("TN tardó en confirmar la creación; se encontró el producto y se vinculó (sin duplicar)");
