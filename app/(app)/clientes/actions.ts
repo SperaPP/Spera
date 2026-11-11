@@ -280,9 +280,10 @@ export async function unificarClientes(targetId: string, sourceIds: string[]): P
   return { ok: true, unificadas: res.unificadas, conflictosPortal: res.conflictos_portal };
 }
 
-/** Ajuste manual del saldo de cuenta corriente (reservado a administración). */
+/** Ajuste manual del saldo de cuenta corriente. Permiso: Cobranzas (editar) — antes era solo
+ *  Administrador por nombre de rol (mig 0123 alinea la función SQL). */
 export async function ajustarSaldoCliente(customerId: string, delta: number, reason: string): Promise<ActionState> {
-  const denied = await requireAdmin();
+  const denied = await requireCan("cobranzas", true);
   if (denied) return denied;
   if (!isFinite(delta) || delta === 0) return { error: "Ingresá un monto distinto de cero" };
   const sb = await createClient();

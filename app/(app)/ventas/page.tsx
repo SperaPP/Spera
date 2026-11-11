@@ -7,7 +7,8 @@ import { ImprimirArmadoButton } from "@/components/imprimir-armado-button";
 import { FacturarButton } from "@/components/facturar-button";
 import { VentasFilters } from "@/components/ventas-filters";
 import { Pagination } from "@/components/pagination";
-import { getStoreScope } from "@/lib/auth";
+import { getStoreScope, getPermissions } from "@/lib/auth";
+import { canEdit } from "@/lib/permissions";
 import { arcaConfig, arcaConfigured } from "@/lib/arca/config";
 
 const CBTE_LABEL: Record<number, string> = { 1: "Fac A", 6: "Fac B", 11: "Fac C" };
@@ -28,11 +29,13 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const sb = await createClient();
 
-  const [{ data: isAdmin }, { data: storesAll }, { storeId: scopeStore }] = await Promise.all([
+  const [{ data: isAdmin }, { data: storesAll }, { storeId: scopeStore }, perms] = await Promise.all([
     sb.rpc("is_admin"),
     sb.from("stores").select("id, name").eq("active", true).order("name"),
     getStoreScope(),
+    getPermissions(),
   ]);
+  const puedeFacturacion = canEdit(perms, "ventas"); // facturar: permiso Ventas (editar)
   // Gestión por mostradores: si está acotado, sólo su local (en query y en el filtro).
   const stores = scopeStore ? (storesAll ?? []).filter((s) => s.id === scopeStore) : storesAll;
 
@@ -201,7 +204,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
                             </Link>
                           );
                         }
-                        const puede = isAdmin === true && s.status === "completada" && s.channel !== "cambio" && Number(s.total) > 0 && arcaOk;
+                        const puede = puedeFacturacion && s.status === "completada" && s.channel !== "cambio" && Number(s.total) > 0 && arcaOk;
                         return puede ? <FacturarButton saleId={s.id} env={arcaEnv} compact /> : null;
                       })()}
                     </div>

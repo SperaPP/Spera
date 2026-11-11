@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Receipt, Gift, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getStoreScope } from "@/lib/auth";
+import { getStoreScope, getPermissions } from "@/lib/auth";
+import { canEdit } from "@/lib/permissions";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AnularVentaButton } from "@/components/anular-venta-button";
 import { FacturarButton } from "@/components/facturar-button";
@@ -32,7 +33,9 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
   const { storeId: scopeStore } = await getStoreScope();
   if (scopeStore && sale.store_id !== scopeStore) notFound();
 
-  const { data: isAdmin } = await sb.rpc("is_admin");
+  const [{ data: isAdmin }, perms] = await Promise.all([sb.rpc("is_admin"), getPermissions()]);
+  // Facturar / nota de crédito: permiso Ventas (editar), no el rol Administrador.
+  const puedeFacturacion = canEdit(perms, "ventas");
   // Editable: pedido no despachado/entregado, solo admin, salvo cambio/TiendaNube o
   // con pagos reales en caja (una cobranza de cuenta corriente NO impide editar). La
   // página de edición vuelve a validar.
@@ -75,9 +78,9 @@ export default async function VentaDetallePage({ params }: { params: Promise<{ i
   const factura = (comprobantes ?? []).find((c) => [1, 6, 11].includes(c.cbte_tipo as number)) ?? null;
   const nota = (comprobantes ?? []).find((c) => [3, 8, 13].includes(c.cbte_tipo as number)) ?? null;
   const puedeFacturar =
-    isAdmin === true && sale.status === "completada" && sale.channel !== "cambio" &&
+    puedeFacturacion && sale.status === "completada" && sale.channel !== "cambio" &&
     Number(sale.total) > 0 && arcaConfigured() && !factura;
-  const puedeNota = isAdmin === true && !!factura && !nota && arcaConfigured();
+  const puedeNota = puedeFacturacion && !!factura && !nota && arcaConfigured();
   const cbteNum = (pv: number, nro: number) => `${String(pv).padStart(4, "0")}-${String(nro).padStart(8, "0")}`;
 
   const field = (label: string, value: string | null) =>

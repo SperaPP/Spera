@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, HandCoins, Pencil, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getPermissions } from "@/lib/auth";
+import { canEdit } from "@/lib/permissions";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import { AjusteSaldoButton } from "@/components/ajuste-saldo-button";
 import { CambiarPasswordClienteButton } from "@/components/cambiar-password-cliente-button";
@@ -58,12 +60,15 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
   const { id } = await params;
   const sb = await createClient();
 
-  const [{ data: customer }, { data: movs }, { data: isAdmin }] = await Promise.all([
+  const [{ data: customer }, { data: movs }, { data: isAdmin }, perms] = await Promise.all([
     sb.from("customers").select("id, name, fiscal_condition, balance, doc_type, doc_number, email, phone, auth_user_id, portal_status, customer_types(name)").eq("id", id).single(),
     sb.from("customer_movements").select("id, delta, reason, note, created_at, reference_type, reference_id").eq("customer_id", id).order("created_at", { ascending: true }),
     sb.rpc("is_admin"),
+    getPermissions(),
   ]);
   if (!customer) notFound();
+  // Ajustes de cta. cte.: permiso Cobranzas (editar), no el rol Administrador (mig 0123).
+  const puedeAjustar = canEdit(perms, "cobranzas");
 
   // Historial de compras: TODAS las ventas del cliente (contado incluido).
   const { data: sales } = await sb
@@ -127,7 +132,7 @@ export default async function ClienteDetallePage({ params }: { params: Promise<{
             {customer.auth_user_id && customer.portal_status !== "aprobado" && <HabilitarPortalButton customerId={customer.id} />}
             {isAdmin === true && customer.auth_user_id && <CambiarPasswordClienteButton customerId={customer.id} />}
             {isAdmin === true && customer.auth_user_id && <EnviarLinkPortalButton customerId={customer.id} />}
-            {isAdmin === true && <AjusteSaldoButton customerId={customer.id} balance={balance} />}
+            {puedeAjustar && <AjusteSaldoButton customerId={customer.id} balance={balance} />}
           </div>
         </div>
 

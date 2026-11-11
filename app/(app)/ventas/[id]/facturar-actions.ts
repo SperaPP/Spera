@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdmin } from "@/lib/auth";
+import { requireCan } from "@/lib/auth";
 import { arcaConfig, arcaConfigured, arcaPadronConfigured } from "@/lib/arca/config";
 import { emitInvoice } from "@/lib/arca/wsfe";
 import { consultarPadron } from "@/lib/arca/padron";
@@ -21,7 +21,8 @@ const NC_DE: Record<number, number> = { 1: 3, 6: 8, 11: 13 }; // factura → su 
  * desde el botón "Facturar".
  */
 export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?: string; nro?: number; tipo?: string; error?: string; yaExistia?: boolean }> {
-  const denied = await requireAdmin();
+  // Permiso: Ventas (editar) — antes solo Administrador por nombre de rol.
+  const denied = await requireCan("ventas", true);
   if (denied) return { ok: false, error: denied.error };
   if (!arcaConfigured()) return { ok: false, error: "ARCA no está configurado (certificado, clave, CUIT o punto de venta)." };
 
@@ -114,7 +115,8 @@ export async function facturarVenta(saleId: string): Promise<{ ok: boolean; cae?
  * solo el comprobante fiscal que revierte la factura.
  */
 export async function emitirNotaCredito(saleId: string): Promise<{ ok: boolean; cae?: string; nro?: number; tipo?: string; error?: string; yaExistia?: boolean }> {
-  const denied = await requireAdmin();
+  // Permiso: Ventas (editar) — antes solo Administrador por nombre de rol.
+  const denied = await requireCan("ventas", true);
   if (denied) return { ok: false, error: denied.error };
   if (!arcaConfigured()) return { ok: false, error: "ARCA no está configurado." };
 
